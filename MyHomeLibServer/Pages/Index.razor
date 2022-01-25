@@ -1,0 +1,101 @@
+﻿@page "/"
+@using System.Net
+@inject LibrarySearch search;
+@inherits OwningComponentBase
+@inject NavigationManager navManager
+<PageTitle>Index</PageTitle>
+
+<h1>Hello, world!</h1>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="6">
+        <MudPaper Class="pa-4" Height="94px">
+            <MudTextField Value="Author" Label="Author" Variant="Variant.Outlined"
+                          DebounceInterval="100"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Filled.Search" AdornmentColor="Color.Secondary"
+                          TextChanged="SetAuthor" />
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="6">
+        <MudPaper Class="pa-4" Height="94px">
+            <MudTextField Value="Title" Label="Title"
+                          DebounceInterval="100"
+                          Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentIcon="@Icons.Filled.Search" AdornmentColor="Color.Secondary"
+                          TextChanged="SetTitle" />
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="12" md="12">
+        <MudTable Items="books" Breakpoint="Breakpoint.Sm" Virtualize="true" Dense="true" FixedHeader="true" Loading="isLoading">
+            <HeaderContent>
+                <MudTh class="w-25">Authors</MudTh>
+                <MudTh>Title</MudTh>
+                <MudTh>Series</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Authors">@string.Join(", ", context.Authors)</MudTd>
+                <MudTd DataLabel="Title">@context.Title</MudTd>
+                <MudTd DataLabel="Series">@context.Series</MudTd>
+                <MudTd DataLabel="Action">
+                    <MudLink Href="@($"api/download/{@context.Id}")">@context.Ext</MudLink>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudItem>
+</MudGrid>
+
+@code {
+
+    [SupplyParameterFromQuery(Name = "author")]
+    [Parameter]
+    public string? Author { get; set; }
+
+    [SupplyParameterFromQuery(Name = "title")]
+    [Parameter]
+    public string? Title { get; set; }
+
+    List<BookItem> books = new();
+
+    string ReturnUrl => WebUtility.UrlEncode(navManager.ToBaseRelativePath(navManager.Uri));
+
+    bool isLoading;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await SearchBooks();
+    }
+
+    void SetAuthor(string author)
+    {
+        var uri = navManager.GetUriWithQueryParameter("author", string.IsNullOrWhiteSpace(author) ? null : author);
+        if (navManager.Uri != uri)
+        {
+            navManager.NavigateTo(uri);
+        }
+    }
+
+    void SetTitle(string title)
+    {
+        var uri = navManager.GetUriWithQueryParameter("title", string.IsNullOrWhiteSpace(title) ? null : title);
+        if (navManager.Uri != uri)
+        {
+            navManager.NavigateTo(uri);
+        }
+    }
+
+    async Task SearchBooks()
+    {
+        isLoading = true;
+
+        try
+        {
+            books = search.Search(Title, Author);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+}
