@@ -3,42 +3,42 @@
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
-
 <MudLayout>
-    @if (library.Library != null)
-    {
-        <MudAppBar Elevation="25">
-            <MudIconButton Icon="@Icons.Material.Outlined.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
-            <MudHidden Breakpoint="Breakpoint.Xs">
-                <MudText Typo="Typo.h6" Class="ml-4">My Homelib Web UI</MudText>
-            </MudHidden>
-            <MudHidden Breakpoint="Breakpoint.Xs" Invert="true">
-                <MudText Typo="Typo.subtitle2">My Homelib Web UI</MudText>
-            </MudHidden>
-            <MudSpacer />
-        </MudAppBar>
-        <MudDrawer @bind-Open="_drawerOpen" Elevation="25" ClipMode="DrawerClipMode.Always">
-            <NavMenu />
-        </MudDrawer>
-        <MudMainContent>
+    <MudAppBar Elevation="25">
+        <MudIconButton Icon="@Icons.Material.Outlined.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
 
-            <MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
-                @Body
-            </MudContainer>
+        <MudHidden Breakpoint="Breakpoint.Xs">
+            <MudText Typo="Typo.h6" Class="ml-4">Homelib Web UI</MudText>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.Xs" Invert="true">
+            <MudText Typo="Typo.subtitle2">Homelib Web UI</MudText>
+        </MudHidden>
 
-        </MudMainContent>
-    }
-    else
-    {
-        <MudMainContent Style="height: 100vh">
-            <MudContainer Fixed="true" Class="mt-4 d-flex align-center justify-content-center w-100 h-100">
+        <MudSpacer />      
+    </MudAppBar>
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="25" ClipMode="DrawerClipMode.Always">
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
 
-                <MudText Typo="Typo.subtitle1" Color="Color.Dark">Reading Home Lib</MudText>
-                <MudProgressCircular Color="Color.Secondary" Style="height:200px; width: 200px" Indeterminate="true" Class="justify-content-center alig" />
+        <MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
+              @if (library.Library == null)
+        {
+            <MudAlert Severity="Severity.Warning">Library index is in progress</MudAlert>
+        }
+            @Body
+        </MudContainer>
 
-            </MudContainer>
-        </MudMainContent>
-    }
+    </MudMainContent>
+  @*  <MudMainContent Style="height: 100vh">
+        <MudContainer Fixed="true" Class="mt-4 d-flex align-center justify-content-center w-100 h-100">
+
+            <MudText Typo="Typo.subtitle1" Color="Color.Dark">Reading Home Lib</MudText>
+            <MudProgressCircular Color="Color.Secondary" Style="height:200px; width: 200px" Indeterminate="true" Class="justify-content-center alig" />
+
+        </MudContainer>
+    </MudMainContent>
+*@
 </MudLayout>
 
 

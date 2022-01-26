@@ -9,19 +9,9 @@ public class InpxLibrary
     public string Version { get; set; }
     public string IndexFilePath { get; set; }
     public string LibraryFolder { get; set; }
-
-    Dictionary<long, BookItem> Index = new();
-
-    public void AddBook(BookItem book)
-    {
-        BookItems.Add(book);
-        book.Id = BookItems.Count;
-        Index.Add(book.Id, book);
-    }
-    
-    public Stream OpenBook(long libId, out BookItem book)
-    {
-        book = Index[libId];
+       
+    public Stream OpenBook(BookItem book)
+    {        
         var pathToFile = Path.Combine(LibraryFolder, book.ArchiveFile);
         using var file = File.OpenRead(pathToFile);
         using var zip = new ZipArchive(file);

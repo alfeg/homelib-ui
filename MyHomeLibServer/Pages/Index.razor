@@ -3,6 +3,7 @@
 @inject LibrarySearch search;
 @inherits OwningComponentBase
 @inject NavigationManager navManager
+@inject IDbContextFactory<LibDbContext> dbContextFactory;
 <PageTitle>Index</PageTitle>
 
 <h1>Hello, world!</h1>
@@ -90,7 +91,8 @@
 
         try
         {
-            books = search.Search(Title, Author);
+            using var db = dbContextFactory.CreateDbContext();
+            books = search.Search(Title, Author, db);
         }
         finally
         {

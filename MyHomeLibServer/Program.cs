@@ -8,8 +8,10 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection(LibraryConfig.Section));
 builder.Services.AddSingleton<LibraryAccessor>();
-builder.Services.AddHostedService<LibraryReader>();
+builder.Services.AddHostedService<StorageInitializationHostedService>();
+builder.Services.AddHostedService<LibraryInitBgService>();
 builder.Services.AddScoped<LibrarySearch>();
+builder.Services.AddDbContextFactory<LibDbContext>();
 
 var app = builder.Build();
 
