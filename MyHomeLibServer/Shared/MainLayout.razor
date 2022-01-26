@@ -14,7 +14,7 @@
             <MudText Typo="Typo.subtitle2">Homelib Web UI</MudText>
         </MudHidden>
 
-        <MudSpacer />      
+        <MudSpacer />
     </MudAppBar>
     <MudDrawer @bind-Open="_drawerOpen" Elevation="25" ClipMode="DrawerClipMode.Always">
         <NavMenu />
@@ -22,23 +22,14 @@
     <MudMainContent>
 
         <MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
-              @if (library.Library == null)
-        {
-            <MudAlert Severity="Severity.Warning">Library index is in progress</MudAlert>
-        }
+            @if (library.Library.IsIndexing)
+            {
+                <MudAlert Severity="Severity.Warning">Library index is in progress. @library.Library.BooksAdded of @library.Library.BooksRead</MudAlert>
+            }
             @Body
         </MudContainer>
 
     </MudMainContent>
-  @*  <MudMainContent Style="height: 100vh">
-        <MudContainer Fixed="true" Class="mt-4 d-flex align-center justify-content-center w-100 h-100">
-
-            <MudText Typo="Typo.subtitle1" Color="Color.Dark">Reading Home Lib</MudText>
-            <MudProgressCircular Color="Color.Secondary" Style="height:200px; width: 200px" Indeterminate="true" Class="justify-content-center alig" />
-
-        </MudContainer>
-    </MudMainContent>
-*@
 </MudLayout>
 
 
@@ -61,15 +52,15 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (library.Library == null)
+        if (library.Library.IsIndexing)
         {
             timer = new Timer(_ =>
             {
                 InvokeAsync(() =>
                 {
-                    if (library.Library != null)
-                    {
-                        StateHasChanged();
+                    StateHasChanged();
+                    if (!library.Library.IsIndexing)
+                    {                        
                         timer.Dispose();
                     }
                 });

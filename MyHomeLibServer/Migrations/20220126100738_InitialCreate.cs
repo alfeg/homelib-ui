@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -12,27 +13,44 @@ namespace MyHomeLibServer.Migrations
                 name: "books",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", nullable: false),
+                    Id = table.Column<long>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
                     Authors = table.Column<string>(type: "TEXT", nullable: false),
                     Genre = table.Column<string>(type: "TEXT", nullable: false),
                     Title = table.Column<string>(type: "TEXT", nullable: false),
                     Series = table.Column<string>(type: "TEXT", nullable: false),
                     SeriesNo = table.Column<string>(type: "TEXT", nullable: false),
-                    LibId = table.Column<long>(type: "INTEGER", nullable: false),
                     ArchiveFile = table.Column<string>(type: "TEXT", nullable: false),
                     File = table.Column<string>(type: "TEXT", nullable: false),
                     Ext = table.Column<string>(type: "TEXT", nullable: false),
                     Date = table.Column<string>(type: "TEXT", nullable: false),
                     Size = table.Column<long>(type: "INTEGER", nullable: false),
                     Lang = table.Column<string>(type: "TEXT", nullable: false),
-                    Deleted = table.Column<string>(type: "TEXT", nullable: false),
-                    Rate = table.Column<string>(type: "TEXT", nullable: false),
+                    Deleted = table.Column<bool>(type: "INTEGER", nullable: false),
                     LibRate = table.Column<string>(type: "TEXT", nullable: false),
                     Keywords = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_books", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SyncStates",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    InpxFile = table.Column<string>(type: "TEXT", nullable: false),
+                    Etag = table.Column<string>(type: "TEXT", nullable: false),
+                    DurationMs = table.Column<long>(type: "INTEGER", nullable: false),
+                    StartAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    EndAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    IsSynced = table.Column<bool>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SyncStates", x => x.Id);
                 });
 
             migrationBuilder.CreateIndex(
@@ -65,6 +83,9 @@ namespace MyHomeLibServer.Migrations
         {
             migrationBuilder.DropTable(
                 name: "books");
+
+            migrationBuilder.DropTable(
+                name: "SyncStates");
         }
     }
 }

@@ -2,7 +2,7 @@
 
 public class BookItem
 {
-    public string Id { get; set; }
+    public long Id { get; set; }
     public string Authors { get; set; }
 
     public string Genre { get; set; }
@@ -11,9 +11,7 @@ public class BookItem
 
     public string Series { get; set; }
 
-    public string SeriesNo { get; set; }
-
-    public long LibId { get; set; }
+    public string SeriesNo { get; set; }    
 
     public string ArchiveFile { get; set; }
     public string File { get; set; }
@@ -24,7 +22,7 @@ public class BookItem
 
     public string Lang { get; set; }
 
-    public string Deleted { get; set; }
+    public bool Deleted { get; set; }
         
     public string LibRate { get; set; }
 

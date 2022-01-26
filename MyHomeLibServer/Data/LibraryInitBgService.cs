@@ -1,38 +1,33 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using MyHomeLib.Library;
+﻿using Microsoft.Extensions.Options;
 
 namespace MyHomeLibServer.Data;
 
 public class LibraryInitBgService : BackgroundService
 {
-    private readonly IOptions<LibraryConfig> config;
-    private readonly LibraryAccessor library;
-    private readonly IDbContextFactory<LibDbContext> dbFactory;
+    private readonly ImportDataService importDataService;
+    private readonly LibraryAccessor libraryAccessor;
+    private readonly IOptions<LibraryConfig> options;
 
-    public LibraryInitBgService(IOptions<LibraryConfig> config, LibraryAccessor library, IDbContextFactory<LibDbContext> dbFactory)
+    public LibraryInitBgService(ImportDataService importDataService, LibraryAccessor libraryAccessor, IOptions<LibraryConfig> options)
     {
-        this.config = config;
-        this.library = library;
-        this.dbFactory = dbFactory;
+        this.importDataService = importDataService;
+        this.libraryAccessor = libraryAccessor;
+        this.options = options;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var lib = new InpxLibrary();
-
-        using var db = await dbFactory.CreateDbContextAsync(stoppingToken);
-        await db.Database.ExecuteSqlRawAsync("delete from books;");
-        await db.SaveChangesAsync(stoppingToken);
-
-        var reader = new InpxReader();
-        await foreach (var book in reader.ReadLibraryAsync(this.config.Value.CatalogIndexFile, lib))
+        var isSyncRequired = await importDataService.IsSyncRequired();
+        var indexFile = options.Value.CatalogIndexFile;
+        if(indexFile == null)
         {
-            await db.BookItems.AddAsync(book, stoppingToken);
+            return;
         }
 
-        await db.SaveChangesAsync(stoppingToken);
-
-        library.SetLibrary(lib);
+        libraryAccessor.Library.LibraryFolder = Path.GetDirectoryName(indexFile)!;
+        if (isSyncRequired)
+        {
+            await importDataService.SyncDataAsync(stoppingToken);
+        }
     }
 }

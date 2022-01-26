@@ -35,7 +35,7 @@
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Authors">@string.Join(", ", context.Authors)</MudTd>
+                <MudTd DataLabel="Authors" class="w-25" Style="word-wrap: anywhere">@string.Join(", ", context.Authors)</MudTd>
                 <MudTd DataLabel="Title">@context.Title</MudTd>
                 <MudTd DataLabel="Series">@context.Series</MudTd>
                 <MudTd DataLabel="Action">

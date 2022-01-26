@@ -37,7 +37,6 @@ public class InpxReader
             await foreach (var book in inpReader.ReadBooks())
             {
                 book.ArchiveFile = Path.ChangeExtension(inp.Name, ".zip");
-                book.Id = $"{inp.Name}_{book.LibId}";
                 yield return book;
             }
         }

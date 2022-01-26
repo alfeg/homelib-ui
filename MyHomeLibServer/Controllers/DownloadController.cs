@@ -19,7 +19,7 @@ namespace MyHomeLibServer.Controllers
 
         [HttpGet]
         [Route("{id}")]
-        public IActionResult Index(string id)
+        public IActionResult Index(long id)
         {
             using var db = dbContextFactory.CreateDbContext();
             var bookItem = db.BookItems.Find(id);

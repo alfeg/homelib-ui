@@ -13,8 +13,8 @@ public class BookItemMap : ClassMap<BookItem>
         Map(m => m.SeriesNo).Index(4);
         Map(m => m.File).Index(5);
         Map(m => m.Size).Index(6);
-        Map(m => m.LibId).Index(7);
-        Map(m => m.Deleted).Index(8);
+        Map(m => m.Id).Index(7);
+        Map(m => m.Deleted).Convert(row => row.Row.GetField(8) == "1").Index(8);
         Map(m => m.Ext).Index(9);
         Map(m => m.Date).Index(10);
         Map(m => m.Lang).Index(11);

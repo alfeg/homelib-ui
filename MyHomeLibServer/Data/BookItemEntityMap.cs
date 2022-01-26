@@ -29,7 +29,7 @@ public class BookItemEntityMap : IEntityTypeConfiguration<BookItem>
         map.HasIndex(x => x.Keywords);
 
         map.Property(x => x.Lang);
-        map.Property(x => x.LibId);
+        
         map.Property(x => x.LibRate);
         map.Property(x => x.Size);
         map.Property(x => x.Series);

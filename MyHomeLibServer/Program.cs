@@ -11,6 +11,7 @@ builder.Services.AddSingleton<LibraryAccessor>();
 builder.Services.AddHostedService<StorageInitializationHostedService>();
 builder.Services.AddHostedService<LibraryInitBgService>();
 builder.Services.AddScoped<LibrarySearch>();
+builder.Services.AddTransient<ImportDataService>();
 builder.Services.AddDbContextFactory<LibDbContext>();
 
 var app = builder.Build();

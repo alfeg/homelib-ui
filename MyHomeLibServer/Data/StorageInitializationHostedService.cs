@@ -21,6 +21,7 @@ public class StorageInitializationHostedService : IHostedService
         logger.LogInformation("Start of Database migrations if needed");
         if (dbContext.Database.IsRelational())
             await dbContext.Database.MigrateAsync(cancellationToken);
+        logger.LogInformation("Database migrated");
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

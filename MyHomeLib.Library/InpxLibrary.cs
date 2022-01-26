@@ -1,15 +1,19 @@
-﻿using System.IO.Compression;
+﻿using System.Collections.Concurrent;
+using System.IO.Compression;
 
 namespace MyHomeLib.Library;
 
 public class InpxLibrary
 {
-    public List<BookItem> BookItems { get; } = new List<BookItem>();
+    public bool IsIndexing { get; set; }
+    public long BooksAdded { get; set; }
+    public long BooksRead { get; set; }
     public string Description { get; set; }
     public string Version { get; set; }
     public string IndexFilePath { get; set; }
     public string LibraryFolder { get; set; }
-       
+    public BlockingCollection<BookItem> Queue { get; set; } = new (50000);
+
     public Stream OpenBook(BookItem book)
     {        
         var pathToFile = Path.Combine(LibraryFolder, book.ArchiveFile);
