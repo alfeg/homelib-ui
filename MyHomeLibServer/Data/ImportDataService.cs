@@ -120,8 +120,8 @@ public class ImportDataService
         {
             var lib = library.Library;
             await Task.Yield();
-            using var db = await dbFactory.CreateDbContextAsync(stoppingToken);
-            await db.Database.ExecuteSqlRawAsync("delete from books;");
+            await using var db = await dbFactory.CreateDbContextAsync(stoppingToken);
+            await db.Database.ExecuteSqlRawAsync("delete from books;", cancellationToken: stoppingToken);
             logger.LogInformation("Books database cleared");
             await db.SaveChangesAsync(stoppingToken);
             db.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -141,6 +141,10 @@ public class ImportDataService
             }
 
             await db.SaveChangesAsync(stoppingToken);
+
+            await db.Database.ExecuteSqlRawAsync(@"drop table IF EXISTS books_fts
+                CREATE VIRTUAL TABLE books_fts USING fts5(id, title, authors, keywords, series);
+                insert into books_fts select id, title, authors, keywords, series from books ", cancellationToken: stoppingToken);
         });
     }
 }

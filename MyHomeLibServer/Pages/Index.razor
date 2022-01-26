@@ -1,98 +1,106 @@
 ﻿@page "/"
-@using System.Net
 @inject LibrarySearch search;
 @inherits OwningComponentBase
 @inject NavigationManager navManager
 @inject IDbContextFactory<LibDbContext> dbContextFactory;
 <PageTitle>Index</PageTitle>
 
-<h1>Hello, world!</h1>
-
 <MudGrid>
+    <MudDrawer Open="true" Elevation="25" ClipMode="DrawerClipMode.Always">
+        <NavMenu />
+    </MudDrawer>
     <MudItem xs="12" sm="6" md="6">
         <MudPaper Class="pa-4" Height="94px">
-            <MudTextField Value="Author" Label="Author" Variant="Variant.Outlined"
+            <MudTextField Value="Search" Label="Search" Variant="Variant.Outlined"
                           DebounceInterval="100"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Filled.Search" AdornmentColor="Color.Secondary"
-                          TextChanged="SetAuthor" />
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="6">
-        <MudPaper Class="pa-4" Height="94px">
-            <MudTextField Value="Title" Label="Title"
-                          DebounceInterval="100"
-                          Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentIcon="@Icons.Filled.Search" AdornmentColor="Color.Secondary"
-                          TextChanged="SetTitle" />
+                          TextChanged="SetSearch" />
         </MudPaper>
     </MudItem>
 
     <MudItem xs="12" sm="12" md="12">
-        <MudTable Items="books" Breakpoint="Breakpoint.Sm" Virtualize="true" Dense="true" FixedHeader="true" Loading="isLoading">
+        <MudTable @ref="table" RowsPerPage="25" ServerData="SearchData" Breakpoint="Breakpoint.Sm" Virtualize="true" Dense="true" FixedHeader="true" Loading="isLoading">
             <HeaderContent>
                 <MudTh class="w-25">Authors</MudTh>
                 <MudTh>Title</MudTh>
+                <MudTh>Genre</MudTh>
                 <MudTh>Series</MudTh>
+                <MudTh>Date</MudTh>
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Authors" class="w-25" Style="word-wrap: anywhere">@string.Join(", ", context.Authors)</MudTd>
                 <MudTd DataLabel="Title">@context.Title</MudTd>
+                <MudTd DataLabel="Genre">@context.Genre</MudTd>
                 <MudTd DataLabel="Series">@context.Series</MudTd>
+                <MudTd DataLabel="Date">@context.Date</MudTd>
                 <MudTd DataLabel="Action">
-                    <MudLink Href="@($"api/download/{@context.Id}")">@context.Ext</MudLink>
+                    <MudLink Target="_blank" Href="@($"api/download/{@context.Id}")">@context.Ext</MudLink>
                 </MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
     </MudItem>
 </MudGrid>
 
 @code {
 
-    [SupplyParameterFromQuery(Name = "author")]
+    [SupplyParameterFromQuery(Name = "search")]
     [Parameter]
-    public string? Author { get; set; }
+    public string? Search { get; set; }
 
-    [SupplyParameterFromQuery(Name = "title")]
+    [SupplyParameterFromQuery(Name = "page")]
     [Parameter]
-    public string? Title { get; set; }
+    public long? Page { get; set; }
 
     List<BookItem> books = new();
 
-    string ReturnUrl => WebUtility.UrlEncode(navManager.ToBaseRelativePath(navManager.Uri));
-
     bool isLoading;
-
+    private MudTable<BookItem> table;
+    bool isRendered = false;
     protected override async Task OnParametersSetAsync()
     {
-        await SearchBooks();
+        if (table != null)
+        {
+            await table.ReloadServerData();
+        }
     }
 
-    void SetAuthor(string author)
+    protected override Task OnAfterRenderAsync(bool firstRender)
     {
-        var uri = navManager.GetUriWithQueryParameter("author", string.IsNullOrWhiteSpace(author) ? null : author);
+        isRendered = true;
+        return Task.CompletedTask;
+    }
+
+    void SetSearch(string search)
+    {
+        var uri = navManager.GetUriWithQueryParameter("search", !string.IsNullOrWhiteSpace(search) ? search : null);
         if (navManager.Uri != uri)
         {
             navManager.NavigateTo(uri);
         }
     }
 
-    void SetTitle(string title)
-    {
-        var uri = navManager.GetUriWithQueryParameter("title", string.IsNullOrWhiteSpace(title) ? null : title);
-        if (navManager.Uri != uri)
-        {
-            navManager.NavigateTo(uri);
-        }
-    }
-
-    async Task SearchBooks()
+    private async Task<TableData<BookItem>> SearchData(TableState state)
     {
         isLoading = true;
 
         try
         {
-            using var db = dbContextFactory.CreateDbContext();
-            books = search.Search(Title, Author, db);
+            await using var db = await dbContextFactory.CreateDbContextAsync();
+            var query = search.Search(Search, db, CancellationToken.None);
+
+            var total = await query.CountAsync();
+
+            var result = await query.Skip(state.Page * state.PageSize).Take(state.PageSize).ToListAsync();
+
+            return new TableData<BookItem>()
+                {
+                    Items = result,
+                    TotalItems = total
+                };
         }
         finally
         {

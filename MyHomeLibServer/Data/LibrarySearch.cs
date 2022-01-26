@@ -1,5 +1,5 @@
 ﻿using MyHomeLib.Library;
-using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 
 namespace MyHomeLibServer.Data;
 
@@ -12,30 +12,17 @@ public class LibrarySearch
         this.logger = logger;
     }
 
-    public List<BookItem> Search(string title, string author, LibDbContext db)
+    public IQueryable<BookItem> Search(string? term, LibDbContext db, CancellationToken token)
     {
-        var sw = Stopwatch.StartNew();
-        try
+        if (string.IsNullOrWhiteSpace(term))
         {
-            IQueryable<BookItem> query = db.BookItems;
-            if (!string.IsNullOrWhiteSpace(title))
-            {
-                query = query.Where(x => x.Title.Contains(title));
-            }
-
-            if (!string.IsNullOrWhiteSpace(author))
-            {
-                query = query.Where(x => x.Authors.Contains(author));
-            }
-
-            return query
-                .Take(50)
-                .ToList();
+            return db.BookItems.OrderByDescending(b => b.Date);
         }
-        finally
-        {
-            sw.Stop();
-            logger.LogInformation("Search completed in {time}ms", sw.Elapsed.TotalMilliseconds);
-        }
+
+        var result =
+            db.BookItems.FromSqlRaw(
+                $"select b.* from books_fts bf join books b on bf.id = b.id where books_fts match '{term ?? ""}' order by RANK");
+
+        return result;
     }
 }

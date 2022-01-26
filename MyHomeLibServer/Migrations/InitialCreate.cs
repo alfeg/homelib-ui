@@ -1,5 +1,4 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -23,7 +22,7 @@ namespace MyHomeLibServer.Migrations
                     ArchiveFile = table.Column<string>(type: "TEXT", nullable: false),
                     File = table.Column<string>(type: "TEXT", nullable: false),
                     Ext = table.Column<string>(type: "TEXT", nullable: false),
-                    Date = table.Column<string>(type: "TEXT", nullable: false),
+                    Date = table.Column<DateOnly>(type: "TEXT", nullable: false),
                     Size = table.Column<long>(type: "INTEGER", nullable: false),
                     Lang = table.Column<string>(type: "TEXT", nullable: false),
                     Deleted = table.Column<bool>(type: "INTEGER", nullable: false),

@@ -4,6 +4,6 @@ namespace MyHomeLibServer.Data;
 
 public class LibraryAccessor
 {
-    public InpxLibrary Library { get; private set; } = new();
+    public InpxLibrary Library { get; } = new();
 
 }

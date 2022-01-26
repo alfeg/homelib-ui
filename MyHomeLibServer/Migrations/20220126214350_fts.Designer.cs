@@ -11,8 +11,8 @@ using MyHomeLibServer.Data;
 namespace MyHomeLibServer.Migrations
 {
     [DbContext(typeof(LibDbContext))]
-    [Migration("20220126100738_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20220126214350_fts")]
+    partial class fts
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
@@ -33,8 +33,7 @@ namespace MyHomeLibServer.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Date")
-                        .IsRequired()
+                    b.Property<DateOnly>("Date")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("Deleted")
