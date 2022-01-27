@@ -9,7 +9,7 @@ namespace MyHomeLibServer.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"
-            drop table books_fts;
+            drop table if exists books_fts;
             CREATE VIRTUAL TABLE books_fts USING fts5(id, title, authors, keywords);
             insert into books_fts select id, title , authors ,keywords from books
             ");

@@ -142,7 +142,7 @@ public class ImportDataService
 
             await db.SaveChangesAsync(stoppingToken);
 
-            await db.Database.ExecuteSqlRawAsync(@"drop table IF EXISTS books_fts
+            await db.Database.ExecuteSqlRawAsync(@"drop table IF EXISTS books_fts;
                 CREATE VIRTUAL TABLE books_fts USING fts5(id, title, authors, keywords, series);
                 insert into books_fts select id, title, authors, keywords, series from books ", cancellationToken: stoppingToken);
         });

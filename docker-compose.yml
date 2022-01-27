@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  myhomelib:
+    restart: always
+    image: myhomelib
+    environment:
+      Library__DbPath: /app/db/data.db
+      Library__CatalogIndexFile: /app/lib/${INDEX}
+    ports:
+      - 16000:80
+    volumes:
+      - homelib:/app/db
+      - ${LIBRARY}:/app/lib
+
+volumes:
+  homelib:

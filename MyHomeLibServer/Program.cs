@@ -2,19 +2,29 @@ using MudBlazor.Services;
 using MyHomeLibServer.Data;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddMudServices();
-builder.Services.AddMvc();
-builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
-builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection(LibraryConfig.Section));
-builder.Services.AddSingleton<LibraryAccessor>();
-builder.Services.AddHostedService<StorageInitializationHostedService>();
-builder.Services.AddHostedService<LibraryInitBgService>();
-builder.Services.AddScoped<LibrarySearch>();
-builder.Services.AddTransient<ImportDataService>();
-builder.Services.AddDbContextFactory<LibDbContext>();
+
+
+
+void ConfigureServices(IServiceCollection services)
+{
+    services.AddMudServices();
+    services.AddMvc();
+    services.AddRazorPages();
+    services.AddServerSideBlazor();
+    services.Configure<LibraryConfig>(builder.Configuration.GetSection(LibraryConfig.Section));
+    services.AddSingleton<LibraryAccessor>();
+    services.AddHostedService<StorageInitializationHostedService>();
+    services.AddHostedService<LibraryInitBgService>();
+    services.AddScoped<LibrarySearch>();
+    services.AddTransient<ImportDataService>();
+    services.AddDbContextFactory<LibDbContext>();
+    services.AddLocalization();
+}
+
+ConfigureServices(builder.Services);
 
 var app = builder.Build();
+
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -30,8 +40,7 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
-//app.UseAuthentication();
-//app.UseAuthorization();
+app.UseRequestLocalization();
 
 app.UseEndpoints(e =>
 {

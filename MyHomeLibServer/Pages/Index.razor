@@ -1,17 +1,18 @@
 ﻿@page "/"
+@page "/books"
 @inject LibrarySearch search;
 @inherits OwningComponentBase
 @inject NavigationManager navManager
 @inject IDbContextFactory<LibDbContext> dbContextFactory;
-<PageTitle>Index</PageTitle>
-
+@inject IStringLocalizer<Resource> localizer;
+<PageTitle>@localizer["Search"]</PageTitle>
 <MudGrid>
     <MudDrawer Open="true" Elevation="25" ClipMode="DrawerClipMode.Always">
         <NavMenu />
     </MudDrawer>
-    <MudItem xs="12" sm="6" md="6">
+    <MudItem xs="12" sm="12" md="12">
         <MudPaper Class="pa-4" Height="94px">
-            <MudTextField Value="Search" Label="Search" Variant="Variant.Outlined"
+            <MudTextField Value="Search" Label="@localizer["Search"]" Variant="Variant.Outlined"
                           DebounceInterval="100"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Filled.Search" AdornmentColor="Color.Secondary"
                           TextChanged="SetSearch" />
@@ -21,11 +22,11 @@
     <MudItem xs="12" sm="12" md="12">
         <MudTable @ref="table" RowsPerPage="25" ServerData="SearchData" Breakpoint="Breakpoint.Sm" Virtualize="true" Dense="true" FixedHeader="true" Loading="isLoading">
             <HeaderContent>
-                <MudTh class="w-25">Authors</MudTh>
-                <MudTh>Title</MudTh>
-                <MudTh>Genre</MudTh>
-                <MudTh>Series</MudTh>
-                <MudTh>Date</MudTh>
+                <MudTh class="w-25">@Resource.Authors</MudTh>
+                <MudTh>@Resource.Title</MudTh>
+                <MudTh>@Resource.Genre</MudTh>
+                <MudTh>@Resource.Series</MudTh>
+                <MudTh>@Resource.Date</MudTh>
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -55,23 +56,14 @@
     [Parameter]
     public long? Page { get; set; }
 
-    List<BookItem> books = new();
-
     bool isLoading;
     private MudTable<BookItem> table;
-    bool isRendered = false;
     protected override async Task OnParametersSetAsync()
     {
         if (table != null)
         {
             await table.ReloadServerData();
         }
-    }
-
-    protected override Task OnAfterRenderAsync(bool firstRender)
-    {
-        isRendered = true;
-        return Task.CompletedTask;
     }
 
     void SetSearch(string search)
@@ -83,6 +75,7 @@
         }
     }
 
+    private TableData<BookItem> lastSearch = new() {Items = new BookItem[] {}};
     private async Task<TableData<BookItem>> SearchData(TableState state)
     {
         isLoading = true;
@@ -96,14 +89,21 @@
 
             var result = await query.Skip(state.Page * state.PageSize).Take(state.PageSize).ToListAsync();
 
-            return new TableData<BookItem>()
-                {
-                    Items = result,
-                    TotalItems = total
-                };
+            lastSearch = new TableData<BookItem>()
+            {
+                Items = result,
+                TotalItems = total
+            };
+
+            return lastSearch;
+        }
+        catch
+        {
+            return lastSearch;
         }
         finally
         {
+            
             isLoading = false;
         }
     }
