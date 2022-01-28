@@ -12,12 +12,14 @@
             <MudTextField Value="Search" Label="@localizer["Search"]" Variant="Variant.Outlined"
                           DebounceInterval="100"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Filled.Search" AdornmentColor="Color.Secondary"
-                          TextChanged="SetSearch" />
+                          TextChanged="SetSearch"/>
         </MudPaper>
     </MudItem>
 
     <MudItem xs="12" sm="12" md="12">
-        <MudTable @ref="table" RowsPerPage="25" ServerData="SearchData" Breakpoint="Breakpoint.Sm" Virtualize="true" Dense="true" FixedHeader="true" Loading="isLoading">
+        <MudTable @ref="table" RowsPerPage="25" ServerData="SearchData" Breakpoint="Breakpoint.Sm" Virtualize="false"
+                  Dense="true" FixedHeader="true" Loading="isLoading">
+
             <HeaderContent>
                 <MudHidden Breakpoint="Breakpoint.Sm">
                     <MudTh class="w-25">@Resource.Authors</MudTh>
@@ -25,9 +27,8 @@
                 <MudHidden Breakpoint="Breakpoint.Sm" Invert="true">
                     <MudTh>@Resource.Authors</MudTh>
                 </MudHidden>
-
                 <MudTh>@Resource.Title</MudTh>
-                <MudTh>@Resource.Genre</MudTh>
+                @* <MudTh>@Resource.Genre</MudTh> *@
                 <MudTh>@Resource.Series</MudTh>
                 <MudTh>@Resource.Date</MudTh>
                 <MudTh></MudTh>
@@ -41,15 +42,15 @@
                 </MudHidden>
 
                 <MudTd DataLabel="Title">@context.Title</MudTd>
-                <MudTd DataLabel="Genre">@context.Genre</MudTd>
+                @* <MudTd DataLabel="Genre">@context.Genre</MudTd> *@
                 <MudTd DataLabel="Series">@context.Series</MudTd>
                 <MudTd DataLabel="Date">@context.Date</MudTd>
                 <MudTd DataLabel="Action">
-                    <MudLink Target="_blank" Href="@($"api/download/{@context.Id}")">@context.Ext</MudLink>
+                    <MudLink Target="_blank" Href="@($"api/download/{@context.Id}")">@context.Extension</MudLink>
                 </MudTd>
             </RowTemplate>
             <PagerContent>
-                <MudTablePager />
+                <MudTablePager/>
             </PagerContent>
         </MudTable>
     </MudItem>
@@ -66,7 +67,8 @@
     public long? Page { get; set; }
 
     bool isLoading;
-    private MudTable<BookItem> table;
+    private MudTable<Book> table;
+
     protected override async Task OnParametersSetAsync()
     {
         if (table != null)
@@ -84,8 +86,9 @@
         }
     }
 
-    private TableData<BookItem> lastSearch = new() { Items = new BookItem[] { } };
-    private async Task<TableData<BookItem>> SearchData(TableState state)
+    private TableData<Book> lastSearch = new() {Items = new Book[] {}};
+
+    private async Task<TableData<Book>> SearchData(TableState state)
     {
         isLoading = true;
 
@@ -98,11 +101,11 @@
 
             var result = await query.Skip(state.Page * state.PageSize).Take(state.PageSize).ToListAsync();
 
-            lastSearch = new TableData<BookItem>()
-                {
-                    Items = result,
-                    TotalItems = total
-                };
+            lastSearch = new TableData<Book>()
+            {
+                Items = result,
+                TotalItems = total
+            };
 
             return lastSearch;
         }
@@ -112,9 +115,17 @@
         }
         finally
         {
-
             isLoading = false;
         }
     }
+
+    private TableGroupDefinition<Book> _groupDefinition = new()
+    {
+        GroupName = "Group",
+        Indentation = false,
+        Expandable = true,
+        IsInitiallyExpanded = false,
+        Selector = (e) => e.Series
+    };
 
 }

@@ -1,9 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
+﻿using System.Text.Json;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using System.Text.Json;
 
-namespace MyHomeLibServer.Data;
+namespace MyHomeLibServer.Data.Services;
 
 public static class ValueConversionExtensions
 {

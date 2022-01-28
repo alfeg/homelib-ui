@@ -1,14 +1,16 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using MyHomeLib.Library;
 using System.Reflection;
+using MyHomeLibServer.Data.Domain;
 
 namespace MyHomeLibServer.Data;
 
 public class LibDbContext : DbContext
 {
-    public DbSet<BookItem> BookItems { get; set; }
-    public DbSet<SyncState> SyncStates { get; set; }
+    public DbSet<Book> Books { get; set; } = null!;
+    public DbSet<Author> Authors { get; set; } = null!;
+    public DbSet<Series> Series { get; set; } = null!;
+    public DbSet<SyncState> SyncStates { get; set; } = null!;
 
     public string DbPath { get; set; }
 
@@ -29,7 +31,7 @@ public class LibDbContext : DbContext
         }
 
         var dirName = Path.GetDirectoryName(DbPath);
-        if (!Directory.Exists(dirName))
+        if (dirName != null && !Directory.Exists(dirName))
         {
             Directory.CreateDirectory(dirName);
         }
@@ -38,7 +40,12 @@ public class LibDbContext : DbContext
     // The following configures EF to create a Sqlite database file in the
     // special "local" folder for your platform.
     protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseSqlite($"Data Source={DbPath}");
+    {
+        options.UseSqlite($"Data Source={DbPath}");
+            //.LogTo(Console.WriteLine);
+
+        options.EnableSensitiveDataLogging();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

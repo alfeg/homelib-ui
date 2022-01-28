@@ -1,6 +1,6 @@
 ﻿using MyHomeLib.Library;
 
-namespace MyHomeLibServer.Data;
+namespace MyHomeLibServer.Data.Services;
 
 public class LibraryAccessor
 {

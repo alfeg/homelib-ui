@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Options;
 
-namespace MyHomeLibServer.Data;
+namespace MyHomeLibServer.Data.Services;
 
 public class LibraryInitBgService : BackgroundService
 {

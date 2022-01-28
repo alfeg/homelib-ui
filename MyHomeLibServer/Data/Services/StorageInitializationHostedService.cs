@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace MyHomeLibServer.Data;
+namespace MyHomeLibServer.Data.Services;
 
 public class StorageInitializationHostedService : IHostedService
 {

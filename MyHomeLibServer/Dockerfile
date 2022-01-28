@@ -20,6 +20,7 @@ RUN dotnet publish "MyHomeLibServer.csproj" -c Release -r linux-x64 -p:PublishRe
 
 FROM base AS final
 ENV DOTNET_TieredPGO=1
+RUN apt update && apt install calibre
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "MyHomeLibServer.dll"]

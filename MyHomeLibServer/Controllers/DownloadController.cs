@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyHomeLibServer.Data;
+using MyHomeLibServer.Data.Services;
 
 namespace MyHomeLibServer.Controllers
 {
@@ -19,12 +20,13 @@ namespace MyHomeLibServer.Controllers
 
         [HttpGet]
         [Route("{id}")]
-        public IActionResult Index(long id)
+        public IActionResult Index(int id)
         {
-            using var db = dbContextFactory.CreateDbContext();
-            var bookItem = db.BookItems.Find(id);
-            var book = libraryAccessor.Library.OpenBook(bookItem);
-            return File(book, "application/" + bookItem.Ext, bookItem.Title + "." + bookItem.Ext, false);
+            throw new NotImplementedException();
+            // using var db = dbContextFactory.CreateDbContext();
+            // var bookItem = db.Books.Find(id);
+            // var book = libraryAccessor.Library.OpenBook(bookItem);
+            // return File(book, "application/" + bookItem.Extension, bookItem.Title + "." + bookItem.Extension, false);
         }
     }
 }
