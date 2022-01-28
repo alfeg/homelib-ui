@@ -2,7 +2,7 @@
 
 public class BookItem
 {
-    public long Id { get; set; }
+    public int Id { get; set; }
     public string Authors { get; set; }
 
     public string Genre { get; set; }
@@ -27,5 +27,4 @@ public class BookItem
     public string LibRate { get; set; }
 
     public string Keywords { get; set; }
-
 }
