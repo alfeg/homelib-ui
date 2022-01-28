@@ -14,24 +14,26 @@ public class LibrarySearch
 
     public IQueryable<Book> Search(string? term, LibDbContext db, CancellationToken token)
     {
-        var query = db.Books
-            .Include(b => b.Authors)
-            .AsQueryable();
-        
-        if (term != null)
-        {
-            query = query
-                .Where(b => b.Title.Contains(term));
-        }
+        return db.BooksFts
+            .Include(b => b.Book)
+            .Include(b => b.Book.Authors)
+            .Include(b => b.Book.Series)
+            .Where(b => b.Match == (term ?? ""))
+            .OrderBy(b => b.Rank)
+            .Select(b => b.Book);
+
+
         // if (string.IsNullOrWhiteSpace(term))
         // {
-        //     return db.BookItems.OrderByDescending(b => b.Date);
+        //     return db.Books.OrderByDescending(b => b.Date);
         // }
         //
         // var result =
-        //     db.BookItems.FromSqlRaw(
-        //         $"select b.* from books_fts bf join books b on bf.id = b.id where books_fts match '{term ?? ""}' order by RANK");
-
-        return query; //new List<BookItem>().AsQueryable();
+        //     db.Books.FromSqlInterpolated(
+        //         $"select b.* from books_fts bf join books b on bf.rowid = b.id where books_fts match {term ?? ""} order by RANK")
+        //     .Include(b => b.Authors)
+        //     .Include(b => b.Series);
+        //
+        // return result; //new List<BookItem>().AsQueryable();
     }
 }

@@ -1,7 +1,9 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using CsvHelper.Configuration;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Library;
 using MyHomeLibServer.Data.Domain;
@@ -58,7 +60,7 @@ public class ImportDataService
         if (lib.IsIndexing) return;
 
         lib.IsIndexing = true;
-        lib.Queue = new BlockingCollection<BookItem>(50000);
+        lib.Queue = new BlockingCollection<BookItem>(12000);
 
         try
         {
@@ -132,10 +134,11 @@ public class ImportDataService
                 await db.Database.ExecuteSqlRawAsync("delete from Genre;", cancellationToken: stoppingToken);
                 await db.Database.ExecuteSqlRawAsync("delete from Keyword;", cancellationToken: stoppingToken);
                 await db.Database.ExecuteSqlRawAsync("delete from Authors;", cancellationToken: stoppingToken);
+                await db.Database.ExecuteSqlRawAsync("drop table IF EXISTS books_fts;" 
+                    + " CREATE VIRTUAL TABLE books_fts USING fts5(title, authors, keywords, series, content='')", cancellationToken: stoppingToken);
 
                 logger.LogInformation("Books database cleared");
                 await db.SaveChangesAsync(stoppingToken);
-                //db.ChangeTracker.AutoDetectChangesEnabled = false;
             }
 
             logger.LogInformation("Indexing books");
@@ -147,7 +150,7 @@ public class ImportDataService
             int authorId = 0;
             int seriesId = 0;
 
-            foreach (var chunk in lib.Queue.GetConsumingEnumerable().Chunk(1500))
+            foreach (var chunk in lib.Queue.GetConsumingEnumerable().Chunk(5000))
             {
                 await using (var db = await dbFactory.CreateDbContextAsync(stoppingToken))
                 {
@@ -181,9 +184,9 @@ public class ImportDataService
                         {
                             serie = db.Series.Find(serieExistingId)!;
                         }
-
+                        book.Series = serie;
+                        
                         var authorsList = bookItem.Authors.Split(':', StringSplitOptions.RemoveEmptyEntries);
-
                         foreach (var authorName in authorsList)
                         {
                             Author author;
@@ -208,25 +211,25 @@ public class ImportDataService
 
                             book.Authors.Add(author);
                         }
-
-                        book.Series = serie;
+                        
                         db.Books.Add(book);
+                        db.BooksFts.Add(new BooksFts()
+                        {
+                            RowId = book.Id,
+                            Authors = bookItem.Authors,
+                            Title = book.Title,
+                            Keywords = bookItem.Keywords,
+                            Series = bookItem.Series
+                        });                  
+
                         lib.BooksAdded++;
-                        //
-                        // if (lib.BooksAdded % 5000 == 0)
-                        // {
-                        //     logger.LogInformation("Indexing books. {count} completed", lib.BooksAdded);
-                        //     await db.SaveChangesAsync(stoppingToken);
-                        // }
                     }
+                    
                     logger.LogInformation("Indexing books. {count} completed", lib.BooksAdded);
                     await db.SaveChangesAsync(stoppingToken);
                 }
             }
-
-            // await db.Database.ExecuteSqlRawAsync(@"drop table IF EXISTS books_fts;
-            //     CREATE VIRTUAL TABLE books_fts USING fts5(id, title, authors, keywords, series);
-            //     insert into books_fts select id, title, authors, keywords, series from books ", cancellationToken: stoppingToken);
         });
     }
 }
+

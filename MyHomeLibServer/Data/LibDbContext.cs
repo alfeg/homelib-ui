@@ -8,6 +8,7 @@ namespace MyHomeLibServer.Data;
 public class LibDbContext : DbContext
 {
     public DbSet<Book> Books { get; set; } = null!;
+    public DbSet<BooksFts> BooksFts { get; set; } = null!;
     public DbSet<Author> Authors { get; set; } = null!;
     public DbSet<Series> Series { get; set; } = null!;
     public DbSet<SyncState> SyncStates { get; set; } = null!;
