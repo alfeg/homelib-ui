@@ -43,7 +43,7 @@
 
                 <MudTd DataLabel="Title">@context.Title</MudTd>
                 @* <MudTd DataLabel="Genre">@context.Genre</MudTd> *@
-                <MudTd DataLabel="Series">@context.Series</MudTd>
+                <MudTd DataLabel="Series">@context.Series?.Name</MudTd>
                 <MudTd DataLabel="Date">@context.Date</MudTd>
                 <MudTd DataLabel="Action">
                     <MudLink Target="_blank" Href="@($"api/download/{@context.Id}")">@context.Extension</MudLink>
@@ -118,14 +118,4 @@
             isLoading = false;
         }
     }
-
-    private TableGroupDefinition<Book> _groupDefinition = new()
-    {
-        GroupName = "Group",
-        Indentation = false,
-        Expandable = true,
-        IsInitiallyExpanded = false,
-        Selector = (e) => e.Series
-    };
-
 }

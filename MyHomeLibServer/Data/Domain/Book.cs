@@ -16,4 +16,5 @@ public class Book
     public List<Author> Authors { get; set; } = new();
     public List<Keyword> Keywords { get; set; } = new();
     public List<Genre> Genres { get; set; } = new();
+    public BooksFts FTS { get; set; }
 }
