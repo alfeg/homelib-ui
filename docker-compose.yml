@@ -18,3 +18,8 @@ services:
 
 volumes:
   homelib:
+    
+networks:
+  default:
+    external: true
+    name: traefik_default
