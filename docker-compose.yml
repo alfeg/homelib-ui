@@ -12,6 +12,9 @@ services:
     volumes:
       - homelib:/app/db
       - ${LIBRARY}:/app/lib
+    labels:
+      - traefik.enable=true
+      - app.name=books
 
 volumes:
   homelib:
