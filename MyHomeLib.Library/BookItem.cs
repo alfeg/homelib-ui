@@ -1,6 +1,6 @@
 ﻿namespace MyHomeLib.Library;
 
-public class BookItem
+public class BookItem : IBookItem
 {
     public int Id { get; set; }
     public string Authors { get; set; }

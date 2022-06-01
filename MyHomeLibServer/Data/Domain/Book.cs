@@ -1,11 +1,15 @@
-﻿namespace MyHomeLibServer.Data.Domain;
+﻿using MyHomeLib.Library;
 
-public class Book
+namespace MyHomeLibServer.Data.Domain;
+
+public class Book : IBookItem
 {
     public int Id { get; set; }
     public string Title { get; set; }
 
     public string ArchiveFile { get; set; }
+    public string File => FileName;
+    public string Ext => Extension;
     public string FileName { get; set; }
     public string Extension { get; set; }
     public long Size { get; set; }
