@@ -22,11 +22,10 @@ namespace MyHomeLibServer.Controllers
         [Route("{id}")]
         public IActionResult Index(int id)
         {
-            throw new NotImplementedException();
-            // using var db = dbContextFactory.CreateDbContext();
-            // var bookItem = db.Books.Find(id);
-            // var book = libraryAccessor.Library.OpenBook(bookItem);
-            // return File(book, "application/" + bookItem.Extension, bookItem.Title + "." + bookItem.Extension, false);
+            using var db = dbContextFactory.CreateDbContext();
+            var bookItem = db.Books.Find(id);
+            var book = libraryAccessor.Library.OpenBook(bookItem);
+            return File(book, "application/" + bookItem.Extension, bookItem.Title + "." + bookItem.Extension, false);
         }
     }
 }

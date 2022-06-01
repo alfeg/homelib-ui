@@ -14,7 +14,7 @@ public class InpxLibrary
     public string LibraryFolder { get; set; }
     public BlockingCollection<BookItem> Queue { get; set; } = new (50000);
 
-    public Stream OpenBook(BookItem book)
+    public Stream OpenBook(IBookItem book)
     {        
         var pathToFile = Path.Combine(LibraryFolder, book.ArchiveFile);
         using var file = File.OpenRead(pathToFile);

@@ -1,0 +1,21 @@
+﻿@page "/author/{id}"
+@inject IDbContextFactory<LibDbContext> dbFactory;
+
+<h3>Author</h3>
+
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    Data.Domain.Author? author;
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        this.author = await db.Authors.FindAsync(Id);
+        
+        
+    }
+
+}
