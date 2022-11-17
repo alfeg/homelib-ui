@@ -1,10 +1,15 @@
+using Microsoft.Extensions.Hosting.WindowsServices;
 using MudBlazor.Services;
 using MyHomeLibServer.Data;
 using MyHomeLibServer.Data.Services;
 
-var builder = WebApplication.CreateBuilder(args);
-
-
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService()
+                                     ? AppContext.BaseDirectory : default
+});
+builder.Host.UseWindowsService();
 
 void ConfigureServices(IServiceCollection services)
 {

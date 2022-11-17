@@ -14,7 +14,7 @@ public class LibrarySearch
 
     public IQueryable<Book> Search(string? term, LibDbContext db, CancellationToken token)
     {
-        return db.BooksFts
+         return db.BooksFts
             .Include(b => b.Book)
             .Include(b => b.Book.Authors)
             .Include(b => b.Book.Series)

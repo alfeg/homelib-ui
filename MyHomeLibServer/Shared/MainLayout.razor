@@ -27,7 +27,7 @@
         <MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
             @if (library.Library.IsIndexing)
             {
-                <MudAlert Severity="Severity.Warning">Library index is in progress. @library.Library.BooksAdded of @library.Library.BooksRead</MudAlert>
+                <MudAlert Severity="Severity.Warning">@library.Library.IndexingMessage</MudAlert>
             }
             @Body
         </MudContainer>

@@ -1,11 +1,8 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Text;
-using CsvHelper.Configuration;
+﻿using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Library;
+using MyHomeLibServer.Core;
 using MyHomeLibServer.Data.Domain;
 
 namespace MyHomeLibServer.Data.Services;
@@ -60,22 +57,20 @@ public class ImportDataService
         if (lib.IsIndexing) return;
 
         lib.IsIndexing = true;
-        lib.Queue = new BlockingCollection<BookItem>(12000);
-
         try
         {
-            using var db = dbFactory.CreateDbContext();
-            var sync = new SyncState();
-            sync.StartAt = DateTime.UtcNow;
-            sync.InpxFile = config.Value.CatalogIndexFile;
+            await using var db = await dbFactory.CreateDbContextAsync(token);
+            var sync = new SyncState
+            {
+                StartAt = DateTime.UtcNow,
+                InpxFile = config.Value.CatalogIndexFile
+            };
             sync.Etag = new FileInfo(sync.InpxFile).LastWriteTimeUtc.ToString();
             db.SyncStates.Add(sync);
             await db.SaveChangesAsync(token);
             var sw = Stopwatch.StartNew();
-            var reader = StartReaderThread();
-            var writer = StartWriterThread(token);
-
-            await Task.WhenAll(new[] {reader, writer});
+            var books = GetBooksStream(token);
+            await StartWriterThread(books, token);
 
             sync.EndAt = DateTime.UtcNow;
             sync.DurationMs = sw.ElapsedMilliseconds;
@@ -90,146 +85,141 @@ public class ImportDataService
         await Task.Yield();
     }
 
-    private Task StartReaderThread()
+    private async IAsyncEnumerable<BookItem> GetBooksStream(CancellationToken cancellationToken)
     {
-        return Task.Run(async () =>
+        var lib = library.Library;
+        await Task.Yield();
+        logger.LogInformation("Reading books from {catalog}", this.config.Value.CatalogIndexFile);
+
+        var reader = new InpxReader();
+        var duplicateChecker = new HashSet<long>();
+        await foreach (var book in reader.ReadLibraryAsync(this.config.Value.CatalogIndexFile, lib)
+                           .WithCancellation(cancellationToken))
         {
-            var lib = library.Library;
-            await Task.Yield();
-            logger.LogInformation("Reading books from {catalog}", this.config.Value.CatalogIndexFile);
-
-            var reader = new InpxReader();
-            var duplicateChecker = new HashSet<long>();
-            await foreach (var book in reader.ReadLibraryAsync(this.config.Value.CatalogIndexFile, lib))
+            lib.BooksRead++;
+            if (duplicateChecker.Add(book.Id))
             {
-                lib.BooksRead++;
-                if (lib.BooksRead % 1000 == 0)
-                {
-                    // logger.LogInformation("Reading books from {catalog}. {count} read", this.config.Value.CatalogIndexFile, lib.BooksRead);
-                    await Task.Yield();
-                }
-
-                if (duplicateChecker.Add(book.Id))
-                {
-                    lib.Queue.Add(book);
-                }
+                yield return book;
             }
-
-            lib.Queue.CompleteAdding();
-        });
+        }
     }
 
-    private Task StartWriterThread(CancellationToken stoppingToken)
+    private async Task StartWriterThread(IAsyncEnumerable<BookItem> books, CancellationToken stoppingToken)
     {
-        return Task.Run(async () =>
+        var lib = library.Library;
+
+        await using (var dbCtx = await dbFactory.CreateDbContextAsync(stoppingToken))
         {
-            var lib = library.Library;
-            await Task.Yield();
-            await using (var db = await dbFactory.CreateDbContextAsync(stoppingToken))
-            {
-                await db.Database.ExecuteSqlRawAsync("delete from AuthorSeries;", cancellationToken: stoppingToken);
-                await db.Database.ExecuteSqlRawAsync("delete from AuthorBook;", cancellationToken: stoppingToken);
-                await db.Database.ExecuteSqlRawAsync("delete from Books;", cancellationToken: stoppingToken);
-                await db.Database.ExecuteSqlRawAsync("delete from Series;", cancellationToken: stoppingToken);
-                await db.Database.ExecuteSqlRawAsync("delete from Genre;", cancellationToken: stoppingToken);
-                await db.Database.ExecuteSqlRawAsync("delete from Keyword;", cancellationToken: stoppingToken);
-                await db.Database.ExecuteSqlRawAsync("delete from Authors;", cancellationToken: stoppingToken);
-                await db.Database.ExecuteSqlRawAsync("drop table IF EXISTS books_fts;" 
-                    + " CREATE VIRTUAL TABLE books_fts USING fts5(title, authors, keywords, series, content='')", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("delete from AuthorSeries;", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("delete from AuthorBook;", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("delete from Books;", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("delete from Series;", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("delete from Genre;", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("delete from Keyword;", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("delete from Authors;", cancellationToken: stoppingToken);
+            await dbCtx.Database.ExecuteSqlRawAsync("drop table IF EXISTS books_fts;"
+                                                    + " CREATE VIRTUAL TABLE books_fts USING fts5(title, authors, keywords, series, content='')",
+                cancellationToken: stoppingToken);
 
-                logger.LogInformation("Books database cleared");
-                await db.SaveChangesAsync(stoppingToken);
-            }
+            logger.LogInformation("Books database cleared");
+            await dbCtx.SaveChangesAsync(stoppingToken);
+        }
 
-            logger.LogInformation("Indexing books");
+        Dictionary<string, int> authors = new();
+        Dictionary<string, int> series = new();
+        Dictionary<string, int> keywords = new();
 
-            Dictionary<string, int> authors = new();
-            Dictionary<string, int> series = new();
-            Dictionary<string, int> keywords = new();
+        int authorIdSource = 0;
+        int seriesId = 0;
 
-            int authorId = 0;
-            int seriesId = 0;
+        logger.LogInformation("Reading books info");
+        var booksList = await books.ToListAsync(cancellationToken: stoppingToken);
 
-            foreach (var chunk in lib.Queue.GetConsumingEnumerable().Chunk(5000))
-            {
-                await using (var db = await dbFactory.CreateDbContextAsync(stoppingToken))
-                {
-                    foreach (var bookItem in chunk)
-                    {
-                        var book = new Book()
-                        {
-                            Id = bookItem.Id,
-                            Date = bookItem.Date,
-                            Extension = bookItem.Ext,
-                            Title = bookItem.Title,
-                            Size = bookItem.Size,
-                            ArchiveFile = bookItem.ArchiveFile,
-                            FileName = bookItem.File,
-                            Language = bookItem.Lang,
-                            SeriesNo = int.TryParse(bookItem.SeriesNo, out var serno) ? serno : null
-                        };
-
-                        Series serie;
-                        if (!series.TryGetValue(bookItem.Series, out var serieExistingId))
-                        {
-                            serie = new Series
-                            {
-                                Id = ++seriesId,
-                                Name = bookItem.Series
-                            };
-                            series.Add(bookItem.Series, serie.Id);
-                            db.Series.Add(serie);
-                        }
-                        else
-                        {
-                            serie = db.Series.Find(serieExistingId)!;
-                        }
-                        book.Series = serie;
-                        
-                        var authorsList = bookItem.Authors.Split(':', StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var authorName in authorsList)
-                        {
-                            Author author;
-                            if (!authors.TryGetValue(authorName, out var authorExistingId))
-                            {
-                                var splitName = authorName.Split(',');
-                                author = new Author()
-                                {
-                                    Id = ++authorId,
-                                    LastName = splitName[0],
-                                    FirstName = splitName.Length > 1 ? splitName[1] : String.Empty,
-                                    MiddleName = splitName.Length > 2 ? splitName[2] : String.Empty,
-                                };
-                                authors.Add(authorName, author.Id);
-                                db.Authors.Add(author);
-                                author.Series.Add(serie);
-                            }
-                            else
-                            {
-                                author = db.Authors.Find(authorExistingId);
-                            }
-
-                            book.Authors.Add(author);
-                        }
-                        
-                        db.Books.Add(book);
-                        db.BooksFts.Add(new BooksFts()
-                        {
-                            RowId = book.Id,
-                            Authors = bookItem.Authors,
-                            Title = book.Title,
-                            Keywords = bookItem.Keywords,
-                            Series = bookItem.Series
-                        });                  
-
-                        lib.BooksAdded++;
-                    }
-                    
-                    logger.LogInformation("Indexing books. {count} completed", lib.BooksAdded);
-                    await db.SaveChangesAsync(stoppingToken);
-                }
-            }
+        logger.LogInformation("Indexing books");
+        var tracker = new ProgressTracker("Library indexing", booksList.Count, data =>
+        {
+            library.Library.IndexingMessage = string.Format(data.FormatTemplate, data.MessageArgs);
+            logger.Log(LogLevel.Information, data.MessageTemplate, data.MessageArgs);
         });
+
+        foreach (var chunk in booksList.Chunk(8000))
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(stoppingToken);
+            foreach (var bookItem in chunk)
+            {
+                var book = new Book()
+                {
+                    Id = bookItem.Id,
+                    Date = bookItem.Date,
+                    Extension = bookItem.Ext,
+                    Title = bookItem.Title,
+                    Size = bookItem.Size,
+                    ArchiveFile = bookItem.ArchiveFile,
+                    FileName = bookItem.File,
+                    Language = bookItem.Lang,
+                    SeriesNo = int.TryParse(bookItem.SeriesNo, out var serno) ? serno : null
+                };
+
+                Series serie;
+                if (!series.TryGetValue(bookItem.Series, out var serieExistingId))
+                {
+                    serie = new Series
+                    {
+                        Id = ++seriesId,
+                        Name = bookItem.Series
+                    };
+                    series.Add(bookItem.Series, serie.Id);
+                    db.Series.Add(serie);
+                }
+                else
+                {
+                    serie = await db.Series.FindAsync(serieExistingId);
+                }
+
+                book.Series = serie;
+
+                var authorsList = bookItem.Authors.Split(':', StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var authorName in authorsList)
+                {
+                    Author author;
+                    if (!authors.TryGetValue(authorName, out var authorId))
+                    {
+                        var splitName = authorName.Split(',');
+                        author = new Author()
+                        {
+                            Id = ++authorIdSource,
+                            LastName = splitName[0],
+                            FirstName = splitName.Length > 1 ? splitName[1] : String.Empty,
+                            MiddleName = splitName.Length > 2 ? splitName[2] : String.Empty,
+                        };
+                        authors.Add(authorName, author.Id);
+                        db.Authors.Add(author);
+                        author.Series.Add(serie);
+                    }
+                    else
+                    {
+                        author = await db.Authors.FindAsync(authorId);
+                    }
+
+                    book.Authors.Add(author);
+                }
+
+                db.Books.Add(book);
+                db.BooksFts.Add(new BooksFts()
+                {
+                    RowId = book.Id,
+                    Authors = bookItem.Authors,
+                    Title = book.Title,
+                    Keywords = bookItem.Keywords,
+                    Series = bookItem.Series
+                });
+
+                lib.BooksAdded++;
+                tracker.Track(1);
+            }
+
+            await db.SaveChangesAsync(stoppingToken);
+        }
     }
 }
-

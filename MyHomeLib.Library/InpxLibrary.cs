@@ -12,7 +12,8 @@ public class InpxLibrary
     public string Version { get; set; }
     public string IndexFilePath { get; set; }
     public string LibraryFolder { get; set; }
-    public BlockingCollection<BookItem> Queue { get; set; } = new (50000);
+    
+    public string IndexingMessage { get; set; }
 
     public Stream OpenBook(IBookItem book)
     {        
