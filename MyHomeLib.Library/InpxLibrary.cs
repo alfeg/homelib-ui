@@ -19,8 +19,11 @@ public class InpxLibrary
     {        
         var pathToFile = Path.Combine(LibraryFolder, book.ArchiveFile);
         using var file = File.OpenRead(pathToFile);
+       
         using var zip = new ZipArchive(file);
+        
         var entry = zip.GetEntry(book.File + "." + book.Ext);
+        
         var ms = new MemoryStream();
         using var fb2 = entry.Open();
         fb2.CopyTo(ms);
