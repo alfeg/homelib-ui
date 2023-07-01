@@ -7,7 +7,8 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
     ContentRootPath = WindowsServiceHelpers.IsWindowsService()
-                                     ? AppContext.BaseDirectory : default
+        ? AppContext.BaseDirectory
+        : default
 });
 builder.Host.UseWindowsService();
 
@@ -48,11 +49,8 @@ app.UseRouting();
 
 app.UseRequestLocalization();
 
-app.UseEndpoints(e =>
-{
-    e.MapControllers();
-    e.MapBlazorHub();
-    e.MapFallbackToPage("/_Host");
-});
+app.MapControllers();
+app.MapBlazorHub();
+app.MapFallbackToPage("/_Host");
 
 app.Run();
