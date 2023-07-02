@@ -1,16 +1,12 @@
 using System.Collections.Concurrent;
 using System.IO.Compression;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
 using Fb2.Document;
 using Humanizer;
 using Microsoft.Extensions.Options;
 using MonoTorrent;
 using MonoTorrent.Client;
-using MyHomeLib.Files.Core;
 
-namespace MyHomeLib.Files.Torrents;
+namespace MyHomeListServer.Torrent;
 
 public class DownloadManager
 {

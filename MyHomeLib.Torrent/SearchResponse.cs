@@ -1,3 +1,3 @@
-namespace MyHomeLib.Files.Torrents;
+namespace MyHomeListServer.Torrent;
 
 public record SearchResponse(string[] Names) : TorrentResponse;

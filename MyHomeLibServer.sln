@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHomeLib.Files", "MyHomeLi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHomeLib.Torrent", "MyHomeLib.Torrent\MyHomeLib.Torrent.csproj", "{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FlibustaCli", "FlibustaCli\FlibustaCli.csproj", "{7FAFABB6-2184-4103-AA53-4326AAC6125F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7FAFABB6-2184-4103-AA53-4326AAC6125F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7FAFABB6-2184-4103-AA53-4326AAC6125F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7FAFABB6-2184-4103-AA53-4326AAC6125F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7FAFABB6-2184-4103-AA53-4326AAC6125F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
