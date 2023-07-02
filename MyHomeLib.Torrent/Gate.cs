@@ -1,4 +1,4 @@
-namespace MyHomeLib.Files.Torrents;
+namespace MyHomeListServer.Torrent;
 
 public class Gate 
 {

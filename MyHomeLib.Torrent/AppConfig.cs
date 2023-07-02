@@ -1,4 +1,4 @@
-namespace MyHomeLib.Files.Core;
+namespace MyHomeListServer.Torrent;
 
 public class AppConfig
 {

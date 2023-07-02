@@ -1,10 +1,35 @@
+using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
-using MyHomeLib.Files.Core;
+using MonoTorrent.Client;
 using MyHomeLib.Library;
 using Parquet.Serialization;
 
-namespace MyHomeLib.Files.Torrents;
+namespace MyHomeListServer.Torrent;
+
+public static class TorrentsServiceExtension
+{
+    public static void AddTorrents(this IServiceCollection services, IConfiguration configuration)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+       services.Configure<AppConfig>(configuration);
+       services.AddSingleton<DownloadManager>();
+       services.AddSingleton<LibraryIndexer>();
+       services.AddMemoryCache();
+       services.AddSingleton<ClientEngine>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<AppConfig>>().Value;
+            var settingsBuilder = new EngineSettingsBuilder()
+            {
+                FastResumeMode = FastResumeMode.BestEffort,
+                CacheDirectory = config.CacheDirectory,
+            };
+    
+            var engine = new ClientEngine(settingsBuilder.ToSettings());
+            return engine;
+        });
+    }
+}
 
 public class LibraryIndexer
 {
@@ -81,6 +106,7 @@ public class LibraryIndexer
         var libraryEnumerable = readLibraryAsync.ToBlockingEnumerable()
             .Select(book => new BookInfoDto
                 {
+                    Id = book.Id,
                     Title = book.Title,
                     Author = book.Authors,
                     Series = book.Series,

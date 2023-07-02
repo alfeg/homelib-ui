@@ -1,7 +1,7 @@
 using MonoTorrent;
 using MonoTorrent.Client;
 
-namespace MyHomeLib.Files.Core;
+namespace MyHomeListServer.Torrent;
 
 public static class TorrentHelper
 {
@@ -22,17 +22,17 @@ public static class TorrentHelper
         }
     }
 
-    public static async Task<Torrent> DownloadTorrentFileAsync(this ClientEngine eng, MagnetLink link,
+    public static async Task<MonoTorrent.Torrent> DownloadTorrentFileAsync(this ClientEngine eng, MagnetLink link,
         AppConfig config)
     {
         var torrentFile = config.TorrentPath(link.InfoHashes.V1);
         if (File.Exists(torrentFile))
         {
-            return await Torrent.LoadAsync(torrentFile);
+            return await MonoTorrent.Torrent.LoadAsync(torrentFile);
         }
 
         var metadata = await eng.DownloadMetadataAsync(link, CancellationToken.None);
-        var torrent = await Torrent.LoadAsync(metadata.ToArray());
+        var torrent = await MonoTorrent.Torrent.LoadAsync(metadata.ToArray());
         await File.WriteAllBytesAsync(torrentFile, metadata.ToArray());
         return torrent;
     }

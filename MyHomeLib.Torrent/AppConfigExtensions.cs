@@ -1,6 +1,6 @@
 using MonoTorrent;
 
-namespace MyHomeLib.Files.Core;
+namespace MyHomeListServer.Torrent;
 
 public static class AppConfigExtensions
 {

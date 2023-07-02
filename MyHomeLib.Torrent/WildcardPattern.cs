@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace MyHomeLib.Files.Core;
+namespace MyHomeListServer.Torrent;
 
 public class WildcardPattern
 {
