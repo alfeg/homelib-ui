@@ -1,5 +1,7 @@
 using MonoTorrent;
 
+namespace MyHomeLib.Files.Core;
+
 public static class AppConfigExtensions
 {
     public static string DataFolder(this AppConfig config)
@@ -37,4 +39,7 @@ public static class AppConfigExtensions
 
     public static string TorrentPath(this AppConfig config, InfoHash hash) =>
         Path.Combine(config.TorrentsFolder(), $"{hash.ToHex()}.torrent");
+    
+    public static string DataFile(this AppConfig config, string infoHash) =>
+        Path.Combine(config.TorrentsFolder(), $"{infoHash}.parquet");
 }
