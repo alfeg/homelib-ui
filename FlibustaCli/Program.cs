@@ -36,7 +36,7 @@ app.Configure(config =>
 {
     config.SetApplicationName("FlibustaCLI");
    
-    // config.ValidateExamples();
+    config.ValidateExamples();
     
     config.AddExample("lib", "list");
     config.AddExample("lib", "add", "magnet:?xt=urn:btih:86754c4ea0c0bc40d6f3b260ac8476d4cdec5591&tr=http%3A%2F%2Ftr.ysagin.top%3A2710%2Fannounce&xl=426504503079&dn=Flibusta.FB2.01.05.23");
@@ -47,7 +47,7 @@ app.Configure(config =>
     {
         lib.AddCommand<ListLibraryCommand>("list")
             .WithDescription("List added libraries");
-        lib.AddCommand<AddLibraryCommand>("lib-add").WithDescription("Add library with magnet uri");    
+        lib.AddCommand<AddLibraryCommand>("add").WithDescription("Add library with magnet uri");    
     }).WithAlias("library");
 
     config.AddCommand<ListLibraryCommand>("lib-list").WithDescription("List added libraries");
