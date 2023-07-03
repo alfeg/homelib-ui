@@ -4,7 +4,7 @@ public record DownloadRequest(string Library, string Archive, string? Book = nul
 {
     public override string ToString()
     {
-        return $"[{Library}] {Name}";
+        return $"DownloadRequest [{Library}] {Name}";
     }
 
     public string Name => $"{Archive} => {Book}";

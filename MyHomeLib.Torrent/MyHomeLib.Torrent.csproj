@@ -19,6 +19,7 @@
         <PackageReference Include="Humanizer.Core" Version="2.14.1" />
         <PackageReference Include="MonoTorrent" Version="3.0.0-beta.rev0159" />
         <PackageReference Include="Parquet.Net" Version="4.15.0" />
+        <PackageReference Include="Spectre.Console" Version="0.47.0" />
     </ItemGroup>
 
     <ItemGroup>

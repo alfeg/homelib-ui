@@ -5,160 +5,137 @@ using Humanizer;
 using Microsoft.Extensions.Options;
 using MonoTorrent;
 using MonoTorrent.Client;
+using Spectre.Console;
 
 namespace MyHomeListServer.Torrent;
 
 public class DownloadManager
 {
     private readonly ClientEngine _clientEngine;
-    private readonly ILogger<DownloadManager> _logger;
 
-    public DownloadManager(ClientEngine clientEngine, IOptions<AppConfig> config, ILogger<DownloadManager> logger)
+    public DownloadManager(ClientEngine clientEngine, IOptions<AppConfig> config)
     {
         _clientEngine = clientEngine;
-        _logger = logger;
         _appConfig = config.Value;
     }
 
-    private readonly Gate _gate = new(new SemaphoreSlim(1));
-
-    private readonly ConcurrentDictionary<string, ConcurrentQueue<QueueItem>> _queue = new();
     private readonly AppConfig _appConfig;
-
-    private async Task<Task<TorrentResponse>> AddToQueue(TorrentRequest request)
-    {
-        using var _ = await _gate.Wait();
-
-        var queue = _queue.GetOrAdd(request.Library, hash =>
-        {
-            var internalQueue = new ConcurrentQueue<QueueItem>();
-            Task.Run(() => ProcessQueue(hash, internalQueue, CancellationToken.None));
-            return internalQueue;
-        });
-
-        var existing = queue.FirstOrDefault(q => q.Request == request);
-        if (existing != null)
-        {
-            _logger.LogInformation("{Request}: Already in queue", request);
-            return existing.TokenSource.Task;
-        }
-
-        var queueItem = new QueueItem(request, new TaskCompletionSource<TorrentResponse>());
-        queue.Enqueue(queueItem);
-        _logger.LogInformation("{Request}: Added to queue", request);
-        return queueItem.TokenSource.Task;
-    }
 
     public async Task<SearchResponse> SearchFiles(SearchRequest request)
     {
-        var task = await AddToQueue(request);
-        var response = await task;
+        var response = await ProcessQueue(request);
         return response as SearchResponse;
     }
 
     public async Task<DownloadResponse> DownloadFile(DownloadRequest request)
     {
-        var task = await AddToQueue(request);
-        var response = await task;
+        var response = await ProcessQueue(request);
         return response as DownloadResponse;
     }
 
-    record QueueItem(TorrentRequest Request, TaskCompletionSource<TorrentResponse> TokenSource);
-
-    private async Task ProcessQueue(string hash, ConcurrentQueue<QueueItem> queue, CancellationToken cancellationToken)
+    private async Task<TorrentResponse> ProcessQueue(TorrentRequest request,
+        CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("[{Hash}] Creating torrent manager", hash);
-        var manager = _clientEngine.Torrents.FirstOrDefault(t => t.InfoHashes.V1.ToHex() == hash);
+        var hash = request.Link?.InfoHashes.V1OrV2.ToHex() ?? request.Library;
+
+        AnsiConsole.WriteLine($"[{hash}] Processing request {request}");
+        var manager = _clientEngine.Torrents.FirstOrDefault(t => t.InfoHashes.V1OrV2.ToHex() == hash);
 
         if (manager == null)
         {
-            var link = new MagnetLink(InfoHash.FromHex(hash), announceUrls: _appConfig.AnnounceUrls);
-            _logger.LogInformation("[{Hash}] Adding streaming manager", hash);
+            var infoHash = request.Link?.InfoHashes ?? InfoHashes.FromInfoHash(InfoHash.FromHex(hash));
+            var announceUrls = request.Link?.AnnounceUrls ?? new List<string>();
+            announceUrls = announceUrls.Union(_appConfig.AnnounceUrls).ToList();
+            var link = new MagnetLink(infoHash, request.Link?.Name, announceUrls);
+
+            AnsiConsole.WriteLine($"[{hash}] Adding streaming manager");
             manager = await _clientEngine.AddStreamingAsync(link, _appConfig.TorrentsFolder(hash));
         }
 
         var cancel = new CancellationTokenSource();
-        var monitorLock = new ManualResetEventSlim();
 
-#pragma warning disable CS4014
-        Task.Run(async () =>
-#pragma warning restore CS4014
-        {
-            while (!cancel.Token.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(3), cancel.Token);
-                monitorLock.Wait();
-                _logger.LogInformation(
-                    "[{Hash}] D: {DownloadTotal} ({DownloadRate}) U: {UploadTotal} ({UploadRate}) (Seeds/Leechs: {Seeds}/{Peers})",
-                    hash,
-                    (manager.Monitor.DataBytesReceived + manager.Monitor.ProtocolBytesReceived).Bytes().Humanize(),
-                    manager.Monitor.DownloadRate.Bytes().Per(TimeSpan.FromSeconds(1)).Humanize(),
-                    (manager.Monitor.DataBytesSent + manager.Monitor.ProtocolBytesSent).Bytes().Humanize(),
-                    manager.Monitor.UploadRate.Bytes().Per(TimeSpan.FromSeconds(1)).Humanize(),
-                    manager.Peers.Seeds, manager.Peers.Leechs);
-            }
-        }, cancel.Token);
+        TorrentResponse? response = null;
 
-        manager.TorrentStateChanged += (sender, args) =>
-        {
-            _logger.LogInformation("[{Hash}] Torrent state changed from {OldState} to {NewState}", hash, args.OldState,
-                args.NewState);
-            if (args.NewState != TorrentState.Stopped)
+        await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Pong)
+            .StartAsync("Working", async (ctx) =>
             {
-                monitorLock.Set();
-            }
-            else
-            {
-                monitorLock.Reset();
-            }
-        };
-
-        while (true)
-        {
-            if (queue.Count > 0)
-            {
-                _logger.LogInformation("[{Hash}] Start streaming manager", hash);
-                await manager.SetDownloadOnly("");
-                await manager.StartAsync();
-                await manager.WaitForMetadataAsync(cancellationToken);
-
-                while (queue.TryPeek(out var item))
+                Task.Run(async () =>
                 {
-                    try
+                    while (!cancel.Token.IsCancellationRequested)
                     {
-                        switch (item.Request)
-                        {
-                            case DownloadRequest downloadRequest:
-                            {
-                                var download = await DownloadFileInternal(manager, downloadRequest, cancellationToken);
-                                item.TokenSource.SetResult(download);
-                                await Task.Delay(1000, cancellationToken);
-                                break;
-                            }
-                            case SearchRequest searchRequest:
-                                var pattern = new WildcardPattern(searchRequest.FilePattern);
-                                var result = manager.Files
-                                    .Select(f => f.Path)
-                                    .Where(f => pattern.IsMatch(f))
-                                    .ToArray();
-                                item.TokenSource.SetResult(new SearchResponse(result));
-                                break;
-                        }
+                        await Task.Delay(TimeSpan.FromSeconds(2));
+
+                        ctx.Status(string.Format("[[{0}]] D: {1} ({2}) U: {3} ({4}) (Seeds/Leechs: {5}/{6})",
+                            hash,
+                            (manager.Monitor.DataBytesReceived + manager.Monitor.ProtocolBytesReceived).Bytes()
+                            .Humanize(),
+                            manager.Monitor.DownloadRate.Bytes().Per(TimeSpan.FromSeconds(1)).Humanize(),
+                            (manager.Monitor.DataBytesSent + manager.Monitor.ProtocolBytesSent).Bytes().Humanize(),
+                            manager.Monitor.UploadRate.Bytes().Per(TimeSpan.FromSeconds(1)).Humanize(),
+                            manager.Peers.Seeds, manager.Peers.Leechs
+                        ));
                     }
-                    finally
-                    {
-                        queue.TryDequeue(out _);
-                    }
+                });
+
+                void ManagerOnTorrentStateChanged(object? sender, TorrentStateChangedEventArgs args)
+                {
+                    AnsiConsole.WriteLine("[{0}] Torrent state changed from {1} to {2}", hash, args.OldState,
+                        args.NewState);
                 }
 
-                _logger.LogInformation("[{Hash}] Stop streaming manager", hash);
+                manager.TorrentStateChanged += ManagerOnTorrentStateChanged;
 
-                await manager.StopAsync();
-            }
+                if (request.RequireStartStop || !manager.HasMetadata)
+                {
+                    AnsiConsole.WriteLine("[{0}] Start streaming manager", hash);
 
-            await Task.Delay(2000, cancellationToken);
-            await RemoveOldArchivesPolicy(manager);
-        }
+                    await manager.StartAsync();
+                    await manager.WaitForMetadataAsync(cancellationToken);
+                }
+
+                await manager.SetDownloadOnly("");
+
+                var torrentPath = _appConfig.TorrentPath(manager.InfoHashes.V1OrV2);
+                if (!File.Exists(torrentPath) && manager.Torrent != null)
+                {
+                    File.Copy(manager.MetadataPath, torrentPath);
+                }
+
+                try
+                {
+                    switch (request)
+                    {
+                        case DownloadRequest downloadRequest:
+                            response = await DownloadFileInternal(manager, downloadRequest, cancellationToken);
+                            break;
+                        case SearchRequest searchRequest:
+                            var pattern = new WildcardPattern(searchRequest.FilePattern);
+                            var result = manager.Files
+                                .Select(f => f.Path)
+                                .Where(f => pattern.IsMatch(f))
+                                .ToArray();
+                            response = new SearchResponse(result);
+                            break;
+                    }
+                }
+                finally
+                {
+                    AnsiConsole.WriteLine("[{0}] Stop streaming manager", hash);
+                    manager.TorrentStateChanged -= ManagerOnTorrentStateChanged;
+                    try
+                    {
+                        await manager.StopAsync();
+                    } catch{}
+
+                    cancel.Cancel();
+
+                    await RemoveOldArchivesPolicy(manager);
+                }
+            });
+
+        return response ??
+               throw new NotImplementedException($"Request of type: {request.GetType()} is not implemented");
     }
 
     private async Task RemoveOldArchivesPolicy(TorrentManager manager)
@@ -168,11 +145,15 @@ public class DownloadManager
         foreach (var file in manager.Files)
         {
             var info = new FileInfo(file.DownloadCompleteFullPath);
+            if (info.Name.EndsWith("inpx"))
+            {
+                continue;
+            }
             if (info.Exists && (DateTime.UtcNow - info.LastAccessTimeUtc) > oldFilePolicySpan)
             {
                 File.Delete(info.FullName);
-                _logger.LogWarning("[{Hash}] File {FilName} deleted by policy. Older then {PolicyPeriod}",
-                    manager.InfoHashes.V1.ToHex(), info.Name, oldFilePolicySpan.Humanize());
+                AnsiConsole.WriteLine("[{0}] File {1} deleted by policy. Older then {2}",
+                    manager.InfoHashes.V1OrV2.ToHex(), info.Name, oldFilePolicySpan.Humanize());
                 await manager.SetNeedsHashCheckAsync();
             }
         }
@@ -181,19 +162,13 @@ public class DownloadManager
     private async Task<DownloadResponse> DownloadFileInternal(TorrentManager manager, DownloadRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[{Hash}] {Request} Starting download of file", request.Library, request.Name);
+        AnsiConsole.WriteLine("[{0}] {1} Starting download of file", request.Library, request.Name);
 
         var archive = request.Archive;
         var book = request.Book;
 
         var fileToDownload = manager.Files.First(f => f.Path == archive);
         await manager.SetDownloadOnly(fileToDownload.Path);
-        if (manager.State == TorrentState.Stopped)
-        {
-            await manager.StartAsync();
-            await manager.WaitForMetadataAsync(cancellationToken);
-        }
-
         await using var archiveFileStream =
             fileToDownload.BitField.AllTrue
                 ? File.Open(fileToDownload.DownloadCompleteFullPath, FileMode.Open)
@@ -208,16 +183,16 @@ public class DownloadManager
         if (book == null)
         {
             await archiveFileStream.CopyToAsync(bookStream, cancellationToken);
-            await manager.StopAsync();
-            return new DownloadResponse(bookStream.ToArray(), string.Empty, string.Empty, fileToDownload.DownloadCompleteFullPath);
+            return new DownloadResponse(bookStream.ToArray(), string.Empty, string.Empty,
+                fileToDownload.DownloadCompleteFullPath);
         }
 
-        _logger.LogInformation("[{Hash}] {Request} Looking for archive central directory", request.Library,
+        AnsiConsole.WriteLine("[{0}] {1} Looking for archive central directory", request.Library,
             request.Name);
 
         using (var zip = new ZipArchive(archiveFileStream))
         {
-            _logger.LogInformation("[{Hash}] {Request} Reading book data", request.Library, request.Name);
+            AnsiConsole.WriteLine("[{0}] {1} Reading book data", request.Library, request.Name);
             var entry = zip.GetEntry(book);
             var entryStream = entry.Open();
             await entryStream.CopyToAsync(bookStream, cancellationToken);
@@ -233,13 +208,13 @@ public class DownloadManager
 
             title ??= Path.GetFileNameWithoutExtension(book);
 
-            _logger.LogInformation("[{Hash}] {Request} Downloaded {BookTitle}.fb2", request.Library, request.Name,
+            AnsiConsole.WriteLine("[{0}] {1} Downloaded {2}.fb2", request.Library, request.Name,
                 title);
             return new DownloadResponse(bookStream.ToArray(), "application/fb2", $"{title}.fb2",
                 fileToDownload.DownloadCompleteFullPath);
         }
 
-        _logger.LogInformation("[{Hash}] {Request} Downloaded {BookTitle}", request.Library, request.Name, book);
+        AnsiConsole.WriteLine("[{0}] {1} Downloaded {2}", request.Library, request.Name, book);
         return new DownloadResponse(bookStream.ToArray(), "application/fb2", book,
             fileToDownload.DownloadCompleteFullPath);
     }
