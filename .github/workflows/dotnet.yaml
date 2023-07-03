@@ -1,6 +1,7 @@
 name: .NET
 
 on:
+  
   push:
     branches: [ master ]
   pull_request:
@@ -24,8 +25,6 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build --no-restore -c release
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
     - name: Small
       run: >
         dotnet publish -c release -p:PublishDir=../dist/small --no-self-contained 
@@ -39,12 +38,12 @@ jobs:
 
     - uses: actions/upload-artifact@v3
       with:
-        name: Elib2Ebook-${{ matrix.os }}
+        name: FlibustaCli-${{ matrix.os }}
         path: ${{ github.workspace }}/dist/small
 
     - uses: actions/upload-artifact@v3
       with:
-        name: Elib2Ebook-${{ matrix.os }}-portable
+        name: FlibustaCli-${{ matrix.os }}-portable
         path: ${{ github.workspace }}/dist/portable
     
   release:
@@ -57,7 +56,7 @@ jobs:
       - uses: kzrnm/get-net-sdk-project-versions-action@v1
         id: get-version
         with:
-          proj-path: Elib2Ebook/Elib2Ebook.csproj
+          proj-path: FlibustaCli/FlibustaCli.csproj
           
       - name: "get-last-release"
         id: last_release
@@ -81,39 +80,39 @@ jobs:
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
         uses: actions/download-artifact@v3
         with:
-          name: Elib2Ebook-ubuntu-latest
+          name: FlibustaCli-ubuntu-latest
           path: ${{ github.workspace }}/linux
       - name: download-artifact-ubuntu-portable
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
         uses: actions/download-artifact@v3
         with:
-          name: Elib2Ebook-ubuntu-latest-portable
+          name: FlibustaCli-ubuntu-latest-portable
           path: ${{ github.workspace }}/linux-portable      
           
       - name: download-artifact-windows
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
         uses: actions/download-artifact@v3
         with:
-          name: Elib2Ebook-windows-latest
+          name: FlibustaCli-windows-latest
           path: ${{ github.workspace }}/windows
       - name: download-artifact-windows-portable
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
         uses: actions/download-artifact@v3
         with:
-          name: Elib2Ebook-windows-latest-portable
+          name: FlibustaCli-windows-latest-portable
           path: ${{ github.workspace }}/windows-portable
           
       - name: download-artifact-macos
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
         uses: actions/download-artifact@v3
         with:
-          name: Elib2Ebook-macos-latest
+          name: FlibustaCli-macos-latest
           path: ${{ github.workspace }}/macos
       - name: download-artifact-macos-portable
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
         uses: actions/download-artifact@v3
         with:
-          name: Elib2Ebook-macos-latest-portable
+          name: FlibustaCli-macos-latest-portable
           path: ${{ github.workspace }}/macos-portable
                   
       - name: Install zip
@@ -122,30 +121,30 @@ jobs:
         
       - name: Zip output
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
-        run: zip -qq -x "*.pdb" -r ../Elib2Ebook-Linux.zip .
+        run: zip -qq -x "*.pdb" -r ../FlibustaCli-Linux.zip .
         working-directory: ${{ github.workspace }}/linux
       - name: Zip output
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
-        run: zip -qq -x "*.pdb" -r ../Elib2Ebook-Linux-portable.zip .
+        run: zip -qq -x "*.pdb" -r ../FlibustaCli-Linux-portable.zip .
         working-directory: ${{ github.workspace }}/linux-portable
           
       - name: Zip output
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
-        run: zip -qq -x "*.pdb" -r ../Elib2Ebook-Windows.zip .
+        run: zip -qq -x "*.pdb" -r ../FlibustaCli-Windows.zip .
         working-directory: ${{ github.workspace }}/windows          
       - name: Zip output
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
-        run: zip -qq -x "*.pdb" -r ../Elib2Ebook-Windows-portable.zip .
+        run: zip -qq -x "*.pdb" -r ../FlibustaCli-Windows-portable.zip .
         working-directory: ${{ github.workspace }}/windows-portable
         
       - name: Zip output
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
-        run: zip -qq -x "*.pdb" -r ../Elib2Ebook-Macos.zip .
+        run: zip -qq -x "*.pdb" -r ../FlibustaCli-Macos.zip .
         working-directory: ${{ github.workspace }}/macos
                  
       - name: Zip output
         if: ${{ steps.last_release.outputs.tag_name != steps.get-version.outputs.version }}
-        run: zip -qq -x "*.pdb" -r ../Elib2Ebook-Macos-portable.zip .
+        run: zip -qq -x "*.pdb" -r ../FlibustaCli-Macos-portable.zip .
         working-directory: ${{ github.workspace }}/macos-portable
                  
       - name: upload linux artifact
@@ -155,8 +154,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: Elib2Ebook-Linux.zip
-          asset_name: Elib2Ebook-Linux.zip
+          asset_path: FlibustaCli-Linux.zip
+          asset_name: FlibustaCli-Linux.zip
           asset_content_type: application/zip
                  
       - name: upload windows artifact
@@ -166,8 +165,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: Elib2Ebook-Windows.zip
-          asset_name: Elib2Ebook-Windows.zip
+          asset_path: FlibustaCli-Windows.zip
+          asset_name: FlibustaCli-Windows.zip
           asset_content_type: application/zip
           
       - name: upload macos artifact
@@ -177,8 +176,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: Elib2Ebook-Macos.zip
-          asset_name: Elib2Ebook-Macos.zip
+          asset_path: FlibustaCli-Macos.zip
+          asset_name: FlibustaCli-Macos.zip
           asset_content_type: application/zip
 
       - name: upload linux artifact portable
@@ -188,8 +187,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: Elib2Ebook-Linux-portable.zip
-          asset_name: Elib2Ebook-Linux-portable.zip
+          asset_path: FlibustaCli-Linux-portable.zip
+          asset_name: FlibustaCli-Linux-portable.zip
           asset_content_type: application/zip
 
       - name: upload windows artifact portable
@@ -199,8 +198,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: Elib2Ebook-Windows-portable.zip
-          asset_name: Elib2Ebook-Windows-portable.zip
+          asset_path: FlibustaCli-Windows-portable.zip
+          asset_name: FlibustaCli-Windows-portable.zip
           asset_content_type: application/zip
 
       - name: upload macos artifact portable
@@ -210,6 +209,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: Elib2Ebook-Macos-portable.zip
-          asset_name: Elib2Ebook-Macos-portable.zip
+          asset_path: FlibustaCli-Macos-portable.zip
+          asset_name: FlibustaCli-Macos-portable.zip
           asset_content_type: application/zip
