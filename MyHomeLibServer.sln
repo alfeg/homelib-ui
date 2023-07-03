@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHomeLibServer", "MyHomeLi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHomeLib.Library", "MyHomeLib.Library\MyHomeLib.Library.csproj", "{970BEB89-3E54-45BA-8CD8-1AC6F71CC82A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHomeLib.Files", "MyHomeLib.Files\MyHomeLib.Files.csproj", "{122F2FFB-EFBB-46DE-8AB0-689A33146A54}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyHomeLib.Torrent", "MyHomeLib.Torrent\MyHomeLib.Torrent.csproj", "{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FlibustaCli", "FlibustaCli\FlibustaCli.csproj", "{7FAFABB6-2184-4103-AA53-4326AAC6125F}"
@@ -27,10 +25,6 @@ Global
 		{970BEB89-3E54-45BA-8CD8-1AC6F71CC82A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{970BEB89-3E54-45BA-8CD8-1AC6F71CC82A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{970BEB89-3E54-45BA-8CD8-1AC6F71CC82A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{122F2FFB-EFBB-46DE-8AB0-689A33146A54}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{122F2FFB-EFBB-46DE-8AB0-689A33146A54}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{122F2FFB-EFBB-46DE-8AB0-689A33146A54}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{122F2FFB-EFBB-46DE-8AB0-689A33146A54}.Release|Any CPU.Build.0 = Release|Any CPU
 		{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ED1852DD-F10C-4837-9BA9-B9C6C4D82F7A}.Release|Any CPU.ActiveCfg = Release|Any CPU

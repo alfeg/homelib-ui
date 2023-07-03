@@ -1,5 +1,8 @@
+using MonoTorrent;
+
 namespace MyHomeListServer.Torrent;
 
-public record SearchRequest(string Library, string FilePattern) : TorrentRequest(Library)
+public record SearchRequest(string Library, string FilePattern) : TorrentRequest(Library, RequireStartStop: false)
 {
+
 }

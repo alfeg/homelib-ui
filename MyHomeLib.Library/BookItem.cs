@@ -17,7 +17,7 @@ public class BookItem : IBookItem
     public string File { get; set; }
     
     public string Ext { get; set; }
-    public DateOnly Date { get; set; }
+    public DateTime Date { get; set; }
     public long Size { get; set; }
 
     public string Lang { get; set; }

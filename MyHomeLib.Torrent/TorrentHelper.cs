@@ -25,7 +25,7 @@ public static class TorrentHelper
     public static async Task<MonoTorrent.Torrent> DownloadTorrentFileAsync(this ClientEngine eng, MagnetLink link,
         AppConfig config)
     {
-        var torrentFile = config.TorrentPath(link.InfoHashes.V1);
+        var torrentFile = config.TorrentPath(link.InfoHashes.V1OrV2);
         if (File.Exists(torrentFile))
         {
             return await MonoTorrent.Torrent.LoadAsync(torrentFile);
