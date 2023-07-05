@@ -96,10 +96,8 @@ public class LibraryIndexer
         return data;
     }
     
-    public async IAsyncEnumerable<BookItem> SearchLibrary(string hash, string search)
+    public async IAsyncEnumerable<BookItem> SearchLibrary(string hash, string? search, string? language)
     {
-        // urlPrefix = urlPrefix.TrimEnd('/') + "/";
-
         IEnumerable<BookItem> SearchBooks(IList<BookItem> data)
         {
             foreach (var bookInfoDto in data)
@@ -107,6 +105,11 @@ public class LibraryIndexer
                 if (bookInfoDto.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                     bookInfoDto.Authors.Contains(search, StringComparison.OrdinalIgnoreCase))
                 {
+                    if (language != null && bookInfoDto.Lang != language)
+                    {
+                        continue;
+                    }
+                    
                     yield return bookInfoDto;
                 }
             }

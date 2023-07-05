@@ -17,6 +17,8 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
         public string? Library { get; set; }
 
         [CommandOption("-m|--max")] public int MaxResults { get; set; } = 20;
+        
+        [CommandOption("-l|--language")] public string? Language { get; set; }
     }
 
     public SearchCommand(LibraryIndexer libraryIndexer)
@@ -44,7 +46,7 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
         {
             foreach (var library in LibraryHashes())
             {
-                var results = _libraryIndexer.SearchLibrary(library, settings.Search);
+                var results = _libraryIndexer.SearchLibrary(library, settings.Search, settings.Language);
                 await foreach (var book in results)
                 {
                     yield return (library, book);
@@ -57,6 +59,7 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
         table.AddColumn("Hash");
         table.AddColumn("Book Title");
         table.AddColumn("Book Authors");
+        table.AddColumn("Language");
         table.AddColumn(new TableColumn("ID").RightAligned());
 
         await AnsiConsole.Live(table).StartAsync(async ctx =>
@@ -67,7 +70,7 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
             {
                 var library = result.Library;
                 var book = result.Book;
-                table.AddRow(library.Substring(0, 12), book.Title, book.Authors, book.Id.ToString());
+                table.AddRow(library.Substring(0, 12), book.Title, book.Authors, book.Lang, book.Id.ToString());
                 ctx.Refresh();
                 if (++count >= max)
                 {

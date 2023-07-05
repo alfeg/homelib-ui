@@ -17,16 +17,15 @@ public static class TorrentsServiceExtension
         services.AddSingleton<ClientEngine>(sp =>
         {
             var config = sp.GetRequiredService<IOptions<AppConfig>>().Value;
-            var settingsBuilder = new EngineSettingsBuilder()
+            var settingsBuilder = new EngineSettingsBuilder
             {
                 FastResumeMode = FastResumeMode.BestEffort,
                 CacheDirectory = config.CacheDirectory,
             };
             var factories = Factories.Default
                 .WithStreamingPieceRequesterCreator(() => new PartialStreamingRequester(config));
-            
-            var engine = new ClientEngine(settingsBuilder.ToSettings(), factories);
-            return engine;
+
+            return new ClientEngine(settingsBuilder.ToSettings(), factories);
         });
 
         return services;

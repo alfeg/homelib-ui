@@ -364,3 +364,4 @@ FodyWeavers.xsd
 
 .idea
 /MyHomeLib.Files/cache/
+/dist

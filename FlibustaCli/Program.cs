@@ -1,12 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-// library
-//     list
-//     add
-// search: book
-// download: book id
-
-using FlibustaCli.Core;
+﻿using FlibustaCli.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MyHomeListServer.Torrent;
