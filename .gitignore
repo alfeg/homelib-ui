@@ -366,3 +366,4 @@ FodyWeavers.xsd
 /MyHomeLib.Files/cache/
 /dist
 .DS_Store
+/FlibustaCli/cache
