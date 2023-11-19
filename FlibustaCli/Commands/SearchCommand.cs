@@ -18,7 +18,7 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
 
         [CommandOption("-m|--max")] public int MaxResults { get; set; } = 20;
         
-        [CommandOption("-l|--language")] public string? Language { get; set; }
+        [CommandOption("-g|--language")] public string? Language { get; set; }
     }
 
     public SearchCommand(LibraryIndexer libraryIndexer)
