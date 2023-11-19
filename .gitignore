@@ -365,3 +365,4 @@ FodyWeavers.xsd
 .idea
 /MyHomeLib.Files/cache/
 /dist
+.DS_Store
