@@ -19,6 +19,7 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
         [CommandOption("-m|--max")] public int MaxResults { get; set; } = 20;
         
         [CommandOption("-g|--language")] public string? Language { get; set; }
+        [CommandOption("-a|--author")] public string? Author { get; set; }
     }
 
     public SearchCommand(LibraryIndexer libraryIndexer)
@@ -46,7 +47,7 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
         {
             foreach (var library in LibraryHashes())
             {
-                var results = _libraryIndexer.SearchLibrary(library, settings.Search, settings.Language);
+                var results = _libraryIndexer.SearchLibrary(library, settings.Search, settings.Author, settings.Language);
                 await foreach (var book in results)
                 {
                     yield return (library, book);

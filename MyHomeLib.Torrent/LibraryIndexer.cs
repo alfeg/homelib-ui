@@ -60,7 +60,8 @@ public class LibraryIndexer
                 File.Delete(dataFile);
             }
 
-            AnsiConsole.MarkupLine($"[[{hash}]] Saving [green]{libraryEnumerable.Count}[/] books data to [bold]{dataFile}[/]");
+            AnsiConsole.MarkupLine(
+                $"[[{hash}]] Saving [green]{libraryEnumerable.Count}[/] books data to [bold]{dataFile}[/]");
             ctx.Status($"Saving");
             await ParquetSerializer.SerializeAsync(libraryEnumerable, dataFile, new ParquetSerializerOptions
             {
@@ -95,21 +96,26 @@ public class LibraryIndexer
         var data = await ParquetSerializer.DeserializeAsync<BookItem>(file);
         return data;
     }
-    
-    public async IAsyncEnumerable<BookItem> SearchLibrary(string hash, string? search, string? language)
+
+    public async IAsyncEnumerable<BookItem> SearchLibrary(string hash, string? search, string? author, string? language)
     {
         IEnumerable<BookItem> SearchBooks(IList<BookItem> data)
         {
             foreach (var bookInfoDto in data)
             {
-                if (bookInfoDto.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    bookInfoDto.Authors.Contains(search, StringComparison.OrdinalIgnoreCase))
+                var res = author != null
+                    ? bookInfoDto.Title.Contains(search, StringComparison.OrdinalIgnoreCase) &&
+                      bookInfoDto.Authors.Contains(author, StringComparison.OrdinalIgnoreCase)
+                    : bookInfoDto.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                      bookInfoDto.Authors.Contains(search, StringComparison.OrdinalIgnoreCase);
+
+                if (res)
                 {
                     if (language != null && bookInfoDto.Lang != language)
                     {
                         continue;
                     }
-                    
+
                     yield return bookInfoDto;
                 }
             }
