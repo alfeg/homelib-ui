@@ -167,7 +167,7 @@ public class DownloadManager
         var archive = request.Archive;
         var book = request.Book;
 
-        var fileToDownload = manager.Files.First(f => f.Path == archive);
+        var fileToDownload = manager.Files.First(f => f.Path.EndsWith(archive));
         await manager.SetDownloadOnly(fileToDownload.Path);
         await using var archiveFileStream =
             fileToDownload.BitField.AllTrue
