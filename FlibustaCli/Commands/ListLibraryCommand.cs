@@ -11,7 +11,7 @@ internal class ListLibraryCommand : AsyncCommand<ListLibrarySettings>
         _libraryIndexer = libraryIndexer;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, ListLibrarySettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, ListLibrarySettings settings, CancellationToken cancellationToken)
     {
         var libraries = _libraryIndexer.ListLibraries()
             .OrderByDescending(l => l.Files.Count);

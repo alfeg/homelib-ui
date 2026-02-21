@@ -27,7 +27,7 @@ internal class SearchCommand : AsyncCommand<SearchCommand.SearchCommandSettings>
         _libraryIndexer = libraryIndexer;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, SearchCommandSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, SearchCommandSettings settings, CancellationToken cancellationToken)
     {
         IEnumerable<string> LibraryHashes()
         {

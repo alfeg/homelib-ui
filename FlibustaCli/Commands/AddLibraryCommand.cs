@@ -16,7 +16,7 @@ public class AddLibraryCommand : AsyncCommand<AddLibraryCommand.AddLibrarySettin
         _libraryIndexer = libraryIndexer;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, AddLibrarySettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, AddLibrarySettings settings, CancellationToken cancellationToken)
     {
         await _libraryIndexer.IndexLibrary(settings.MagnetUri ?? throw new ArgumentNullException(nameof(settings.MagnetUri)));
         return 0;

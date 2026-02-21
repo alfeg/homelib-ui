@@ -23,7 +23,7 @@ internal class DownloadCommand : AsyncCommand<DownloadCommand.DownloadCommandSet
         _libraryIndexer = libraryIndexer;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, DownloadCommandSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, DownloadCommandSettings settings, CancellationToken cancellationToken)
     {
         IEnumerable<string> LibraryHashes()
         {
