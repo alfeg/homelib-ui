@@ -56,26 +56,41 @@ public class DownloadManager
 
         // Background stats sampler — feeds IProgress<TorrentStats> every second while active
         using var statsCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (request.Progress is not null)
+        _ = Task.Run(async () =>
         {
-            _ = Task.Run(async () =>
+            var tick = 0;
+            while (!statsCts.Token.IsCancellationRequested)
             {
-                while (!statsCts.Token.IsCancellationRequested)
-                {
-                    request.Progress.Report(new TorrentStats(
-                        manager.Monitor.DownloadRate,
-                        manager.Monitor.UploadRate,
-                        manager.Monitor.DataBytesReceived + manager.Monitor.ProtocolBytesReceived,
-                        manager.Peers.Seeds,
-                        manager.Peers.Leechs,
-                        manager.PartialProgress,
-                        manager.State.ToString(),
-                        _clientEngine.Dht.NodeCount,
-                        _clientEngine.Dht.State.ToString()));
-                    try { await Task.Delay(1000, statsCts.Token); } catch { break; }
-                }
-            }, statsCts.Token);
-        }
+                var stats = new TorrentStats(
+                    manager.Monitor.DownloadRate,
+                    manager.Monitor.UploadRate,
+                    manager.Monitor.DataBytesReceived + manager.Monitor.ProtocolBytesReceived,
+                    manager.Peers.Seeds,
+                    manager.Peers.Leechs,
+                    manager.PartialProgress,
+                    manager.State.ToString(),
+                    _clientEngine.Dht.NodeCount,
+                    _clientEngine.Dht.State.ToString());
+
+                request.Progress?.Report(stats);
+
+                if (++tick % 5 == 0)
+                    _logger.LogInformation(
+                        "[{Hash}] State={State} | DHT={DhtState} nodes={DhtNodes} | " +
+                        "Seeds={Seeds} Peers={Peers} | ⬇ {Down:0.0} KB/s ⬆ {Up:0.0} KB/s | " +
+                        "Received={Bytes} KB | Progress={Progress:0.0}%",
+                        hash,
+                        stats.State,
+                        stats.DhtState, stats.DhtNodes,
+                        stats.Seeds, stats.Peers,
+                        stats.DownloadRateBytesPerSec / 1024,
+                        stats.UploadRateBytesPerSec / 1024,
+                        stats.BytesReceived / 1024,
+                        stats.PartialProgress);
+
+                try { await Task.Delay(1000, statsCts.Token); } catch { break; }
+            }
+        }, statsCts.Token);
 
         void OnTorrentStateChanged(object? sender, TorrentStateChangedEventArgs args)
             => _logger.LogInformation("[{Hash}] Torrent state: {Old} → {New}", hash, args.OldState, args.NewState);
