@@ -2,6 +2,8 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject LibraryService Library
 @inject DownloadQueueService Queue
+@implements IDisposable
+@using Humanizer
 
 <PageTitle>Book Search — MyHomeLib</PageTitle>
 
@@ -13,9 +15,34 @@
 }
 else if (!libraryReady)
 {
-    <div class="alert alert-info d-flex align-items-center gap-2">
-        <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-        <span>Loading library index (may download INPX from torrent on first run)…</span>
+    <div class="alert alert-info">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+            <span>@Library.LoadStatus</span>
+        </div>
+        @if (Library.InpxStats is { } s)
+        {
+            <div class="mt-2 ms-1" style="font-size:0.8rem">
+                @if (s.State == "Metadata")
+                {
+                    <div>Fetching torrent metadata via DHT…
+                        <span class="ms-2">🌐 @s.DhtNodes nodes (@s.DhtState)</span>
+                        <span class="ms-2">👤 @s.Seeds seeds / @s.Peers peers</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="progress mb-1" style="height:5px;max-width:400px" title="@s.PartialProgress.ToString("0.0")%">
+                        <div class="progress-bar" style="width:@s.PartialProgress.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                    </div>
+                    <div class="d-flex gap-3">
+                        <span>⬇ @FormatRate(s.DownloadRateBytesPerSec)</span>
+                        <span>🌱 @s.Seeds / @s.Peers</span>
+                        <span>🌐 @s.DhtNodes (@s.DhtState)</span>
+                    </div>
+                }
+            </div>
+        }
     </div>
 }
 else if (!indexReady)
@@ -112,6 +139,7 @@ else if (!indexReady)
 @code {
     string searchQuery = "";
     Guid? lastQueued;
+    PeriodicTimer? _loadTimer;
 
     (IReadOnlyList<BookItem> Page, int Total)? results;
     bool libraryReady;
@@ -129,10 +157,14 @@ else if (!indexReady)
             errorMessage = Library.IndexTask.Exception?.GetBaseException().Message;
         else if (!indexReady)
             _ = WatchProgress();
+        if (!indexReady)
+            _ = PollLoad();
     }
 
     async Task WatchProgress()
     {
+        // Poll every second while loading so LoadStatus / InpxStats stay current
+        _loadTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         try
         {
             await Library.LoadTask;
@@ -146,7 +178,16 @@ else if (!indexReady)
         {
             errorMessage = ex.GetBaseException().Message;
         }
+        _loadTimer.Dispose();
+        _loadTimer = null;
         await InvokeAsync(StateHasChanged);
+    }
+
+    // Drives the re-render loop while loading
+    async Task PollLoad()
+    {
+        while (_loadTimer is not null && await _loadTimer.WaitForNextTickAsync())
+            await InvokeAsync(StateHasChanged);
     }
 
     async Task Search()
@@ -165,4 +206,9 @@ else if (!indexReady)
     {
         lastQueued = await Queue.EnqueueAsync(book);
     }
+
+    static string FormatRate(double bytesPerSec) =>
+        bytesPerSec < 1 ? "0 B/s" : $"{((long)bytesPerSec).Bytes().Humanize("#.#")}/s";
+
+    public void Dispose() => _loadTimer?.Dispose();
 }
