@@ -3,6 +3,9 @@ using MyHomeLib.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Serve _framework/blazor.web.js and other SDK static assets in all environments.
+builder.WebHost.UseStaticWebAssets();
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 

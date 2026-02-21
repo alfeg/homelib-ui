@@ -14,5 +14,8 @@
 @code {
     [Inject] LibraryService Library { get; set; } = default!;
 
-    string Subtitle => Library.Metadata.Description ?? string.Empty;
+    // collection.info is multi-line; show only the first meaningful line.
+    string Subtitle => Library.Metadata.Description?
+        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .FirstOrDefault() ?? string.Empty;
 }
