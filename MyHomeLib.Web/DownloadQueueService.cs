@@ -164,14 +164,11 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
 
     public async Task DeleteAsync(Guid jobId)
     {
-        // If the job is actively downloading, cancel it — ProcessJobAsync will delete from DB
-        if (_jobCts.TryGetValue(jobId, out var cts))
-        {
-            await cts.CancelAsync();
-            return; // deletion happens in ProcessJobAsync's catch
-        }
+        // Cancel active download if running (fire-and-forget the cancellation)
+        if (_jobCts.TryRemove(jobId, out var cts))
+            _ = cts.CancelAsync();
 
-        // Otherwise remove immediately
+        // Delete from DB and disk immediately — don't wait for ProcessJobAsync
         var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
         if (job?.FilePath != null && File.Exists(job.FilePath))
             File.Delete(job.FilePath);
@@ -226,7 +223,7 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
         }
         catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
         {
-            // User-initiated abort: remove from queue entirely
+            // User-initiated abort — DeleteAsync already removed from DB; this is a no-op safety net
             _logger.LogInformation("Job {JobId} aborted by user", jobId);
             await DbExecAsync($"DELETE FROM download_queue WHERE id = '{jobId}'");
         }
