@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="MyHomeLib.Library\MyHomeLib.Library.csproj" />
+  <Project Path="MyHomeLib.Torrent\MyHomeLib.Torrent.csproj" />
+  <Project Path="FlibustaCli\FlibustaCli.csproj" />
+  <Folder Name="Build">
+    <File Path=".github\workflows\dotnet.yaml" />
+  </Folder>
+</Solution>
