@@ -2,7 +2,11 @@ namespace MyHomeLib.Web;
 
 public class LibraryConfig
 {
-    /// <summary>Path to the .inpx file.</summary>
+    /// <summary>
+    /// Optional explicit path to a .inpx file.
+    /// If empty, the app looks for *.inpx in <see cref="DownloadsDirectory"/>;
+    /// if none is found there, it downloads the INPX from the torrent automatically.
+    /// </summary>
     public string InpxPath { get; set; } = string.Empty;
 
     /// <summary>
