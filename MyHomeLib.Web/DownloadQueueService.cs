@@ -33,11 +33,15 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
         _config = config.Value;
         _logger = logger;
 
-        var dbDir = Path.GetDirectoryName(Path.GetFullPath(_config.QueueDbPath));
+        var dbPath = string.IsNullOrWhiteSpace(_config.QueueDbPath)
+            ? Path.Combine(_config.DownloadsDirectory, "queue.db")
+            : _config.QueueDbPath;
+
+        var dbDir = Path.GetDirectoryName(Path.GetFullPath(dbPath));
         if (!string.IsNullOrEmpty(dbDir))
             Directory.CreateDirectory(dbDir);
 
-        _db = new DuckDBConnection($"DataSource={_config.QueueDbPath}");
+        _db = new DuckDBConnection($"DataSource={dbPath}");
         _db.Open();
         InitSchema();
     }

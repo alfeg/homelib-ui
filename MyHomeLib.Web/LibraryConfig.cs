@@ -18,8 +18,11 @@ public class LibraryConfig
     /// <summary>Directory where downloaded books are saved. Must be set explicitly.</summary>
     public string DownloadsDirectory { get; set; } = string.Empty;
 
-    /// <summary>Path to the persistent DuckDB file used for the download queue.</summary>
-    public string QueueDbPath { get; set; } = "queue.db";
+    /// <summary>
+    /// Path to the persistent DuckDB queue file.
+    /// Defaults to <c>queue.db</c> inside <see cref="DownloadsDirectory"/> when left empty.
+    /// </summary>
+    public string QueueDbPath { get; set; } = string.Empty;
 
     public bool TorrentEnabled =>
         !string.IsNullOrWhiteSpace(MagnetUri) && !string.IsNullOrWhiteSpace(DownloadsDirectory);
