@@ -91,11 +91,12 @@ else
                                        href="/api/download/@job.Id"
                                        download="@job.DownloadName">⬇ Get</a>
                                 }
-                                @if (job.Status is DownloadStatus.Ready or DownloadStatus.Failed)
-                                {
-                                    <button class="btn btn-sm btn-outline-danger"
-                                            @onclick="() => Delete(job.Id)">✕</button>
+                                @{
+                                    var isActive = job.Status is DownloadStatus.Downloading;
+                                    var btnLabel = isActive ? "⏹ Abort" : "✕";
+                                    var btnClass = isActive ? "btn btn-sm btn-warning" : "btn btn-sm btn-outline-danger";
                                 }
+                                <button class="@btnClass" @onclick="() => Delete(job.Id)">@btnLabel</button>
                             </div>
                         </td>
                     </tr>
@@ -136,13 +137,10 @@ else
     {
         await Queue.DeleteAsync(id);
         await Refresh();
-        // Resume polling if needed
-        if (jobs.Any(j => j.Status is DownloadStatus.Pending or DownloadStatus.Downloading))
-        {
-            _timer?.Dispose();
-            _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
-            _ = PollAsync();
-        }
+        // Always restart polling to catch the deletion taking effect
+        _timer?.Dispose();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = PollAsync();
     }
 
     static string FormatRate(double bytesPerSec) =>

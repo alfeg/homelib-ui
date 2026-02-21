@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using DuckDB.NET.Data;
 using Microsoft.Extensions.Options;
@@ -15,7 +16,8 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
     private readonly DuckDBConnection _db;
     private readonly Channel<Guid> _channel = Channel.CreateUnbounded<Guid>();
     private readonly SemaphoreSlim _dbLock = new(1, 1);
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, TorrentStats> _activeStats = new();
+    private readonly ConcurrentDictionary<Guid, TorrentStats> _activeStats = new();
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _jobCts = new();
 
     public bool IsEnabled => _config.TorrentEnabled;
 
@@ -69,18 +71,31 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
             return;
         }
 
-        // Ensure downloads directory exists
         Directory.CreateDirectory(_config.DownloadsDirectory);
 
-        // Reset jobs interrupted mid-download back to pending
+        // Reset jobs that were interrupted mid-download back to Pending
         await DbExecAsync("UPDATE download_queue SET status = 'Pending' WHERE status = 'Downloading'");
 
-        // Re-enqueue existing pending jobs
+        // Re-enqueue all Pending jobs from the last run
         foreach (var id in await GetIdsByStatusAsync("Pending"))
             _channel.Writer.TryWrite(id);
 
         await foreach (var jobId in _channel.Reader.ReadAllAsync(stoppingToken))
-            await ProcessJobAsync(jobId, stoppingToken);
+        {
+            try
+            {
+                await ProcessJobAsync(jobId, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // App is shutting down — leave job as Pending so it restarts next time
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled error processing job {JobId}", jobId);
+            }
+        }
     }
 
     public async Task<Guid> EnqueueAsync(MyHomeLib.Library.BookItem book)
@@ -145,7 +160,14 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
 
     public async Task DeleteAsync(Guid jobId)
     {
-        // Optionally delete the file too
+        // If the job is actively downloading, cancel it — ProcessJobAsync will delete from DB
+        if (_jobCts.TryGetValue(jobId, out var cts))
+        {
+            await cts.CancelAsync();
+            return; // deletion happens in ProcessJobAsync's catch
+        }
+
+        // Otherwise remove immediately
         var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
         if (job?.FilePath != null && File.Exists(job.FilePath))
             File.Delete(job.FilePath);
@@ -153,29 +175,30 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
         await DbExecAsync($"DELETE FROM download_queue WHERE id = '{jobId}'");
     }
 
-    private async Task ProcessJobAsync(Guid jobId, CancellationToken ct)
+    private async Task ProcessJobAsync(Guid jobId, CancellationToken stoppingToken)
     {
+        // Per-job CTS linked to app shutdown, so the user can cancel individual jobs
+        using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        _jobCts[jobId] = jobCts;
+
         await DbExecAsync($"UPDATE download_queue SET status = 'Downloading' WHERE id = '{jobId}'");
         _logger.LogInformation("Processing download job {JobId}", jobId);
 
         try
         {
             var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
-            if (job == null) return;
+            if (job is null) return;
 
             var link = MagnetLink.Parse(_config.MagnetUri);
             var hash = link.InfoHashes.V1OrV2.ToHex();
 
             var progress = new Progress<TorrentStats>(s => _activeStats[jobId] = s);
             var request = new DownloadRequest(hash, job.Archive, job.FileName) { Link = link, Progress = progress };
-            var response = await _downloadManager.DownloadFile(request);
-            _activeStats.TryRemove(jobId, out _);
+            var response = await _downloadManager.DownloadFile(request, jobCts.Token);
 
-            // Save to configured downloads directory
-            var safeName = MakeSafeFileName(response.Name.Length > 0 ? response.Name : job.FileName);
+            var safeName = MakeSafeFileName(response!.Name.Length > 0 ? response.Name : job.FileName);
             var filePath = Path.Combine(_config.DownloadsDirectory, safeName);
 
-            // Avoid overwriting
             var counter = 1;
             while (File.Exists(filePath))
             {
@@ -184,7 +207,7 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
                     $"{Path.GetFileNameWithoutExtension(safeName)}_{counter++}{ext}");
             }
 
-            await File.WriteAllBytesAsync(filePath, response.Data, ct);
+            await File.WriteAllBytesAsync(filePath, response.Data, stoppingToken);
 
             await DbExecAsync($"""
                 UPDATE download_queue
@@ -197,15 +220,31 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
 
             _logger.LogInformation("Job {JobId} completed → {FilePath}", jobId, filePath);
         }
+        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+        {
+            // User-initiated abort: remove from queue entirely
+            _logger.LogInformation("Job {JobId} aborted by user", jobId);
+            await DbExecAsync($"DELETE FROM download_queue WHERE id = '{jobId}'");
+        }
+        catch (OperationCanceledException)
+        {
+            // App shutdown: leave as Pending so it restarts next time
+            await DbExecAsync($"UPDATE download_queue SET status = 'Pending' WHERE id = '{jobId}'");
+            throw;
+        }
         catch (Exception ex)
         {
-            _activeStats.TryRemove(jobId, out _);
             _logger.LogError(ex, "Job {JobId} failed", jobId);
             await DbExecAsync($"""
                 UPDATE download_queue
                 SET status = 'Failed', error = '{Esc(ex.Message)}', completed_at = now()
                 WHERE id = '{jobId}'
                 """);
+        }
+        finally
+        {
+            _activeStats.TryRemove(jobId, out _);
+            _jobCts.TryRemove(jobId, out _);
         }
     }
 

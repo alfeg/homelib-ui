@@ -21,15 +21,15 @@ public class DownloadManager
         _logger = logger;
     }
 
-    public async Task<SearchResponse> SearchFiles(SearchRequest request)
+    public async Task<SearchResponse?> SearchFiles(SearchRequest request, CancellationToken ct = default)
     {
-        var response = await ProcessQueue(request);
+        var response = await ProcessQueue(request, ct);
         return response as SearchResponse;
     }
 
-    public async Task<DownloadResponse> DownloadFile(DownloadRequest request)
+    public async Task<DownloadResponse?> DownloadFile(DownloadRequest request, CancellationToken ct = default)
     {
-        var response = await ProcessQueue(request);
+        var response = await ProcessQueue(request, ct);
         return response as DownloadResponse;
     }
 
