@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using Microsoft.Extensions.Options;
 using MonoTorrent.Client;
@@ -23,10 +24,15 @@ builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("Torrent"
 builder.Services.AddSingleton<ClientEngine>(sp =>
 {
     var config = sp.GetRequiredService<IOptions<AppConfig>>().Value;
+    var endpoint = new IPEndPoint(IPAddress.Any, config.ListenPort);
     var settingsBuilder = new EngineSettingsBuilder
     {
-        FastResumeMode = FastResumeMode.BestEffort,
-        CacheDirectory = config.CacheDirectory,
+        FastResumeMode       = FastResumeMode.BestEffort,
+        CacheDirectory       = config.CacheDirectory,
+        AutoSaveLoadDhtCache = true,   // persist DHT routing table across restarts
+        AllowPortForwarding  = true,   // enable UPnP / NAT-PMP
+        DhtEndPoint          = endpoint,
+        ListenEndPoints      = new Dictionary<string, IPEndPoint> { ["ipv4"] = endpoint },
     };
     var factories = Factories.Default
         .WithStreamingPieceRequesterCreator(() => new PartialStreamingRequester(config));
