@@ -70,7 +70,8 @@ public class DownloadManager
                         manager.Peers.Leechs,
                         manager.PartialProgress,
                         manager.State.ToString(),
-                        _clientEngine.Dht.NodeCount));
+                        _clientEngine.Dht.NodeCount,
+                        _clientEngine.Dht.State.ToString()));
                     try { await Task.Delay(1000, statsCts.Token); } catch { break; }
                 }
             }, statsCts.Token);

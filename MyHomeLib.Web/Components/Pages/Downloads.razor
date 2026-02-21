@@ -60,7 +60,7 @@ else
                                                 {
                                                     <div class="text-muted" style="font-size:0.75rem">
                                                         Fetching torrent metadata via DHT…
-                                                        <span class="ms-2" title="DHT nodes">🌐 @stats.DhtNodes nodes</span>
+                                                        <span class="ms-2" title="DHT nodes">🌐 @stats.DhtNodes nodes (@stats.DhtState)</span>
                                                         <span class="ms-2" title="Seeds / Peers">👤 @stats.Seeds seeds / @stats.Peers peers</span>
                                                     </div>
                                                 }
@@ -75,7 +75,7 @@ else
                                                         <span title="Upload speed">⬆ @FormatRate(stats.UploadRateBytesPerSec)</span>
                                                         <span title="Seeds / Peers">🌱 @stats.Seeds / @stats.Peers</span>
                                                         <span title="Bytes received">@stats.BytesReceived.Bytes().Humanize("#.#")</span>
-                                                        <span title="DHT nodes">🌐 @stats.DhtNodes</span>
+                                                        <span title="DHT nodes">🌐 @stats.DhtNodes (@stats.DhtState)</span>
                                                     </div>
                                                 }
                                             </div>
