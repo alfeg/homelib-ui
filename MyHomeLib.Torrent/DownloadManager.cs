@@ -62,14 +62,16 @@ public class DownloadManager
             {
                 while (!statsCts.Token.IsCancellationRequested)
                 {
-                    try { await Task.Delay(1000, statsCts.Token); } catch { break; }
                     request.Progress.Report(new TorrentStats(
                         manager.Monitor.DownloadRate,
                         manager.Monitor.UploadRate,
                         manager.Monitor.DataBytesReceived + manager.Monitor.ProtocolBytesReceived,
                         manager.Peers.Seeds,
                         manager.Peers.Leechs,
-                        manager.PartialProgress));
+                        manager.PartialProgress,
+                        manager.State.ToString(),
+                        _clientEngine.Dht.NodeCount));
+                    try { await Task.Delay(1000, statsCts.Token); } catch { break; }
                 }
             }, statsCts.Token);
         }

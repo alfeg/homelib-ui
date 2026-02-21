@@ -51,21 +51,33 @@ else
                                     <div>
                                         <span class="badge bg-primary mb-1">
                                             <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                                            Downloading
+                                            @(stats?.State ?? "Downloading")
                                         </span>
                                         @if (stats is not null)
                                         {
                                             <div class="mt-1">
-                                                <div class="progress mb-1" style="height:6px" title="@stats.PartialProgress.ToString("0.0")%">
-                                                    <div class="progress-bar" role="progressbar"
-                                                         style="width:@stats.PartialProgress.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
-                                                </div>
-                                                <div class="d-flex gap-2 text-muted" style="font-size:0.75rem">
-                                                    <span title="Download speed">⬇ @FormatRate(stats.DownloadRateBytesPerSec)</span>
-                                                    <span title="Upload speed">⬆ @FormatRate(stats.UploadRateBytesPerSec)</span>
-                                                    <span title="Seeds / Peers">🌱 @stats.Seeds / @stats.Peers</span>
-                                                    <span title="Bytes received">@stats.BytesReceived.Bytes().Humanize("#.#")</span>
-                                                </div>
+                                                @if (stats.State == "Metadata")
+                                                {
+                                                    <div class="text-muted" style="font-size:0.75rem">
+                                                        Fetching torrent metadata via DHT…
+                                                        <span class="ms-2" title="DHT nodes">🌐 @stats.DhtNodes nodes</span>
+                                                        <span class="ms-2" title="Seeds / Peers">👤 @stats.Seeds seeds / @stats.Peers peers</span>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="progress mb-1" style="height:6px" title="@stats.PartialProgress.ToString("0.0")%">
+                                                        <div class="progress-bar" role="progressbar"
+                                                             style="width:@stats.PartialProgress.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                                                    </div>
+                                                    <div class="d-flex gap-2 text-muted" style="font-size:0.75rem">
+                                                        <span title="Download speed">⬇ @FormatRate(stats.DownloadRateBytesPerSec)</span>
+                                                        <span title="Upload speed">⬆ @FormatRate(stats.UploadRateBytesPerSec)</span>
+                                                        <span title="Seeds / Peers">🌱 @stats.Seeds / @stats.Peers</span>
+                                                        <span title="Bytes received">@stats.BytesReceived.Bytes().Humanize("#.#")</span>
+                                                        <span title="DHT nodes">🌐 @stats.DhtNodes</span>
+                                                    </div>
+                                                }
                                             </div>
                                         }
                                     </div>

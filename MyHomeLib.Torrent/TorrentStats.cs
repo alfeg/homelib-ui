@@ -7,5 +7,7 @@ public record TorrentStats(
     long BytesReceived,
     int Seeds,
     int Peers,
-    double PartialProgress   // 0 – 100
+    double PartialProgress,   // 0 – 100
+    string State,             // TorrentState as string, e.g. "Metadata", "Downloading"
+    int DhtNodes              // number of DHT nodes the engine knows about
 );
