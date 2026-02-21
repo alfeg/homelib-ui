@@ -10,4 +10,8 @@
     <ProjectReference Include="..\MyHomeLib.Library\MyHomeLib.Library.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.4" />
+  </ItemGroup>
+
 </Project>

@@ -1,16 +1,19 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Library;
 
 namespace MyHomeLib.Web;
 
-public class LibraryService
+public class LibraryService : IAsyncDisposable
 {
     public Task<IList<BookItem>> LoadTask { get; }
+    public Task<BookSearchIndex> IndexTask { get; }
     public InpxLibrary Metadata { get; } = new();
 
-    public LibraryService(IOptions<LibraryConfig> config)
+    public LibraryService(IOptions<LibraryConfig> config, ILogger<LibraryService> logger)
     {
         LoadTask = LoadAsync(config.Value.InpxPath, Metadata);
+        IndexTask = BuildIndexAsync(logger);
     }
 
     private static async Task<IList<BookItem>> LoadAsync(string path, InpxLibrary metadata)
@@ -28,22 +31,21 @@ public class LibraryService
         return books;
     }
 
-    public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(
-        string? title, string? author, string? series, int max = 200)
+    private async Task<BookSearchIndex> BuildIndexAsync(ILogger logger)
     {
         var books = await LoadTask;
+        return await BookSearchIndex.BuildAsync(books, logger);
+    }
 
-        IEnumerable<BookItem> query = books;
+    public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)
+    {
+        var index = await IndexTask;
+        return await index.SearchAsync(query, max);
+    }
 
-        if (!string.IsNullOrWhiteSpace(title))
-            query = query.Where(b => b.Title.Contains(title, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(author))
-            query = query.Where(b => b.Authors.Contains(author, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(series))
-            query = query.Where(b => b.Series != null &&
-                                     b.Series.Contains(series, StringComparison.OrdinalIgnoreCase));
-
-        var all = query.ToList();
-        return (all.Take(max).ToList(), all.Count);
+    public async ValueTask DisposeAsync()
+    {
+        if (IndexTask.IsCompletedSuccessfully)
+            await IndexTask.Result.DisposeAsync();
     }
 }

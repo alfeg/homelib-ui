@@ -23,7 +23,7 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Trigger library loading at startup rather than on first request.
-_ = app.Services.GetRequiredService<LibraryService>().LoadTask;
+// Trigger library load and index build at startup rather than on first request.
+_ = app.Services.GetRequiredService<LibraryService>().IndexTask;
 
 app.Run();
