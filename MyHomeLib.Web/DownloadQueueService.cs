@@ -15,8 +15,12 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
     private readonly DuckDBConnection _db;
     private readonly Channel<Guid> _channel = Channel.CreateUnbounded<Guid>();
     private readonly SemaphoreSlim _dbLock = new(1, 1);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, TorrentStats> _activeStats = new();
 
     public bool IsEnabled => _config.TorrentEnabled;
+
+    /// <summary>Live torrent stats for jobs currently downloading.</summary>
+    public IReadOnlyDictionary<Guid, TorrentStats> ActiveStats => _activeStats;
 
     public DownloadQueueService(
         DownloadManager downloadManager,
@@ -162,8 +166,10 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
             var link = MagnetLink.Parse(_config.MagnetUri);
             var hash = link.InfoHashes.V1OrV2.ToHex();
 
-            var request = new DownloadRequest(hash, job.Archive, job.FileName) { Link = link };
+            var progress = new Progress<TorrentStats>(s => _activeStats[jobId] = s);
+            var request = new DownloadRequest(hash, job.Archive, job.FileName) { Link = link, Progress = progress };
             var response = await _downloadManager.DownloadFile(request);
+            _activeStats.TryRemove(jobId, out _);
 
             // Save to configured downloads directory
             var safeName = MakeSafeFileName(response.Name.Length > 0 ? response.Name : job.FileName);
@@ -193,6 +199,7 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            _activeStats.TryRemove(jobId, out _);
             _logger.LogError(ex, "Job {JobId} failed", jobId);
             await DbExecAsync($"""
                 UPDATE download_queue

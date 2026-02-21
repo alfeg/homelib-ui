@@ -54,6 +54,26 @@ public class DownloadManager
 
         TorrentResponse? response = null;
 
+        // Background stats sampler — feeds IProgress<TorrentStats> every second while active
+        using var statsCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (request.Progress is not null)
+        {
+            _ = Task.Run(async () =>
+            {
+                while (!statsCts.Token.IsCancellationRequested)
+                {
+                    try { await Task.Delay(1000, statsCts.Token); } catch { break; }
+                    request.Progress.Report(new TorrentStats(
+                        manager.Monitor.DownloadRate,
+                        manager.Monitor.UploadRate,
+                        manager.Monitor.DataBytesReceived + manager.Monitor.ProtocolBytesReceived,
+                        manager.Peers.Seeds,
+                        manager.Peers.Leechs,
+                        manager.PartialProgress));
+                }
+            }, statsCts.Token);
+        }
+
         void OnTorrentStateChanged(object? sender, TorrentStateChangedEventArgs args)
             => _logger.LogInformation("[{Hash}] Torrent state: {Old} → {New}", hash, args.OldState, args.NewState);
 
@@ -88,6 +108,7 @@ public class DownloadManager
         }
         finally
         {
+            await statsCts.CancelAsync();
             manager.TorrentStateChanged -= OnTorrentStateChanged;
             _logger.LogInformation("[{Hash}] Stopping streaming manager", hash);
             try { await manager.StopAsync(); } catch { }
