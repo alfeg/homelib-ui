@@ -1,0 +1,123 @@
+@page "/downloads"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject DownloadQueueService Queue
+@implements IDisposable
+
+<PageTitle>Downloads — MyHomeLib</PageTitle>
+
+<h1 class="h4 mb-4">Downloads</h1>
+
+@if (!Queue.IsEnabled)
+{
+    <div class="alert alert-warning">
+        Torrent downloads are not configured. Set <code>Library:MagnetUri</code> and
+        <code>Library:DownloadsDirectory</code> in your configuration.
+    </div>
+}
+else if (jobs.Count == 0)
+{
+    <p class="text-muted">No downloads yet. Search for a book and click ⬇ to queue it.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Title</th>
+                    <th>Authors</th>
+                    <th>File</th>
+                    <th>Status</th>
+                    <th>Added</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var job in jobs)
+                {
+                    <tr>
+                        <td>@job.Title</td>
+                        <td class="text-muted small">@job.Authors</td>
+                        <td class="font-monospace small">@job.FileName</td>
+                        <td>
+                            @switch (job.Status)
+                            {
+                                case DownloadStatus.Pending:
+                                    <span class="badge bg-secondary">Pending</span>
+                                    break;
+                                case DownloadStatus.Downloading:
+                                    <span class="badge bg-primary">
+                                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                        Downloading
+                                    </span>
+                                    break;
+                                case DownloadStatus.Ready:
+                                    <span class="badge bg-success">Ready</span>
+                                    break;
+                                case DownloadStatus.Failed:
+                                    <span class="badge bg-danger" title="@job.Error">Failed</span>
+                                    break;
+                            }
+                        </td>
+                        <td class="text-muted small">@job.AddedAt.ToLocalTime().ToString("g")</td>
+                        <td class="d-flex gap-1">
+                            @if (job.Status == DownloadStatus.Ready)
+                            {
+                                <a class="btn btn-sm btn-success"
+                                   href="/api/download/@job.Id"
+                                   download="@job.DownloadName">⬇ Get</a>
+                            }
+                            @if (job.Status is DownloadStatus.Ready or DownloadStatus.Failed)
+                            {
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="() => Delete(job.Id)">✕</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    List<DownloadJob> jobs = [];
+    PeriodicTimer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = PollAsync();
+    }
+
+    async Task PollAsync()
+    {
+        if (_timer is null) return;
+        while (await _timer.WaitForNextTickAsync())
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+            // Stop polling when nothing is active
+            if (!jobs.Any(j => j.Status is DownloadStatus.Pending or DownloadStatus.Downloading))
+                _timer.Dispose();
+        }
+    }
+
+    async Task Refresh() => jobs = (await Queue.GetAllAsync()).ToList();
+
+    async Task Delete(Guid id)
+    {
+        await Queue.DeleteAsync(id);
+        await Refresh();
+        // Resume polling if new items are pending
+        if (jobs.Any(j => j.Status is DownloadStatus.Pending or DownloadStatus.Downloading))
+        {
+            _timer?.Dispose();
+            _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+            _ = PollAsync();
+        }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

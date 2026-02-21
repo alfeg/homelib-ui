@@ -1,6 +1,7 @@
 @page "/"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject LibraryService Library
+@inject DownloadQueueService Queue
 
 <PageTitle>Book Search — MyHomeLib</PageTitle>
 
@@ -34,6 +35,14 @@ else if (!indexReady)
     <button class="btn btn-primary" @onclick="Search" disabled="@(!indexReady)">Search</button>
 </div>
 
+@if (lastQueued is not null)
+{
+    <div class="alert alert-success alert-dismissible py-2 mb-3" role="alert">
+        Book queued for download. <a href="/downloads">View downloads →</a>
+        <button type="button" class="btn-close" @onclick="() => lastQueued = null"></button>
+    </div>
+}
+
 @if (results is not null)
 {
     <p class="text-muted small mb-2">
@@ -57,6 +66,7 @@ else if (!indexReady)
                         <th>Lang</th>
                         <th>File</th>
                         <th>Archive</th>
+                        @if (Queue.IsEnabled) { <th></th> }
                     </tr>
                 </thead>
                 <tbody>
@@ -83,6 +93,14 @@ else if (!indexReady)
                             <td>@book.Lang</td>
                             <td class="text-muted small font-monospace">@(book.File + "." + book.Ext)</td>
                             <td class="text-muted small font-monospace">@book.ArchiveFile</td>
+                            @if (Queue.IsEnabled)
+                            {
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            title="Queue download"
+                                            @onclick="() => Enqueue(book)">⬇</button>
+                                </td>
+                            }
                         </tr>
                     }
                 </tbody>
@@ -93,6 +111,7 @@ else if (!indexReady)
 
 @code {
     string searchQuery = "";
+    Guid? lastQueued;
 
     (IReadOnlyList<BookItem> Page, int Total)? results;
     bool libraryReady;
@@ -133,11 +152,17 @@ else if (!indexReady)
     async Task Search()
     {
         if (!indexReady) return;
+        lastQueued = null;
         results = await Library.SearchAsync(searchQuery);
     }
 
     async Task OnKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await Search();
+    }
+
+    async Task Enqueue(BookItem book)
+    {
+        lastQueued = await Queue.EnqueueAsync(book);
     }
 }
