@@ -1,0 +1,132 @@
+@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject LibraryService Library
+
+<PageTitle>Book Search — MyHomeLib</PageTitle>
+
+<h1 class="h4 mb-4">Search Books</h1>
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+else if (!libraryReady)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+        <span>Loading library, please wait…</span>
+    </div>
+}
+
+<div class="row g-2 mb-3">
+    <div class="col-md-4">
+        <input class="form-control" placeholder="Title" @bind="titleFilter" @onkeydown="OnKeyDown" />
+    </div>
+    <div class="col-md-4">
+        <input class="form-control" placeholder="Author" @bind="authorFilter" @onkeydown="OnKeyDown" />
+    </div>
+    <div class="col-md-4">
+        <input class="form-control" placeholder="Series" @bind="seriesFilter" @onkeydown="OnKeyDown" />
+    </div>
+</div>
+
+<div class="d-flex align-items-center gap-3 mb-3">
+    <button class="btn btn-primary" @onclick="Search" disabled="@(!libraryReady)">Search</button>
+    @if (results is not null)
+    {
+        <span class="text-muted small">
+            Showing @results.Value.Page.Count of @results.Value.Total
+            @(results.Value.Total == 1 ? "result" : "results")
+        </span>
+    }
+</div>
+
+@if (results is not null)
+{
+    @if (results.Value.Page.Count == 0)
+    {
+        <p class="text-muted">No books found.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Title</th>
+                        <th>Authors</th>
+                        <th>Series</th>
+                        <th>Lang</th>
+                        <th>Format</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var book in results.Value.Page)
+                    {
+                        <tr>
+                            <td>@book.Title</td>
+                            <td>@book.Authors</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(book.Series))
+                                {
+                                    @book.Series
+                                    @if (!string.IsNullOrEmpty(book.SeriesNo))
+                                    {
+                                        <span class="text-muted"> #@book.SeriesNo</span>
+                                    }
+                                }
+                            </td>
+                            <td>@book.Lang</td>
+                            <td>@book.Ext</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    string titleFilter = "";
+    string authorFilter = "";
+    string seriesFilter = "";
+
+    (IReadOnlyList<BookItem> Page, int Total)? results;
+    bool libraryReady;
+    string? errorMessage;
+
+    protected override void OnInitialized()
+    {
+        libraryReady = Library.LoadTask.IsCompletedSuccessfully;
+
+        if (Library.LoadTask.IsFaulted)
+            errorMessage = Library.LoadTask.Exception?.GetBaseException().Message;
+        else if (!libraryReady)
+            _ = WatchLoadProgress();
+    }
+
+    async Task WatchLoadProgress()
+    {
+        try
+        {
+            await Library.LoadTask;
+            libraryReady = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.GetBaseException().Message;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task Search()
+    {
+        if (!libraryReady) return;
+        results = await Library.SearchAsync(titleFilter, authorFilter, seriesFilter);
+    }
+
+    async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Search();
+    }
+}
