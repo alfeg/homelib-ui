@@ -17,6 +17,7 @@ public class DownloadManager : IAsyncDisposable
 
     /// <summary>Persistent torrent managers keyed by info-hash hex — started once, kept running.</summary>
     private readonly ConcurrentDictionary<string, TorrentManager> _managers = new();
+    private readonly SemaphoreSlim _createLock = new(1, 1);
 
     public DownloadManager(ClientEngine clientEngine, IOptions<AppConfig> config, ILogger<DownloadManager> logger)
     {
@@ -66,7 +67,6 @@ public class DownloadManager : IAsyncDisposable
     {
         if (_managers.TryGetValue(hash, out var existing))
         {
-            // Restart only if the engine stopped/errored it
             if (existing.State is TorrentState.Stopped or TorrentState.Error)
             {
                 _logger.LogInformation("[{Hash}] Restarting stopped/errored manager", hash);
@@ -75,22 +75,38 @@ public class DownloadManager : IAsyncDisposable
             return existing;
         }
 
-        // Reuse a manager already registered with the engine (e.g. resumed from fast-resume)
-        var manager = _clientEngine.Torrents.FirstOrDefault(t => t.InfoHashes.V1OrV2.ToHex() == hash)
-                      ?? await _clientEngine.AddStreamingAsync(link, _appConfig.TorrentsFolder(hash));
-
-        _managers[hash] = manager;
-
-        manager.TorrentStateChanged += (_, args) =>
-            _logger.LogInformation("[{Hash}] Torrent state: {Old} → {New}", hash, args.OldState, args.NewState);
-
-        if (manager.State is TorrentState.Stopped or TorrentState.Error || !manager.HasMetadata)
+        await _createLock.WaitAsync();
+        try
         {
-            _logger.LogInformation("[{Hash}] Starting persistent streaming manager", hash);
-            await manager.StartAsync();
-        }
+            // Re-check inside the lock — another caller may have created it while we waited.
+            if (_managers.TryGetValue(hash, out existing))
+            {
+                if (existing.State is TorrentState.Stopped or TorrentState.Error)
+                    await existing.StartAsync();
+                return existing;
+            }
 
-        return manager;
+            // Reuse a manager already registered with the engine (e.g. resumed from fast-resume)
+            var manager = _clientEngine.Torrents.FirstOrDefault(t => t.InfoHashes.V1OrV2.ToHex() == hash)
+                          ?? await _clientEngine.AddStreamingAsync(link, _appConfig.TorrentsFolder(hash));
+
+            _managers[hash] = manager;
+
+            manager.TorrentStateChanged += (_, args) =>
+                _logger.LogInformation("[{Hash}] Torrent state: {Old} → {New}", hash, args.OldState, args.NewState);
+
+            if (manager.State is TorrentState.Stopped or TorrentState.Error || !manager.HasMetadata)
+            {
+                _logger.LogInformation("[{Hash}] Starting persistent streaming manager", hash);
+                await manager.StartAsync();
+            }
+
+            return manager;
+        }
+        finally
+        {
+            _createLock.Release();
+        }
     }
 
     private async Task<TorrentResponse> ProcessQueue(TorrentRequest request,
