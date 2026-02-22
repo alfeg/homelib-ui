@@ -4,6 +4,7 @@
 @inject DownloadQueueService Queue
 @implements IDisposable
 @using Humanizer
+@using System.Diagnostics
 
 <PageTitle>Book Search — MyHomeLib</PageTitle>
 
@@ -21,14 +22,30 @@ else if (!indexReady)
     </div>
 }
 
-<div class="input-group mb-3">
+<div class="input-group mb-1">
     <input class="form-control"
            placeholder="Search by title, author or series…"
-           @bind="searchQuery"
-           @bind:event="oninput"
-           @onkeydown="OnKeyDown" />
-    <button class="btn btn-primary" @onclick="Search" disabled="@(!indexReady)">Search</button>
+           value="@searchQuery"
+           @oninput="OnInput"
+           @onkeydown="OnKeyDown"
+           disabled="@(!indexReady)" />
+    @if (_searching)
+    {
+        <span class="input-group-text">
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+        </span>
+    }
 </div>
+
+@if (results is not null || _searchMs.HasValue)
+{
+    <p class="text-muted small mb-2">
+        @if (_searchMs.HasValue && results.HasValue)
+        {
+            <span>@results.Value.Total @(results.Value.Total == 1 ? "result" : "results") — @_searchMs ms</span>
+        }
+    </p>
+}
 
 @if (lastQueued is not null)
 {
@@ -38,84 +55,84 @@ else if (!indexReady)
     </div>
 }
 
-@if (results is not null)
+@if (results is { } r && r.Page.Count > 0)
 {
-    <p class="text-muted small mb-2">
-        Showing @results.Value.Page.Count of @results.Value.Total
-        @(results.Value.Total == 1 ? "result" : "results")
-    </p>
-
-    @if (results.Value.Page.Count == 0)
-    {
-        <p class="text-muted">No books found.</p>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table table-sm table-striped table-hover align-middle">
-                <thead class="table-dark">
+    <div class="table-responsive">
+        <table class="table table-sm table-striped table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Title</th>
+                    <th>Authors</th>
+                    <th>Series</th>
+                    <th>Lang</th>
+                    <th>File</th>
+                    <th>Archive</th>
+                    @if (Queue.IsEnabled) { <th></th> }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var book in r.Page)
+                {
                     <tr>
-                        <th>Title</th>
-                        <th>Authors</th>
-                        <th>Series</th>
-                        <th>Lang</th>
-                        <th>File</th>
-                        <th>Archive</th>
-                        @if (Queue.IsEnabled) { <th></th> }
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var book in results.Value.Page)
-                    {
-                        <tr>
-                            <td>@book.Title</td>
-                            <td>
-                                @foreach (var author in book.ParsedAuthors())
-                                {
-                                    <div>@author</div>
-                                }
-                            </td>
-                            <td>
-                                @if (!string.IsNullOrEmpty(book.Series))
-                                {
-                                    @book.Series
-                                    @if (!string.IsNullOrEmpty(book.SeriesNo))
-                                    {
-                                        <span class="text-muted"> #@book.SeriesNo</span>
-                                    }
-                                }
-                            </td>
-                            <td>@book.Lang</td>
-                            <td class="text-muted small font-monospace">@(book.File + "." + book.Ext)</td>
-                            <td class="text-muted small font-monospace">@book.ArchiveFile</td>
-                            @if (Queue.IsEnabled)
+                        <td>@book.Title</td>
+                        <td>
+                            @foreach (var author in book.ParsedAuthors())
                             {
-                                <td>
-                                    <button class="btn btn-sm btn-outline-secondary"
-                                            title="Queue download"
-                                            @onclick="() => Enqueue(book)">⬇</button>
-                                </td>
+                                <div>@author</div>
                             }
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(book.Series))
+                            {
+                                @book.Series
+                                @if (!string.IsNullOrEmpty(book.SeriesNo))
+                                {
+                                    <span class="text-muted"> #@book.SeriesNo</span>
+                                }
+                            }
+                        </td>
+                        <td>@book.Lang</td>
+                        <td class="text-muted small font-monospace">@(book.File + "." + book.Ext)</td>
+                        <td class="text-muted small font-monospace">@book.ArchiveFile</td>
+                        @if (Queue.IsEnabled)
+                        {
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        title="Queue download"
+                                        @onclick="() => Enqueue(book)">⬇</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (r.Total > r.Page.Count)
+    {
+        <p class="text-muted small">Showing top @r.Page.Count of @r.Total results. Refine your query to narrow results.</p>
     }
+}
+else if (results is { Page.Count: 0 } && !_searching)
+{
+    <p class="text-muted">No books found.</p>
 }
 
 @code {
     string searchQuery = "";
     Guid? lastQueued;
     PeriodicTimer? _loadTimer;
+    CancellationTokenSource? _searchCts;
 
     (IReadOnlyList<BookItem> Page, int Total)? results;
     bool indexReady;
     string? errorMessage;
+    bool _searching;
+    long? _searchMs;
 
     protected override void OnInitialized()
     {
-        indexReady   = Library.IndexTask.IsCompletedSuccessfully;
+        indexReady = Library.IndexTask.IsCompletedSuccessfully;
 
         if (Library.IndexTask.IsFaulted)
             errorMessage = Library.IndexTask.Exception?.GetBaseException().Message;
@@ -127,7 +144,6 @@ else if (!indexReady)
 
     async Task WatchProgress()
     {
-        // Poll every second while loading so LoadStatus / InpxStats stay current
         _loadTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         try
         {
@@ -143,23 +159,77 @@ else if (!indexReady)
         await InvokeAsync(StateHasChanged);
     }
 
-    // Drives the re-render loop while loading
     async Task PollLoad()
     {
         while (_loadTimer is not null && await _loadTimer.WaitForNextTickAsync())
             await InvokeAsync(StateHasChanged);
     }
 
-    async Task Search()
+    async Task OnInput(ChangeEventArgs e)
     {
-        if (!indexReady) return;
-        lastQueued = null;
-        results = await Library.SearchAsync(searchQuery);
+        searchQuery = e.Value?.ToString() ?? "";
+        await TriggerSearch(debounceMs: 300);
     }
 
     async Task OnKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") await Search();
+        if (e.Key == "Enter")
+            await TriggerSearch(debounceMs: 0);
+    }
+
+    async Task TriggerSearch(int debounceMs)
+    {
+        // Cancel any in-flight debounce/search
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var cts = _searchCts;
+
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            results = null;
+            _searchMs = null;
+            _searching = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (!indexReady) return;
+
+        if (debounceMs > 0)
+        {
+            try { await Task.Delay(debounceMs, cts.Token); }
+            catch (OperationCanceledException) { return; }
+        }
+
+        if (cts.IsCancellationRequested) return;
+
+        _searching = true;
+        lastQueued = null;
+        await InvokeAsync(StateHasChanged);
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var r = await Library.SearchAsync(searchQuery);
+            sw.Stop();
+            if (!cts.IsCancellationRequested)
+            {
+                results = r;
+                _searchMs = sw.ElapsedMilliseconds;
+            }
+        }
+        catch (Exception ex) when (!cts.IsCancellationRequested)
+        {
+            errorMessage = ex.GetBaseException().Message;
+        }
+        finally
+        {
+            if (!cts.IsCancellationRequested)
+                _searching = false;
+        }
+
+        if (!cts.IsCancellationRequested)
+            await InvokeAsync(StateHasChanged);
     }
 
     async Task Enqueue(BookItem book)
@@ -167,5 +237,9 @@ else if (!indexReady)
         lastQueued = await Queue.EnqueueAsync(book);
     }
 
-    public void Dispose() => _loadTimer?.Dispose();
+    public void Dispose()
+    {
+        _loadTimer?.Dispose();
+        _searchCts?.Cancel();
+    }
 }
