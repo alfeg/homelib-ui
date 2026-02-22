@@ -72,7 +72,7 @@ public class DownloadManager : IAsyncDisposable
     public TorrentStats? GetStats(string hash)
     {
         if (_torrServe != null)
-            return null; // TorrServe stats not yet implemented in this panel
+            return _torrServeStats;
         if (!_managers.TryGetValue(hash, out var manager))
             return null;
         return new TorrentStats(
@@ -85,6 +85,18 @@ public class DownloadManager : IAsyncDisposable
             manager.State.ToString(),
             _clientEngine!.Dht.NodeCount,
             _clientEngine!.Dht.State.ToString());
+    }
+
+    private TorrentStats? _torrServeStats;
+
+    /// <summary>Called by DownloadQueueService sampler to refresh TorrServe stats.</summary>
+    public async Task RefreshTorrServeStatsAsync(string hash, CancellationToken ct = default)
+    {
+        if (_torrServe == null) return;
+        var t = await _torrServe.GetTorrentAsync(hash, ct);
+        if (t == null) { _torrServeStats = null; return; }
+        _torrServeStats = new TorrentStats(0, 0, 0, 0, 0, 0,
+            t.StatString, 0, $"stat={t.Stat}");
     }
 
     /// <summary>

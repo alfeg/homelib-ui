@@ -39,8 +39,11 @@ var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"] ?? "";
 if (!string.IsNullOrWhiteSpace(torrServeUrl))
 {
     // TorrServe mode: use plain HttpClient instances (avoids SocketsHttpHandler config issues)
-    builder.Services.AddSingleton<TorrServeClient>(_ =>
-        new TorrServeClient(new HttpClient(), torrServeUrl));
+    builder.Services.AddSingleton<TorrServeClient>(sp =>
+        new TorrServeClient(
+            new HttpClient(),
+            torrServeUrl,
+            sp.GetRequiredService<ILogger<TorrServeClient>>()));
     builder.Services.AddSingleton<DownloadManager>(sp =>
         new DownloadManager(
             sp.GetRequiredService<TorrServeClient>(),
