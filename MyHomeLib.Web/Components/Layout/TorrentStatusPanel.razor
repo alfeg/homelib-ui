@@ -1,6 +1,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject DownloadQueueService Queue
 @implements IDisposable
+@using Humanizer
 
 @if (Queue.IsEnabled)
 {
@@ -19,9 +20,39 @@
             else
             {
                 <span class="text-success">● Connected</span>
+
                 @if (!string.IsNullOrWhiteSpace(_stats.State) && _stats.State != "Connected")
                 {
                     <span class="text-muted">@_stats.State</span>
+                }
+
+                @if (_stats.DownloadSpeed > 0 || _stats.UploadSpeed > 0)
+                {
+                    <span title="Download / Upload speed">
+                        ↓ @FormatSpeed(_stats.DownloadSpeed) &nbsp; ↑ @FormatSpeed(_stats.UploadSpeed)
+                    </span>
+                }
+
+                @if (_stats.TotalPeers > 0)
+                {
+                    <span title="Active peers / total peers (seeders)">
+                        👥 @_stats.ActivePeers/@_stats.TotalPeers
+                        @if (_stats.ConnectedSeeders > 0)
+                        {
+                            <span class="ms-1 text-success-emphasis">(🌱 @_stats.ConnectedSeeders)</span>
+                        }
+                    </span>
+                }
+
+                @if (_stats.TorrentSize > 0)
+                {
+                    var pct = (int)Math.Round(100.0 * _stats.LoadedSize / _stats.TorrentSize);
+                    <span title="@_stats.LoadedSize.Bytes().Humanize() / @_stats.TorrentSize.Bytes().Humanize() cached">
+                        📦 @pct%
+                        <div class="progress d-inline-flex align-middle" style="width:80px;height:6px;">
+                            <div class="progress-bar" role="progressbar" style="width:@pct%"></div>
+                        </div>
+                    </span>
                 }
             }
 
@@ -55,6 +86,13 @@
             _stats = Queue.LibraryStats;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    static string FormatSpeed(double bytesPerSec)
+    {
+        if (bytesPerSec < 1024) return $"{bytesPerSec:F0} B/s";
+        if (bytesPerSec < 1024 * 1024) return $"{bytesPerSec / 1024:F1} KB/s";
+        return $"{bytesPerSec / (1024 * 1024):F1} MB/s";
     }
 
     public void Dispose() => _timer?.Dispose();

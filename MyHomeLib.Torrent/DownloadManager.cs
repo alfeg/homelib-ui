@@ -48,7 +48,18 @@ public class DownloadManager
             return;
         }
         var t = await _torrServe.GetTorrentAsync(hash, ct);
-        _stats = new TorrentStats(true, t?.StatString ?? "Connected");
+        var ts = t?.TorrentStats;
+        _stats = new TorrentStats(
+            IsConnected:       true,
+            State:             t?.StatString ?? "Connected",
+            DownloadSpeed:     ts?.DownloadSpeed ?? 0,
+            UploadSpeed:       ts?.UploadSpeed ?? 0,
+            TotalPeers:        ts?.TotalPeers ?? 0,
+            ActivePeers:       ts?.ActivePeers ?? 0,
+            ConnectedSeeders:  ts?.ConnectedSeeders ?? 0,
+            LoadedSize:        ts?.LoadedSize ?? 0,
+            TorrentSize:       ts?.TorrentSize ?? 0
+        );
     }
 
     // ── TorrServe paths ─────────────────────────────────────────────────────
