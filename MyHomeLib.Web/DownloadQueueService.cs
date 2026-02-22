@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Threading.Channels;
 using DuckDB.NET.Data;
 using Microsoft.Extensions.Options;
-using MonoTorrent;
 using MyHomeLib.Library;
 using MyHomeListServer.Torrent;
 
@@ -26,6 +25,9 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
 
     /// <summary>Live stats for the library torrent itself (always running when torrent is enabled).</summary>
     public TorrentStats? LibraryStats { get; private set; }
+
+    /// <summary>Number of jobs actively being downloaded right now.</summary>
+    public int ActiveDownloadCount => _jobCts.Count;
 
     public DownloadQueueService(
         DownloadManager downloadManager,
@@ -80,22 +82,21 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
 
         Directory.CreateDirectory(_config.DownloadsDirectory);
 
-        // Start the library torrent proactively so DHT/trackers begin connecting immediately
-        var libraryLink = MagnetLink.Parse(_config.MagnetUri);
-        var libraryHash = libraryLink.InfoHashes.V1OrV2.ToHex();
-        _ = Task.Run(async () =>
-        {
-            try { await _downloadManager.StartLibraryAsync(libraryLink); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Failed to pre-start library torrent"); }
-        }, stoppingToken);
+        var libraryHash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
 
-        // Background sampler: keep LibraryStats updated every second
+        // Background sampler: refresh TorrServe status every 3 seconds
         _ = Task.Run(async () =>
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                LibraryStats = _downloadManager.GetStats(libraryHash);
-                try { await Task.Delay(1000, stoppingToken); } catch { break; }
+                try
+                {
+                    await _downloadManager.RefreshStatsAsync(libraryHash, stoppingToken);
+                    LibraryStats = _downloadManager.GetStats();
+                }
+                catch (OperationCanceledException) { break; }
+                catch { /* swallow transient errors */ }
+                try { await Task.Delay(3000, stoppingToken); } catch { break; }
             }
         }, stoppingToken);
 
@@ -212,11 +213,8 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
             var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
             if (job is null) return;
 
-            var link = MagnetLink.Parse(_config.MagnetUri);
-            var hash = link.InfoHashes.V1OrV2.ToHex();
-
-            var progress = new Progress<TorrentStats>(s => _activeStats[jobId] = s);
-            var request = new DownloadRequest(hash, job.Archive, job.FileName) { Link = link, Progress = progress };
+            var hash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
+            var request = new DownloadRequest(hash, job.Archive, job.FileName) { MagnetUri = _config.MagnetUri };
             var response = await _downloadManager.DownloadFile(request, jobCts.Token);
 
             var ext = Path.GetExtension(response!.Name.Length > 0 ? response.Name : job.FileName);

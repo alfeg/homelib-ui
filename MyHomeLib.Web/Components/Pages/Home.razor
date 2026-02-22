@@ -15,34 +15,9 @@
 }
 else if (!indexReady)
 {
-    <div class="alert alert-info">
-        <div class="d-flex align-items-center gap-2 mb-1">
-            <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-            <span>@Library.LoadStatus</span>
-        </div>
-        @if (Library.InpxStats is { } s)
-        {
-            <div class="mt-2 ms-1" style="font-size:0.8rem">
-                @if (s.State == "Metadata")
-                {
-                    <div>Fetching torrent metadata via DHT…
-                        <span class="ms-2">🌐 @s.DhtNodes nodes (@s.DhtState)</span>
-                        <span class="ms-2">👤 @s.Seeds seeds / @s.Peers peers</span>
-                    </div>
-                }
-                else
-                {
-                    <div class="progress mb-1" style="height:5px;max-width:400px" title="@s.PartialProgress.ToString("0.0")%">
-                        <div class="progress-bar" style="width:@s.PartialProgress.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
-                    </div>
-                    <div class="d-flex gap-3">
-                        <span>⬇ @FormatRate(s.DownloadRateBytesPerSec)</span>
-                        <span>🌱 @s.Seeds / @s.Peers</span>
-                        <span>🌐 @s.DhtNodes (@s.DhtState)</span>
-                    </div>
-                }
-            </div>
-        }
+    <div class="alert alert-info d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+        <span>@Library.LoadStatus</span>
     </div>
 }
 
@@ -191,9 +166,6 @@ else if (!indexReady)
     {
         lastQueued = await Queue.EnqueueAsync(book);
     }
-
-    static string FormatRate(double bytesPerSec) =>
-        bytesPerSec < 1 ? "0 B/s" : $"{((long)bytesPerSec).Bytes().Humanize("#.#")}/s";
 
     public void Dispose() => _loadTimer?.Dispose();
 }

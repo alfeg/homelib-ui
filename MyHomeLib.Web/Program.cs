@@ -1,8 +1,4 @@
-using System.Net;
 using System.Text;
-using Microsoft.Extensions.Options;
-using MonoTorrent.Client;
-using MonoTorrent;
 using MyHomeLib.Web;
 using MyHomeLib.Web.Components;
 using MyHomeListServer.Torrent;
@@ -10,69 +6,37 @@ using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serve _framework/blazor.web.js and other SDK static assets in all environments.
 builder.WebHost.UseStaticWebAssets();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection("Library"));
-builder.Services.AddSingleton<LibraryService>();
-
-// Torrent services (only DownloadManager + ClientEngine — no LibraryIndexer needed here)
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection("Library"));
 builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("Torrent"));
 
-// Derive torrent CacheDirectory from Library:DownloadsDirectory so all torrent data stays
-// in the configured library folder. An explicit Torrent:CacheDirectory in config overrides this.
-builder.Services.PostConfigure<AppConfig>(opts =>
-{
-    if (opts.CacheDirectory == "./cache")
-    {
-        var downloadsDir = builder.Configuration["Library:DownloadsDirectory"];
-        if (!string.IsNullOrWhiteSpace(downloadsDir))
-            opts.CacheDirectory = downloadsDir;
-    }
-});
+// TorrServe services
+var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"]
+    ?? throw new InvalidOperationException("Torrent:TorrServeUrl is required.");
 
-var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"] ?? "";
-if (!string.IsNullOrWhiteSpace(torrServeUrl))
-{
-    // TorrServe mode: use plain HttpClient instances (avoids SocketsHttpHandler config issues)
-    builder.Services.AddSingleton<TorrServeClient>(sp =>
-        new TorrServeClient(
-            new HttpClient(),
-            torrServeUrl,
-            sp.GetRequiredService<ILogger<TorrServeClient>>()));
-    builder.Services.AddSingleton<DownloadManager>(sp =>
-        new DownloadManager(
-            sp.GetRequiredService<TorrServeClient>(),
-            new HttpClient(),
-            sp.GetRequiredService<IOptions<AppConfig>>(),
-            sp.GetRequiredService<ILogger<DownloadManager>>()));
-}
-else
-{
-    // MonoTorrent mode
-    builder.Services.AddSingleton<ClientEngine>(sp =>
-    {
-        var config = sp.GetRequiredService<IOptions<AppConfig>>().Value;
-        var endpoint = new IPEndPoint(IPAddress.Any, config.ListenPort);
-        var settingsBuilder = new EngineSettingsBuilder
-        {
-            FastResumeMode       = FastResumeMode.BestEffort,
-            CacheDirectory       = config.CacheDirectory(),
-            AutoSaveLoadDhtCache = true,
-            AllowPortForwarding  = true,
-            DhtEndPoint          = endpoint,
-            ListenEndPoints      = new Dictionary<string, IPEndPoint> { ["ipv4"] = endpoint },
-        };
-        var factories = Factories.Default
-            .WithStreamingPieceRequesterCreator(() => new PartialStreamingRequester(config));
-        return new ClientEngine(settingsBuilder.ToSettings(), factories);
-    });
-    builder.Services.AddSingleton<DownloadManager>();
-}
+builder.Services.AddSingleton<TorrServeClient>(sp =>
+    new TorrServeClient(
+        new HttpClient(),
+        torrServeUrl,
+        sp.GetRequiredService<ILogger<TorrServeClient>>()));
+
+builder.Services.AddSingleton<DownloadManager>(sp =>
+    new DownloadManager(
+        sp.GetRequiredService<TorrServeClient>(),
+        new HttpClient(),
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AppConfig>>(),
+        sp.GetRequiredService<ILogger<DownloadManager>>()));
+
+// Library initialisation runs in the background (downloads INPX, builds DuckDB index)
+builder.Services.AddSingleton<LibraryService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<LibraryService>());
+
 builder.Services.AddSingleton<DownloadQueueService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DownloadQueueService>());
 
@@ -91,7 +55,7 @@ app.MapRazorComponents<App>()
 app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, DownloadQueueService queue) =>
 {
     var jobs = await queue.GetAllAsync();
-    var job = jobs.FirstOrDefault(j => j.Id == jobId);
+    var job  = jobs.FirstOrDefault(j => j.Id == jobId);
     if (job is null) return Results.NotFound();
     if (job.Status != DownloadStatus.Ready || job.FilePath is null) return Results.StatusCode(202);
     if (!File.Exists(job.FilePath)) return Results.NotFound("File not found on disk");
@@ -100,20 +64,11 @@ app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, DownloadQueueService
     return Results.File(job.FilePath, contentType, job.DownloadName ?? Path.GetFileName(job.FilePath));
 });
 
-// Trigger startup tasks
-_ = app.Services.GetRequiredService<LibraryService>().IndexTask;
-
-// First Ctrl+C → graceful shutdown (default .NET behaviour, cancel handled by host).
-// Second Ctrl+C → force-kill immediately so unreachable trackers can't stall the process.
+// First Ctrl+C → graceful. Second → force exit.
 var ctrlCCount = 0;
 Console.CancelKeyPress += (_, e) =>
 {
-    if (++ctrlCCount > 1)
-    {
-        Console.Error.WriteLine("Force exit.");
-        Environment.Exit(1);
-    }
-    // First press: let the host lifetime handle it gracefully.
+    if (++ctrlCCount > 1) { Console.Error.WriteLine("Force exit."); Environment.Exit(1); }
     e.Cancel = true;
     app.Lifetime.StopApplication();
 };

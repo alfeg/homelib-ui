@@ -1,14 +1,7 @@
 namespace MyHomeListServer.Torrent;
 
-/// <summary>Live snapshot of a torrent manager during download.</summary>
+/// <summary>Snapshot of TorrServe connection and library torrent state.</summary>
 public record TorrentStats(
-    double DownloadRateBytesPerSec,
-    double UploadRateBytesPerSec,
-    long BytesReceived,
-    int Seeds,
-    int Peers,
-    double PartialProgress,   // 0 – 100
-    string State,             // TorrentState as string, e.g. "Metadata", "Downloading"
-    int DhtNodes,             // number of DHT nodes the engine knows about
-    string DhtState           // DhtState as string, e.g. "NotReady", "Initialising", "Ready"
+    bool   IsConnected,
+    string State        // e.g. "Torrent working", "In DB", "TorrServe unreachable"
 );

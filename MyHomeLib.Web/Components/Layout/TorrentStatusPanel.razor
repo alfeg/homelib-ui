@@ -1,87 +1,38 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject DownloadQueueService Queue
 @implements IDisposable
-@using Humanizer
 
 @if (Queue.IsEnabled)
 {
     <div class="torrent-status px-3 py-2 bg-body-tertiary border rounded small text-muted mt-3 mb-2">
         <div class="d-flex flex-wrap align-items-center gap-3">
-            <span class="fw-semibold text-body">🔗 Torrent</span>
+            <span class="fw-semibold text-body">🔗 TorrServe</span>
 
             @if (_stats is null)
             {
                 <span class="fst-italic">Connecting…</span>
             }
+            else if (!_stats.IsConnected)
+            {
+                <span class="text-danger fw-semibold">⚠ Unreachable</span>
+            }
             else
             {
-                <span title="Torrent state">
-                    @if (_stats.State is "Downloading" or "Metadata" or "HashChecking")
-                    {
-                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    }
-                    @_stats.State
-                </span>
-
-                <span title="DHT state / nodes">
-                    🌐&nbsp;@_stats.DhtState
-                    @if (_stats.DhtNodes > 0)
-                    {
-                        <span class="ms-1">(@_stats.DhtNodes nodes)</span>
-                    }
-                </span>
-
-                @if (_stats.Seeds > 0 || _stats.Peers > 0)
+                <span class="text-success">● Connected</span>
+                @if (!string.IsNullOrWhiteSpace(_stats.State) && _stats.State != "Connected")
                 {
-                    <span title="Seeds / Peers">🌱 @_stats.Seeds seeds&nbsp;/ @_stats.Peers peers</span>
-                }
-                else
-                {
-                    <span class="fst-italic">No peers yet</span>
-                }
-
-                @if (_stats.DownloadRateBytesPerSec > 1 || _stats.UploadRateBytesPerSec > 1)
-                {
-                    <span title="Download speed">⬇&nbsp;@FormatRate(_stats.DownloadRateBytesPerSec)</span>
-                    <span title="Upload speed">⬆&nbsp;@FormatRate(_stats.UploadRateBytesPerSec)</span>
+                    <span class="text-muted">@_stats.State</span>
                 }
             }
-        </div>
 
-        @{
-            var activeStats = Queue.ActiveStats;
-        }
-        @if (activeStats.Count > 0)
-        {
-            <div class="mt-2 pt-2 border-top d-flex flex-column gap-1">
-                @foreach (var (_, s) in activeStats)
-                {
-                    @if (s.State == "Metadata")
-                    {
-                        <div class="fst-italic">Fetching torrent metadata via DHT…</div>
-                    }
-                    else
-                    {
-                        <div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>@s.State</span>
-                                <span>@s.PartialProgress.ToString("0.0")%</span>
-                            </div>
-                            <div class="progress mb-1" style="height:6px" title="@s.PartialProgress.ToString("0.0")%">
-                                <div class="progress-bar" role="progressbar"
-                                     style="width:@s.PartialProgress.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <span title="Download speed">⬇&nbsp;@FormatRate(s.DownloadRateBytesPerSec)</span>
-                                <span title="Upload speed">⬆&nbsp;@FormatRate(s.UploadRateBytesPerSec)</span>
-                                <span title="Seeds / Peers">🌱 @s.Seeds / @s.Peers</span>
-                                <span title="Bytes received">@s.BytesReceived.Bytes().Humanize("#.#")</span>
-                            </div>
-                        </div>
-                    }
-                }
-            </div>
-        }
+            @if (Queue.ActiveDownloadCount > 0)
+            {
+                <span>
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    @Queue.ActiveDownloadCount download@(Queue.ActiveDownloadCount > 1 ? "s" : "") in progress
+                </span>
+            }
+        </div>
     </div>
 }
 
@@ -92,7 +43,7 @@
     protected override void OnInitialized()
     {
         if (!Queue.IsEnabled) return;
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
         _ = PollAsync();
     }
 
@@ -105,9 +56,6 @@
             await InvokeAsync(StateHasChanged);
         }
     }
-
-    static string FormatRate(double bytesPerSec) =>
-        bytesPerSec < 1 ? "0 B/s" : $"{((long)bytesPerSec).Bytes().Humanize("#.#")}/s";
 
     public void Dispose() => _timer?.Dispose();
 }
