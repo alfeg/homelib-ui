@@ -1,0 +1,9 @@
+<MudItem xs="6" sm="3">
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Label</MudText>
+    <MudText Typo="Typo.body2" Class="font-weight-bold">@Value</MudText>
+</MudItem>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+}

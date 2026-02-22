@@ -3,11 +3,14 @@ using MyHomeLib.Web;
 using MyHomeLib.Web.Components;
 using MyHomeListServer.Torrent;
 using Microsoft.Extensions.Logging;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddMudServices();
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 

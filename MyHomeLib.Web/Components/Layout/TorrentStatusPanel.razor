@@ -5,162 +5,157 @@
 
 @if (Queue.IsEnabled)
 {
-    <div class="torrent-status px-3 py-2 bg-body-tertiary border rounded small text-muted mt-3 mb-2">
-        {{/* ── Compact status bar ── */}}
-        <div class="d-flex flex-wrap align-items-center gap-3">
-            <span class="fw-semibold text-body">
-                🔗 TorrServe
-                @if (!string.IsNullOrWhiteSpace(_stats?.TorrServVersion))
-                {
-                    <span class="ms-1 text-muted fw-normal" style="font-size:0.8em">@_stats.TorrServVersion</span>
-                }
-            </span>
+    <MudPaper Elevation="1" Class="px-4 py-2 mb-3 mt-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <MudText Typo="Typo.subtitle2">TorrServe</MudText>
+
+            @if (!string.IsNullOrWhiteSpace(_stats?.TorrServVersion))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@_stats.TorrServVersion</MudText>
+            }
 
             @if (_stats is null)
             {
-                <span class="fst-italic">Connecting…</span>
+                <MudChip T="string" Color="Color.Default" Size="Size.Small">Connecting…</MudChip>
             }
             else if (!_stats.IsConnected)
             {
-                <span class="text-danger fw-semibold">⚠ Unreachable</span>
+                <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Warning">Unreachable</MudChip>
             }
             else
             {
-                <span class="text-success">● Connected</span>
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">Connected</MudChip>
 
                 @if (!string.IsNullOrWhiteSpace(_stats.State) && _stats.State != "Connected")
                 {
-                    <span class="text-muted">@_stats.State</span>
+                    <MudChip T="string" Size="Size.Small">@_stats.State</MudChip>
                 }
 
                 @if (_stats.DownloadSpeed > 0 || _stats.UploadSpeed > 0)
                 {
-                    <span title="Download / Upload speed">
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SwapVert"
+                             aria-label="Download / Upload speed">
                         ↓ @FormatSpeed(_stats.DownloadSpeed) &nbsp; ↑ @FormatSpeed(_stats.UploadSpeed)
-                    </span>
+                    </MudChip>
                 }
 
                 @if (!string.IsNullOrWhiteSpace(_stats.BitRate))
                 {
-                    <span title="Bit rate">🎞 @_stats.BitRate</span>
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Videocam" aria-label="Bit rate">
+                        @_stats.BitRate
+                    </MudChip>
                 }
 
                 @if (_stats.TotalPeers > 0)
                 {
-                    <span title="Active / total peers (seeders)">
-                        👥 @_stats.ActivePeers/@_stats.TotalPeers
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Group"
+                             aria-label="Active / total peers (seeders)">
+                        @_stats.ActivePeers/@_stats.TotalPeers
                         @if (_stats.ConnectedSeeders > 0)
                         {
-                            <span class="ms-1 text-success-emphasis">(🌱 @_stats.ConnectedSeeders)</span>
+                            <span class="ml-1">🌱 @_stats.ConnectedSeeders</span>
                         }
-                    </span>
+                    </MudChip>
                 }
 
-                @if (_stats.TorrentSize > 0)
+                @if (_cachePct.HasValue)
                 {
-                    var pct = (int)Math.Round(100.0 * _stats.LoadedSize / _stats.TorrentSize);
-                    <span title="@_stats.LoadedSize.Bytes().Humanize() / @_stats.TorrentSize.Bytes().Humanize() cached">
-                        📦 @pct%
-                        <div class="progress d-inline-flex align-middle" style="width:80px;height:6px;">
-                            <div class="progress-bar" role="progressbar" style="width:@pct%"></div>
-                        </div>
-                    </span>
-                }
-                else if (_stats.CacheCapacity > 0)
-                {
-                    var pct = (int)Math.Round(100.0 * _stats.CacheFilled / _stats.CacheCapacity);
-                    <span title="Cache: @_stats.CacheFilled.Bytes().Humanize() / @_stats.CacheCapacity.Bytes().Humanize()">
-                        🗄 @pct%
-                        <div class="progress d-inline-flex align-middle" style="width:60px;height:6px;">
-                            <div class="progress-bar bg-info" role="progressbar" style="width:@pct%"></div>
-                        </div>
-                    </span>
+                    <div class="d-flex align-items-center gap-1" title="@_cacheTitle" style="min-width:90px">
+                        <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" />
+                        <MudProgressLinear Color="Color.Info" Value="@_cachePct.Value" Class="flex-grow-1" Style="height:6px" />
+                        <MudText Typo="Typo.caption">@_cachePct%</MudText>
+                    </div>
                 }
 
                 @if (_stats.ActiveReaders > 0)
                 {
-                    <span title="Active stream readers">▶ @_stats.ActiveReaders</span>
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.PlayArrow"
+                             aria-label="Active stream readers">@_stats.ActiveReaders</MudChip>
                 }
             }
 
             @if (Queue.ActiveDownloadCount > 0)
             {
-                <span>
-                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    @Queue.ActiveDownloadCount download@(Queue.ActiveDownloadCount > 1 ? "s" : "") in progress
-                </span>
+                <MudChip T="string" Color="Color.Primary" Size="Size.Small">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
+                    @Queue.ActiveDownloadCount download@(Queue.ActiveDownloadCount > 1 ? "s" : "")
+                </MudChip>
             }
 
             @if (_stats?.IsConnected == true)
             {
-                <button class="btn btn-link btn-sm p-0 ms-auto text-muted" @onclick="ToggleDetails">
-                    @(_showDetails ? "▲ less" : "▼ more")
-                </button>
+                <MudIconButton Icon="@(_showDetails ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                               Size="Size.Small"
+                               Class="ml-auto"
+                               aria-label="@(_showDetails ? "Show less" : "Show more")"
+                               OnClick="ToggleDetails" />
             }
         </div>
 
-        {{/* ── Expanded detail panel ── */}}
         @if (_showDetails && _stats?.IsConnected == true)
         {
-            <div class="mt-2 pt-2 border-top row row-cols-2 row-cols-md-4 g-2">
-                @DetailRow("⬇ Download", FormatSpeed(_stats.DownloadSpeed))
-                @DetailRow("⬆ Upload", FormatSpeed(_stats.UploadSpeed))
-                @DetailRow("👥 Peers (active/total)", $"{_stats.ActivePeers}/{_stats.TotalPeers}")
-                @DetailRow("🔓 Half-open", _stats.HalfOpenPeers.ToString())
-                @DetailRow("⏳ Pending", _stats.PendingPeers.ToString())
-                @DetailRow("🌱 Seeders", _stats.ConnectedSeeders.ToString())
+            <MudDivider Class="my-2" />
+            <MudGrid Spacing="2" Class="mt-1">
+                <StatCell Label="⬇ Download" Value="@FormatSpeed(_stats.DownloadSpeed)" />
+                <StatCell Label="⬆ Upload" Value="@FormatSpeed(_stats.UploadSpeed)" />
+                <StatCell Label="Peers (active/total)" Value="@($"{_stats.ActivePeers}/{_stats.TotalPeers}")" />
+                <StatCell Label="Half-open" Value="@_stats.HalfOpenPeers.ToString()" />
+                <StatCell Label="Pending" Value="@_stats.PendingPeers.ToString()" />
+                <StatCell Label="Seeders" Value="@_stats.ConnectedSeeders.ToString()" />
                 @if (_stats.TorrentSize > 0)
                 {
-                    @DetailRow("📦 Loaded", _stats.LoadedSize.Bytes().Humanize())
-                    @DetailRow("📀 Total size", _stats.TorrentSize.Bytes().Humanize())
+                    <StatCell Label="Loaded" Value="@_stats.LoadedSize.Bytes().Humanize()" />
+                    <StatCell Label="Total size" Value="@_stats.TorrentSize.Bytes().Humanize()" />
                     @if (_stats.PreloadSize > 0)
                     {
-                        @DetailRow("⚡ Preloaded", $"{_stats.PreloadedBytes.Bytes().Humanize()} / {_stats.PreloadSize.Bytes().Humanize()}")
+                        <StatCell Label="Preloaded" Value="@($"{_stats.PreloadedBytes.Bytes().Humanize()} / {_stats.PreloadSize.Bytes().Humanize()}")" />
                     }
                 }
                 @if (_stats.CacheCapacity > 0)
                 {
-                    @DetailRow("🗄 Cache", $"{_stats.CacheFilled.Bytes().Humanize()} / {_stats.CacheCapacity.Bytes().Humanize()}")
-                    @DetailRow("🧩 Pieces", _stats.CachedPieces.ToString())
+                    <StatCell Label="Cache" Value="@($"{_stats.CacheFilled.Bytes().Humanize()} / {_stats.CacheCapacity.Bytes().Humanize()}")" />
+                    <StatCell Label="Pieces" Value="@_stats.CachedPieces.ToString()" />
                 }
                 @if (_stats.ActiveReaders > 0)
                 {
-                    @DetailRow("▶ Readers", _stats.ActiveReaders.ToString())
+                    <StatCell Label="Readers" Value="@_stats.ActiveReaders.ToString()" />
                 }
                 @if (_stats.DurationSeconds > 0)
                 {
-                    @DetailRow("⏱ Active", TimeSpan.FromSeconds(_stats.DurationSeconds).Humanize())
+                    <StatCell Label="Active" Value="@TimeSpan.FromSeconds(_stats.DurationSeconds).Humanize()" />
                 }
                 @if (!string.IsNullOrWhiteSpace(_stats.BitRate))
                 {
-                    @DetailRow("🎞 Bit rate", _stats.BitRate)
+                    <StatCell Label="Bit rate" Value="@_stats.BitRate" />
                 }
                 @if (_stats.BytesRead > 0)
                 {
-                    @DetailRow("📖 Bytes read", _stats.BytesRead.Bytes().Humanize())
-                    @DetailRow("✅ Useful", _stats.BytesReadUseful.Bytes().Humanize())
+                    <StatCell Label="Bytes read" Value="@_stats.BytesRead.Bytes().Humanize()" />
+                    <StatCell Label="Useful" Value="@_stats.BytesReadUseful.Bytes().Humanize()" />
                 }
                 @if (_stats.BytesWritten > 0)
                 {
-                    @DetailRow("✍ Bytes written", _stats.BytesWritten.Bytes().Humanize())
+                    <StatCell Label="Bytes written" Value="@_stats.BytesWritten.Bytes().Humanize()" />
                 }
                 @if (_stats.ChunksRead > 0)
                 {
-                    @DetailRow("📊 Chunks read", $"{_stats.ChunksReadUseful} useful / {_stats.ChunksReadWasted} wasted")
+                    <StatCell Label="Chunks" Value="@($"{_stats.ChunksReadUseful} useful / {_stats.ChunksReadWasted} wasted")" />
                 }
                 @if (_stats.PiecesDirtiedGood + _stats.PiecesDirtiedBad > 0)
                 {
-                    @DetailRow("🟩 Pieces", $"{_stats.PiecesDirtiedGood} good / {_stats.PiecesDirtiedBad} bad")
+                    <StatCell Label="Pieces dirty" Value="@($"{_stats.PiecesDirtiedGood} good / {_stats.PiecesDirtiedBad} bad")" />
                 }
-            </div>
+            </MudGrid>
         }
-    </div>
+    </MudPaper>
 }
 
 @code {
     TorrentStats? _stats;
     PeriodicTimer? _timer;
     bool _showDetails;
+    int? _cachePct;
+    string? _cacheTitle;
 
     protected override void OnInitialized()
     {
@@ -175,19 +170,13 @@
         while (await _timer.WaitForNextTickAsync())
         {
             _stats = Queue.LibraryStats;
+            if (_stats is not null)
+                (_cachePct, _cacheTitle) = GetCacheDisplay(_stats);
             await InvokeAsync(StateHasChanged);
         }
     }
 
     void ToggleDetails() => _showDetails = !_showDetails;
-
-    static RenderFragment DetailRow(string label, string value) => __builder =>
-    {
-        <div class="col">
-            <div class="text-muted" style="font-size:0.75em">@label</div>
-            <div class="fw-semibold">@value</div>
-        </div>
-    };
 
     static string FormatSpeed(double bytesPerSec)
     {
@@ -196,5 +185,17 @@
         return $"{bytesPerSec / (1024 * 1024):F1} MB/s";
     }
 
+    static (int? Pct, string? Title) GetCacheDisplay(TorrentStats s)
+    {
+        if (s.TorrentSize > 0)
+            return ((int)Math.Round(100.0 * s.LoadedSize / s.TorrentSize),
+                    $"{s.LoadedSize.Bytes().Humanize()} / {s.TorrentSize.Bytes().Humanize()} cached");
+        if (s.CacheCapacity > 0)
+            return ((int)Math.Round(100.0 * s.CacheFilled / s.CacheCapacity),
+                    $"Cache: {s.CacheFilled.Bytes().Humanize()} / {s.CacheCapacity.Bytes().Humanize()}");
+        return (null, null);
+    }
+
     public void Dispose() => _timer?.Dispose();
 }
+

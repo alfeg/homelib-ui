@@ -2,125 +2,115 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject LibraryService Library
 @inject DownloadQueueService Queue
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
 @implements IDisposable
 @using Humanizer
 @using System.Diagnostics
 
 <PageTitle>Book Search — MyHomeLib</PageTitle>
 
-<h1 class="h4 mb-4">Search Books</h1>
+<MudText Typo="Typo.h5" Class="mb-4">Search Books</MudText>
 
 @if (errorMessage is not null)
 {
-    <div class="alert alert-danger">@errorMessage</div>
+    <MudAlert Severity="Severity.Error" Class="mb-4">@errorMessage</MudAlert>
 }
 else if (!indexReady)
 {
-    <div class="alert alert-info d-flex align-items-center gap-2">
-        <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-        <span>@Library.LoadStatus</span>
-    </div>
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        <div class="d-flex align-items-center gap-2">
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            @Library.LoadStatus
+        </div>
+    </MudAlert>
 }
 
-<div class="input-group mb-1">
-    <input class="form-control"
-           placeholder="Search by title, author or series…"
-           value="@searchQuery"
-           @oninput="OnInput"
-           @onkeydown="OnKeyDown"
-           disabled="@(!indexReady)" />
-    @if (_searching)
-    {
-        <span class="input-group-text">
-            <span class="spinner-border spinner-border-sm" role="status"></span>
-        </span>
-    }
-</div>
+<MudTextField T="string"
+              Value="@searchQuery"
+              Placeholder="Search by title, author or series..."
+              Variant="Variant.Outlined"
+              Adornment="@(_searching ? Adornment.End : Adornment.None)"
+              AdornmentIcon="@Icons.Material.Filled.HourglassTop"
+              Clearable="true"
+              Disabled="@(!indexReady)"
+              OnKeyDown="OnKeyDown"
+              ValueChanged="OnValueChanged"
+              Class="mb-1" />
 
-@if (results is not null || _searchMs.HasValue)
+@if (_searchMs.HasValue && results.HasValue)
 {
-    <p class="text-muted small mb-2">
-        @if (_searchMs.HasValue && results.HasValue)
-        {
-            <span>@results.Value.Total @(results.Value.Total == 1 ? "result" : "results") — @_searchMs ms</span>
-        }
-    </p>
+    <MudText Typo="Typo.caption" Class="mb-3 mud-text-secondary">
+        @results.Value.Total @(results.Value.Total == 1 ? "result" : "results") — @_searchMs ms
+    </MudText>
 }
 
-@if (lastQueued is not null)
+@if (results is { Page.Count: 0 } && !_searching && !string.IsNullOrWhiteSpace(searchQuery))
 {
-    <div class="alert alert-success alert-dismissible py-2 mb-3" role="alert">
-        Book queued for download. <a href="/downloads">View downloads →</a>
-        <button type="button" class="btn-close" @onclick="() => lastQueued = null"></button>
-    </div>
+    <MudAlert Severity="Severity.Warning" Class="mb-4">No books found.</MudAlert>
 }
 
-@if (results is { } r && r.Page.Count > 0)
+@if (results is { Page.Count: > 0 } r)
 {
-    <div class="table-responsive">
-        <table class="table table-sm table-striped table-hover align-middle">
-            <thead class="table-dark">
-                <tr>
-                    <th>Title</th>
-                    <th>Authors</th>
-                    <th>Series</th>
-                    <th>Lang</th>
-                    <th>File</th>
-                    <th>Archive</th>
-                    @if (Queue.IsEnabled) { <th></th> }
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var book in r.Page)
+    <MudTable Items="@r.Page" Hover="true" Dense="true" Striped="true"
+              Breakpoint="Breakpoint.Sm" FixedHeader="true" Height="600px"
+              Class="mb-2">
+        <HeaderContent>
+            <MudTh>Title</MudTh>
+            <MudTh>Authors</MudTh>
+            <MudTh>Series</MudTh>
+            <MudTh>Lang</MudTh>
+            <MudTh>File</MudTh>
+            <MudTh>Archive</MudTh>
+            @if (Queue.IsEnabled) { <MudTh></MudTh> }
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Title">@context.Title</MudTd>
+            <MudTd DataLabel="Authors">
+                @foreach (var author in context.ParsedAuthors())
                 {
-                    <tr>
-                        <td>@book.Title</td>
-                        <td>
-                            @foreach (var author in book.ParsedAuthors())
-                            {
-                                <div>@author</div>
-                            }
-                        </td>
-                        <td>
-                            @if (!string.IsNullOrEmpty(book.Series))
-                            {
-                                @book.Series
-                                @if (!string.IsNullOrEmpty(book.SeriesNo))
-                                {
-                                    <span class="text-muted"> #@book.SeriesNo</span>
-                                }
-                            }
-                        </td>
-                        <td>@book.Lang</td>
-                        <td class="text-muted small font-monospace">@(book.File + "." + book.Ext)</td>
-                        <td class="text-muted small font-monospace">@book.ArchiveFile</td>
-                        @if (Queue.IsEnabled)
-                        {
-                            <td>
-                                <button class="btn btn-sm btn-outline-secondary"
-                                        title="Queue download"
-                                        @onclick="() => Enqueue(book)">⬇</button>
-                            </td>
-                        }
-                    </tr>
+                    <div>@author</div>
                 }
-            </tbody>
-        </table>
-    </div>
+            </MudTd>
+            <MudTd DataLabel="Series">
+                @if (!string.IsNullOrEmpty(context.Series))
+                {
+                    @context.Series
+                    @if (!string.IsNullOrEmpty(context.SeriesNo))
+                    {
+                        <MudText Inline="true" Typo="Typo.caption" Class="ml-1 mud-text-secondary">#@context.SeriesNo</MudText>
+                    }
+                }
+            </MudTd>
+            <MudTd DataLabel="Lang">@context.Lang</MudTd>
+            <MudTd DataLabel="File">
+                <MudText Typo="Typo.caption" Style="font-family:monospace">@(context.File + "." + context.Ext)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Archive">
+                <MudText Typo="Typo.caption" Style="font-family:monospace">@context.ArchiveFile</MudText>
+            </MudTd>
+            @if (Queue.IsEnabled)
+            {
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                   Size="Size.Small"
+                                   aria-label="Queue download"
+                                   OnClick="() => Enqueue(context)" />
+                </MudTd>
+            }
+        </RowTemplate>
+    </MudTable>
 
     @if (r.Total > r.Page.Count)
     {
-        <p class="text-muted small">Showing top @r.Page.Count of @r.Total results. Refine your query to narrow results.</p>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Showing top @r.Page.Count of @r.Total results. Refine your query to narrow results.
+        </MudText>
     }
-}
-else if (results is { Page.Count: 0 } && !_searching)
-{
-    <p class="text-muted">No books found.</p>
 }
 
 @code {
     string searchQuery = "";
-    Guid? lastQueued;
     PeriodicTimer? _loadTimer;
     CancellationTokenSource? _searchCts;
 
@@ -165,9 +155,9 @@ else if (results is { Page.Count: 0 } && !_searching)
             await InvokeAsync(StateHasChanged);
     }
 
-    async Task OnInput(ChangeEventArgs e)
+    async Task OnValueChanged(string value)
     {
-        searchQuery = e.Value?.ToString() ?? "";
+        searchQuery = value;
         await TriggerSearch(debounceMs: 300);
     }
 
@@ -179,7 +169,6 @@ else if (results is { Page.Count: 0 } && !_searching)
 
     async Task TriggerSearch(int debounceMs)
     {
-        // Cancel any in-flight debounce/search
         _searchCts?.Cancel();
         _searchCts = new CancellationTokenSource();
         var cts = _searchCts;
@@ -204,7 +193,6 @@ else if (results is { Page.Count: 0 } && !_searching)
         if (cts.IsCancellationRequested) return;
 
         _searching = true;
-        lastQueued = null;
         await InvokeAsync(StateHasChanged);
 
         var sw = Stopwatch.StartNew();
@@ -234,7 +222,9 @@ else if (results is { Page.Count: 0 } && !_searching)
 
     async Task Enqueue(BookItem book)
     {
-        lastQueued = await Queue.EnqueueAsync(book);
+        await Queue.EnqueueAsync(book);
+        Snackbar.Add($"Queued: {book.Title}", Severity.Success);
+        NavigationManager.NavigateTo("/downloads");
     }
 
     public void Dispose()

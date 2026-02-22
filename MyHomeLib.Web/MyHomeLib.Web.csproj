@@ -14,6 +14,7 @@
   <ItemGroup>
     <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.4" />
     <PackageReference Include="Humanizer.Core" Version="3.0.1" />
+    <PackageReference Include="MudBlazor" Version="8.4.0" />
   </ItemGroup>
 
 </Project>

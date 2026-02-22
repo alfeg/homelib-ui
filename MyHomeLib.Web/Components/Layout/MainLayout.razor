@@ -1,32 +1,53 @@
 @inherits LayoutComponentBase
+@inject LibraryService Library
+@inject DownloadQueueService Queue
 
-<div class="container-xl py-4">
-    <header class="mb-4 border-bottom pb-3 d-flex align-items-center justify-content-between">
-        <div>
-            <span class="fs-4 fw-semibold">📚 MyHomeLib</span>
-            @if (!string.IsNullOrEmpty(Subtitle))
-            {
-                <span class="text-muted ms-2 small">@Subtitle</span>
-            }
-        </div>
-        <nav class="d-flex gap-3">
-            <a href="/" class="text-decoration-none">Search</a>
-            @if (Queue.IsEnabled)
-            {
-                <a href="/downloads" class="text-decoration-none">Downloads</a>
-            }
-        </nav>
-    </header>
-    <TorrentStatusPanel />
-    @Body
-</div>
+<MudThemeProvider Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary" Dense="true">
+        <MudIcon Icon="@Icons.Material.Filled.MenuBook" Class="mr-2" />
+        <MudText Typo="Typo.h6" Class="mr-3">MyHomeLib</MudText>
+        @if (!string.IsNullOrEmpty(Subtitle))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1 d-none d-sm-block">@Subtitle</MudText>
+        }
+        <MudSpacer />
+        <MudButton Href="/" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Search">Search</MudButton>
+        @if (Queue.IsEnabled)
+        {
+            <MudButton Href="/downloads" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Download">Downloads</MudButton>
+        }
+    </MudAppBar>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+            <TorrentStatusPanel />
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
 
 @code {
-    [Inject] LibraryService Library { get; set; } = default!;
-    [Inject] DownloadQueueService Queue { get; set; } = default!;
-
-    // collection.info is multi-line; show only the first meaningful line.
     string Subtitle => Library.Metadata.Description?
         .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .FirstOrDefault() ?? string.Empty;
+
+    static readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#1976d2",
+            Secondary = "#424242",
+            AppbarBackground = "#1565c0",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#90caf9",
+            AppbarBackground = "#0d47a1",
+        },
+    };
 }
