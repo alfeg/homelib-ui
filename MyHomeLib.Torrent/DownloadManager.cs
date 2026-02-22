@@ -113,7 +113,6 @@ public class DownloadManager : IAsyncDisposable
         using var statsCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _ = Task.Run(async () =>
         {
-            var tick = 0;
             while (!statsCts.Token.IsCancellationRequested)
             {
                 var stats = new TorrentStats(
@@ -128,20 +127,6 @@ public class DownloadManager : IAsyncDisposable
                     _clientEngine.Dht.State.ToString());
 
                 request.Progress?.Report(stats);
-
-                if (++tick % 5 == 0)
-                    _logger.LogInformation(
-                        "[{Hash}] State={State} | DHT={DhtState} nodes={DhtNodes} | " +
-                        "Seeds={Seeds} Peers={Peers} | ⬇ {Down:0.0} KB/s ⬆ {Up:0.0} KB/s | " +
-                        "Received={Bytes} KB | Progress={Progress:0.0}%",
-                        hash,
-                        stats.State,
-                        stats.DhtState, stats.DhtNodes,
-                        stats.Seeds, stats.Peers,
-                        stats.DownloadRateBytesPerSec / 1024,
-                        stats.UploadRateBytesPerSec / 1024,
-                        stats.BytesReceived / 1024,
-                        stats.PartialProgress);
 
                 try { await Task.Delay(1000, statsCts.Token); } catch { break; }
             }
