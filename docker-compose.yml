@@ -1,6 +1,6 @@
 services:
   torrserve:
-    image: yourok/torrserver:latest
+    image: ghcr.io/yourok/torrserver:latest
     restart: unless-stopped
     ports:
       - "8099:8090"
