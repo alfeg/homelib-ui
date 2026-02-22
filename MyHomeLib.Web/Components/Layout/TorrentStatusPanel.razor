@@ -6,12 +6,12 @@
 @if (Queue.IsEnabled)
 {
     <MudPaper Elevation="1" Class="px-4 py-2 mb-3 mt-2">
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <MudText Typo="Typo.subtitle2">TorrServe</MudText>
+        <div class="status-toolbar d-flex flex-wrap align-items-center gap-2">
+            <MudText Typo="Typo.subtitle2" Class="mb-0">TorrServe</MudText>
 
             @if (!string.IsNullOrWhiteSpace(_stats?.TorrServVersion))
             {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@_stats.TorrServVersion</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-0">@_stats.TorrServVersion</MudText>
             }
 
             @if (_stats is null)
@@ -60,10 +60,10 @@
 
                 @if (_cachePct.HasValue)
                 {
-                    <div class="d-flex align-items-center gap-1" title="@_cacheTitle" style="min-width:90px">
+                    <div class="status-cache d-flex align-items-center gap-1" title="@_cacheTitle">
                         <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" />
-                        <MudProgressLinear Color="Color.Info" Value="@_cachePct.Value" Class="flex-grow-1" Style="height:6px" />
-                        <MudText Typo="Typo.caption">@_cachePct%</MudText>
+                        <MudProgressLinear Color="Color.Info" Value="@_cachePct.Value" Class="status-cache-progress" Style="height:8px" />
+                        <MudText Typo="Typo.caption" Class="mb-0 status-cache-percent">@_cachePct%</MudText>
                     </div>
                 }
 

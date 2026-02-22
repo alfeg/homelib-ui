@@ -5,7 +5,7 @@
 
 <PageTitle>Downloads — MyHomeLib</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-4">Downloads</MudText>
+<MudText Typo="Typo.h5" Class="page-title">Downloads</MudText>
 
 @if (!Queue.IsEnabled)
 {
@@ -36,7 +36,7 @@ else
                 <MudText Typo="Typo.caption">@context.Authors</MudText>
             </MudTd>
             <MudTd DataLabel="File">
-                <MudText Typo="Typo.caption" Style="font-family:monospace">@context.FileName</MudText>
+                <MudText Typo="Typo.caption" Class="mono-text">@context.FileName</MudText>
             </MudTd>
             <MudTd DataLabel="Status">
                 @switch (context.Status)

@@ -1,8 +1,9 @@
 @inherits LayoutComponentBase
 @inject LibraryService Library
 @inject DownloadQueueService Queue
+@inject IJSRuntime JS
 
-<MudThemeProvider Theme="_theme" />
+<MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -16,6 +17,12 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1 d-none d-sm-block">@Subtitle</MudText>
         }
         <MudSpacer />
+        <MudTooltip Text="@(_isDarkMode ? "Switch to light mode" : "Switch to dark mode")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit"
+                           aria-label="Toggle dark mode"
+                           OnClick="ToggleDarkMode" />
+        </MudTooltip>
         <MudButton Href="/" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Search">Search</MudButton>
         @if (Queue.IsEnabled)
         {
@@ -32,9 +39,27 @@
 </MudLayout>
 
 @code {
+    bool _isDarkMode;
+
     string Subtitle => Library.Metadata.Description?
         .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .FirstOrDefault() ?? string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        var savedTheme = await JS.InvokeAsync<string?>("myHomeLibTheme.get");
+        _isDarkMode = string.Equals(savedTheme, "dark", StringComparison.OrdinalIgnoreCase);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task ToggleDarkMode()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("myHomeLibTheme.set", _isDarkMode ? "dark" : "light");
+    }
 
     static readonly MudTheme _theme = new()
     {
