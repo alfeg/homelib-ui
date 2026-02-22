@@ -6,8 +6,6 @@ using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.UseStaticWebAssets();
-
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
@@ -45,7 +43,7 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 
-app.UseStaticFiles();
+app.MapStaticAssets();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()

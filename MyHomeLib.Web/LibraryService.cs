@@ -33,10 +33,13 @@ public sealed class LibraryService : BackgroundService, IAsyncDisposable
     {
         try
         {
-            // Pre-register library torrent with TorrServe so it is ready immediately
             if (_config.TorrentEnabled)
             {
                 var dm = _sp.GetRequiredService<DownloadManager>();
+
+                // Wait until TorrServe is reachable before proceeding
+                await WaitForTorrServeAsync(dm, stoppingToken);
+
                 try { await dm.StartLibraryAsync(_config.MagnetUri, stoppingToken); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Failed to pre-register library torrent"); }
             }
@@ -52,6 +55,27 @@ public sealed class LibraryService : BackgroundService, IAsyncDisposable
         {
             _logger.LogError(ex, "Library initialisation failed");
             _indexTcs.TrySetException(ex);
+        }
+    }
+
+    private async Task WaitForTorrServeAsync(DownloadManager dm, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await dm.RefreshStatsAsync("", ct);
+                if (dm.GetStats()?.IsConnected == true)
+                {
+                    _logger.LogInformation("TorrServe is reachable");
+                    return;
+                }
+            }
+            catch { /* not ready yet */ }
+
+            LoadStatus = "Waiting for TorrServe…";
+            _logger.LogDebug("TorrServe not reachable, retrying in 3 s…");
+            await Task.Delay(3000, ct);
         }
     }
 

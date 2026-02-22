@@ -9,7 +9,7 @@ RUN dotnet restore MyHomeLib.Web/MyHomeLib.Web.csproj
 COPY MyHomeLib.Library/ MyHomeLib.Library/
 COPY MyHomeLib.Torrent/  MyHomeLib.Torrent/
 COPY MyHomeLib.Web/      MyHomeLib.Web/
-RUN dotnet publish MyHomeLib.Web/MyHomeLib.Web.csproj -c Release -o /app --no-restore
+RUN dotnet publish MyHomeLib.Web/MyHomeLib.Web.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
