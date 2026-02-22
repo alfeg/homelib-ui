@@ -42,17 +42,36 @@ public class DownloadManager(
             return;
         }
         var t = await _torrServe.GetTorrentAsync(hash, ct);
-        var ts = t?.TorrentStats;
+        var cache = string.IsNullOrEmpty(hash) ? null : await _torrServe.GetCacheAsync(hash, ct);
         _stats = new TorrentStats(
             IsConnected:       true,
             State:             t?.StatString ?? "Connected",
-            DownloadSpeed:     ts?.DownloadSpeed ?? 0,
-            UploadSpeed:       ts?.UploadSpeed ?? 0,
-            TotalPeers:        ts?.TotalPeers ?? 0,
-            ActivePeers:       ts?.ActivePeers ?? 0,
-            ConnectedSeeders:  ts?.ConnectedSeeders ?? 0,
-            LoadedSize:        ts?.LoadedSize ?? 0,
-            TorrentSize:       ts?.TorrentSize ?? 0
+            DownloadSpeed:     t?.DownloadSpeed     ?? 0,
+            UploadSpeed:       t?.UploadSpeed       ?? 0,
+            TotalPeers:        t?.TotalPeers        ?? 0,
+            PendingPeers:      t?.PendingPeers      ?? 0,
+            ActivePeers:       t?.ActivePeers       ?? 0,
+            HalfOpenPeers:     t?.HalfOpenPeers     ?? 0,
+            ConnectedSeeders:  t?.ConnectedSeeders  ?? 0,
+            LoadedSize:        t?.LoadedSize        ?? 0,
+            TorrentSize:       t?.TorrentSize       ?? 0,
+            PreloadedBytes:    t?.PreloadedBytes    ?? 0,
+            PreloadSize:       t?.PreloadSize       ?? 0,
+            CacheCapacity:     cache?.Capacity      ?? 0,
+            CacheFilled:       cache?.Filled        ?? 0,
+            CachedPieces:      cache?.PiecesCount   ?? 0,
+            ActiveReaders:     cache?.Readers?.Length ?? 0,
+            BytesWritten:      t?.BytesWritten      ?? 0,
+            BytesRead:         t?.BytesRead         ?? 0,
+            BytesReadUseful:   t?.BytesReadUsefulData ?? 0,
+            ChunksRead:        t?.ChunksRead        ?? 0,
+            ChunksReadUseful:  t?.ChunksReadUseful  ?? 0,
+            ChunksReadWasted:  t?.ChunksReadWasted  ?? 0,
+            PiecesDirtiedGood: t?.PiecesDirtiedGood ?? 0,
+            PiecesDirtiedBad:  t?.PiecesDirtiedBad  ?? 0,
+            DurationSeconds:   t?.DurationSeconds   ?? 0,
+            BitRate:           t?.BitRate           ?? "",
+            TorrServVersion:   _torrServe.LastVersion ?? ""
         );
     }
 

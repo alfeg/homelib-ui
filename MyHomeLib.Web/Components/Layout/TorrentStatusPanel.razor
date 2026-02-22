@@ -6,8 +6,15 @@
 @if (Queue.IsEnabled)
 {
     <div class="torrent-status px-3 py-2 bg-body-tertiary border rounded small text-muted mt-3 mb-2">
+        {{/* ── Compact status bar ── */}}
         <div class="d-flex flex-wrap align-items-center gap-3">
-            <span class="fw-semibold text-body">🔗 TorrServe</span>
+            <span class="fw-semibold text-body">
+                🔗 TorrServe
+                @if (!string.IsNullOrWhiteSpace(_stats?.TorrServVersion))
+                {
+                    <span class="ms-1 text-muted fw-normal" style="font-size:0.8em">@_stats.TorrServVersion</span>
+                }
+            </span>
 
             @if (_stats is null)
             {
@@ -33,9 +40,14 @@
                     </span>
                 }
 
+                @if (!string.IsNullOrWhiteSpace(_stats.BitRate))
+                {
+                    <span title="Bit rate">🎞 @_stats.BitRate</span>
+                }
+
                 @if (_stats.TotalPeers > 0)
                 {
-                    <span title="Active peers / total peers (seeders)">
+                    <span title="Active / total peers (seeders)">
                         👥 @_stats.ActivePeers/@_stats.TotalPeers
                         @if (_stats.ConnectedSeeders > 0)
                         {
@@ -54,6 +66,21 @@
                         </div>
                     </span>
                 }
+                else if (_stats.CacheCapacity > 0)
+                {
+                    var pct = (int)Math.Round(100.0 * _stats.CacheFilled / _stats.CacheCapacity);
+                    <span title="Cache: @_stats.CacheFilled.Bytes().Humanize() / @_stats.CacheCapacity.Bytes().Humanize()">
+                        🗄 @pct%
+                        <div class="progress d-inline-flex align-middle" style="width:60px;height:6px;">
+                            <div class="progress-bar bg-info" role="progressbar" style="width:@pct%"></div>
+                        </div>
+                    </span>
+                }
+
+                @if (_stats.ActiveReaders > 0)
+                {
+                    <span title="Active stream readers">▶ @_stats.ActiveReaders</span>
+                }
             }
 
             @if (Queue.ActiveDownloadCount > 0)
@@ -63,13 +90,77 @@
                     @Queue.ActiveDownloadCount download@(Queue.ActiveDownloadCount > 1 ? "s" : "") in progress
                 </span>
             }
+
+            @if (_stats?.IsConnected == true)
+            {
+                <button class="btn btn-link btn-sm p-0 ms-auto text-muted" @onclick="ToggleDetails">
+                    @(_showDetails ? "▲ less" : "▼ more")
+                </button>
+            }
         </div>
+
+        {{/* ── Expanded detail panel ── */}}
+        @if (_showDetails && _stats?.IsConnected == true)
+        {
+            <div class="mt-2 pt-2 border-top row row-cols-2 row-cols-md-4 g-2">
+                @DetailRow("⬇ Download", FormatSpeed(_stats.DownloadSpeed))
+                @DetailRow("⬆ Upload", FormatSpeed(_stats.UploadSpeed))
+                @DetailRow("👥 Peers (active/total)", $"{_stats.ActivePeers}/{_stats.TotalPeers}")
+                @DetailRow("🔓 Half-open", _stats.HalfOpenPeers.ToString())
+                @DetailRow("⏳ Pending", _stats.PendingPeers.ToString())
+                @DetailRow("🌱 Seeders", _stats.ConnectedSeeders.ToString())
+                @if (_stats.TorrentSize > 0)
+                {
+                    @DetailRow("📦 Loaded", _stats.LoadedSize.Bytes().Humanize())
+                    @DetailRow("📀 Total size", _stats.TorrentSize.Bytes().Humanize())
+                    @if (_stats.PreloadSize > 0)
+                    {
+                        @DetailRow("⚡ Preloaded", $"{_stats.PreloadedBytes.Bytes().Humanize()} / {_stats.PreloadSize.Bytes().Humanize()}")
+                    }
+                }
+                @if (_stats.CacheCapacity > 0)
+                {
+                    @DetailRow("🗄 Cache", $"{_stats.CacheFilled.Bytes().Humanize()} / {_stats.CacheCapacity.Bytes().Humanize()}")
+                    @DetailRow("🧩 Pieces", _stats.CachedPieces.ToString())
+                }
+                @if (_stats.ActiveReaders > 0)
+                {
+                    @DetailRow("▶ Readers", _stats.ActiveReaders.ToString())
+                }
+                @if (_stats.DurationSeconds > 0)
+                {
+                    @DetailRow("⏱ Active", TimeSpan.FromSeconds(_stats.DurationSeconds).Humanize())
+                }
+                @if (!string.IsNullOrWhiteSpace(_stats.BitRate))
+                {
+                    @DetailRow("🎞 Bit rate", _stats.BitRate)
+                }
+                @if (_stats.BytesRead > 0)
+                {
+                    @DetailRow("📖 Bytes read", _stats.BytesRead.Bytes().Humanize())
+                    @DetailRow("✅ Useful", _stats.BytesReadUseful.Bytes().Humanize())
+                }
+                @if (_stats.BytesWritten > 0)
+                {
+                    @DetailRow("✍ Bytes written", _stats.BytesWritten.Bytes().Humanize())
+                }
+                @if (_stats.ChunksRead > 0)
+                {
+                    @DetailRow("📊 Chunks read", $"{_stats.ChunksReadUseful} useful / {_stats.ChunksReadWasted} wasted")
+                }
+                @if (_stats.PiecesDirtiedGood + _stats.PiecesDirtiedBad > 0)
+                {
+                    @DetailRow("🟩 Pieces", $"{_stats.PiecesDirtiedGood} good / {_stats.PiecesDirtiedBad} bad")
+                }
+            </div>
+        }
     </div>
 }
 
 @code {
     TorrentStats? _stats;
     PeriodicTimer? _timer;
+    bool _showDetails;
 
     protected override void OnInitialized()
     {
@@ -87,6 +178,16 @@
             await InvokeAsync(StateHasChanged);
         }
     }
+
+    void ToggleDetails() => _showDetails = !_showDetails;
+
+    static RenderFragment DetailRow(string label, string value) => __builder =>
+    {
+        <div class="col">
+            <div class="text-muted" style="font-size:0.75em">@label</div>
+            <div class="fw-semibold">@value</div>
+        </div>
+    };
 
     static string FormatSpeed(double bytesPerSec)
     {
