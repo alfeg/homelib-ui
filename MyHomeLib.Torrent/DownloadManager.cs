@@ -178,14 +178,14 @@ public class DownloadManager : IAsyncDisposable
         {
             await statsCts.CancelAsync();
             // Manager stays running — do not call StopAsync
-            await RemoveOldArchivesPolicy(manager);
+            RemoveOldArchivesPolicy(manager);
         }
 
         return response ??
                throw new NotImplementedException($"Request of type: {request.GetType()} is not implemented");
     }
 
-    private async Task RemoveOldArchivesPolicy(TorrentManager manager)
+    private void RemoveOldArchivesPolicy(TorrentManager manager)
     {
         var oldFilePolicySpan = TimeSpan.FromHours(1);
 
@@ -200,7 +200,8 @@ public class DownloadManager : IAsyncDisposable
                 File.Delete(info.FullName);
                 _logger.LogInformation("[{Hash}] File {File} deleted by policy (older than {Age})",
                     manager.InfoHashes.V1OrV2.ToHex(), info.Name, oldFilePolicySpan.Humanize());
-                await manager.SetNeedsHashCheckAsync();
+                // No SetNeedsHashCheckAsync — manager stays running; MonoTorrent will detect
+                // missing pieces and re-download them on the next request for this file.
             }
         }
     }
