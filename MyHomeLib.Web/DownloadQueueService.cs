@@ -219,13 +219,16 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
             var request = new DownloadRequest(hash, job.Archive, job.FileName) { Link = link, Progress = progress };
             var response = await _downloadManager.DownloadFile(request, jobCts.Token);
 
-            var safeName = MakeSafeFileName(response!.Name.Length > 0 ? response.Name : job.FileName);
+            var ext = Path.GetExtension(response!.Name.Length > 0 ? response.Name : job.FileName);
+            var friendlyBase = string.IsNullOrWhiteSpace(job.Authors)
+                ? job.Title
+                : $"{job.Authors} - {job.Title}";
+            var safeName = MakeSafeFileName(friendlyBase + ext);
             var filePath = Path.Combine(_config.DownloadsDirectory, safeName);
 
             var counter = 1;
             while (File.Exists(filePath))
             {
-                var ext = Path.GetExtension(safeName);
                 filePath = Path.Combine(_config.DownloadsDirectory,
                     $"{Path.GetFileNameWithoutExtension(safeName)}_{counter++}{ext}");
             }
