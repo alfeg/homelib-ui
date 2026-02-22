@@ -11,7 +11,9 @@ namespace MyHomeListServer.Torrent;
 
 public class DownloadManager : IAsyncDisposable
 {
-    private readonly ClientEngine _clientEngine;
+    private readonly ClientEngine? _clientEngine;
+    private readonly TorrServeClient? _torrServe;
+    private readonly HttpClient? _httpClient;
     private readonly AppConfig _appConfig;
     private readonly ILogger<DownloadManager> _logger;
 
@@ -19,6 +21,7 @@ public class DownloadManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, TorrentManager> _managers = new();
     private readonly SemaphoreSlim _createLock = new(1, 1);
 
+    /// <summary>MonoTorrent mode constructor.</summary>
     public DownloadManager(ClientEngine clientEngine, IOptions<AppConfig> config, ILogger<DownloadManager> logger)
     {
         _clientEngine = clientEngine;
@@ -26,25 +29,50 @@ public class DownloadManager : IAsyncDisposable
         _logger = logger;
     }
 
+    /// <summary>TorrServe mode constructor.</summary>
+    public DownloadManager(TorrServeClient torrServe, HttpClient httpClient,
+        IOptions<AppConfig> config, ILogger<DownloadManager> logger)
+    {
+        _torrServe  = torrServe;
+        _httpClient = httpClient;
+        _appConfig  = config.Value;
+        _logger     = logger;
+    }
+
     public async Task<SearchResponse?> SearchFiles(SearchRequest request, CancellationToken ct = default)
     {
+        if (_torrServe != null)
+            return await SearchViaTorrServe(request, ct);
         var response = await ProcessQueue(request, ct);
         return response as SearchResponse;
     }
 
     public async Task<DownloadResponse?> DownloadFile(DownloadRequest request, CancellationToken ct = default)
     {
+        if (_torrServe != null)
+            return await DownloadFileViaTorrServe(request, ct);
         var response = await ProcessQueue(request, ct);
         return response as DownloadResponse;
     }
 
     /// <summary>Proactively starts the library torrent so DHT/peers begin connecting at app startup.</summary>
-    public async Task StartLibraryAsync(MagnetLink link) =>
+    public async Task StartLibraryAsync(MagnetLink link)
+    {
+        if (_torrServe != null)
+        {
+            var hash = link.InfoHashes.V1OrV2.ToHex();
+            _logger.LogInformation("[{Hash}] Pre-starting library torrent via TorrServe", hash);
+            await _torrServe.AddTorrentAsync(link.ToV1String(), link.Name ?? hash, saveToDb: true);
+            return;
+        }
         await GetOrCreateManagerAsync(link.InfoHashes.V1OrV2.ToHex(), link);
+    }
 
     /// <summary>Returns a snapshot of the current torrent stats for a given info-hash, or null if not running.</summary>
     public TorrentStats? GetStats(string hash)
     {
+        if (_torrServe != null)
+            return null; // TorrServe stats not yet implemented in this panel
         if (!_managers.TryGetValue(hash, out var manager))
             return null;
         return new TorrentStats(
@@ -55,8 +83,8 @@ public class DownloadManager : IAsyncDisposable
             manager.Peers.Leechs,
             manager.PartialProgress,
             manager.State.ToString(),
-            _clientEngine.Dht.NodeCount,
-            _clientEngine.Dht.State.ToString());
+            _clientEngine!.Dht.NodeCount,
+            _clientEngine!.Dht.State.ToString());
     }
 
     /// <summary>
@@ -258,6 +286,69 @@ public class DownloadManager : IAsyncDisposable
         _logger.LogInformation("[{Library}] {Name} Downloaded {Book}", request.Library, request.Name, book);
         return new DownloadResponse(bookStream.ToArray(), "application/fb2", book,
             fileToDownload.DownloadCompleteFullPath);
+    }
+
+    // ── TorrServe paths ─────────────────────────────────────────────────────
+
+    private async Task<SearchResponse> SearchViaTorrServe(SearchRequest request, CancellationToken ct)
+    {
+        var hash = request.Link?.InfoHashes.V1OrV2.ToHex() ?? request.Library;
+        var magnetUri = request.Link?.ToV1String()
+                        ?? throw new InvalidOperationException("MagnetLink required for TorrServe search");
+
+        await _torrServe!.AddTorrentAsync(magnetUri, hash, saveToDb: true, ct);
+        var files = await _torrServe.WaitForFilesAsync(hash, ct);
+        var pattern = new WildcardPattern(request.FilePattern);
+        var names = files.Select(f => f.Path).Where(p => pattern.IsMatch(p)).ToArray();
+        return new SearchResponse(names);
+    }
+
+    private async Task<DownloadResponse> DownloadFileViaTorrServe(DownloadRequest request, CancellationToken ct)
+    {
+        var hash = request.Link?.InfoHashes.V1OrV2.ToHex() ?? request.Library;
+        var archive = request.Archive;
+        var book = request.Book;
+
+        _logger.LogInformation("[TorrServe][{Library}] {Name} Starting download", request.Library, request.Name);
+
+        var files = await _torrServe!.WaitForFilesAsync(hash, ct);
+        var file = files.FirstOrDefault(f => f.Path.EndsWith(archive))
+                   ?? throw new FileNotFoundException($"Archive {archive} not found in torrent {hash}");
+
+        var streamUrl = _torrServe.GetStreamUrl(hash, file.Id);
+        await using var archiveStream = new HttpRangeStream(_httpClient!, streamUrl, file.Length);
+
+        var bookStream = new MemoryStream();
+        if (book == null)
+        {
+            await archiveStream.CopyToAsync(bookStream, ct);
+            return new DownloadResponse(bookStream.ToArray(), string.Empty, string.Empty, null);
+        }
+
+        _logger.LogInformation("[TorrServe][{Library}] {Name} Reading archive entry", request.Library, request.Name);
+        using (var zip = new ZipArchive(archiveStream))
+        {
+            var entry = zip.GetEntry(book)
+                        ?? throw new FileNotFoundException($"Entry {book} not found in {archive}");
+            await entry.Open().CopyToAsync(bookStream, ct);
+        }
+
+        bookStream.Seek(0, SeekOrigin.Begin);
+        if (book.EndsWith(".fb2"))
+        {
+            var fb2 = new Fb2Document();
+            await fb2.LoadAsync(bookStream);
+            bookStream.Seek(0, SeekOrigin.Begin);
+            var title = fb2.Title?.Content.FirstOrDefault(c => c.Name == "book-title")?.ToString()
+                        ?? Path.GetFileNameWithoutExtension(book);
+            _logger.LogInformation("[TorrServe][{Library}] {Name} Downloaded {Title}.fb2",
+                request.Library, request.Name, title);
+            return new DownloadResponse(bookStream.ToArray(), "application/fb2", $"{title}.fb2", null);
+        }
+
+        _logger.LogInformation("[TorrServe][{Library}] {Name} Downloaded {Book}",
+            request.Library, request.Name, book);
+        return new DownloadResponse(bookStream.ToArray(), string.Empty, book, null);
     }
 
     /// <summary>Gracefully stop all running torrent managers on app shutdown.</summary>

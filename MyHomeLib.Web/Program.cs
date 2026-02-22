@@ -6,6 +6,7 @@ using MonoTorrent;
 using MyHomeLib.Web;
 using MyHomeLib.Web.Components;
 using MyHomeListServer.Torrent;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,25 +35,46 @@ builder.Services.PostConfigure<AppConfig>(opts =>
     }
 });
 
-builder.Services.AddSingleton<ClientEngine>(sp =>
+var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"] ?? "";
+if (!string.IsNullOrWhiteSpace(torrServeUrl))
 {
-    var config = sp.GetRequiredService<IOptions<AppConfig>>().Value;
-    var endpoint = new IPEndPoint(IPAddress.Any, config.ListenPort);
-    // Engine internal cache (DHT nodes, fast-resume) → <downloads>/.cache/
-    var settingsBuilder = new EngineSettingsBuilder
+    // TorrServe mode: no MonoTorrent ClientEngine needed
+    builder.Services.AddHttpClient("torrserve-api");
+    builder.Services.AddHttpClient("torrserve-stream");
+    builder.Services.AddSingleton<TorrServeClient>(sp =>
     {
-        FastResumeMode       = FastResumeMode.BestEffort,
-        CacheDirectory       = config.CacheDirectory(), // extension method → base/.cache
-        AutoSaveLoadDhtCache = true,   // persist DHT routing table across restarts
-        AllowPortForwarding  = true,   // enable UPnP / NAT-PMP
-        DhtEndPoint          = endpoint,
-        ListenEndPoints      = new Dictionary<string, IPEndPoint> { ["ipv4"] = endpoint },
-    };
-    var factories = Factories.Default
-        .WithStreamingPieceRequesterCreator(() => new PartialStreamingRequester(config));
-    return new ClientEngine(settingsBuilder.ToSettings(), factories);
-});
-builder.Services.AddSingleton<DownloadManager>();
+        var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("torrserve-api");
+        return new TorrServeClient(http, torrServeUrl);
+    });
+    builder.Services.AddSingleton<DownloadManager>(sp =>
+        new DownloadManager(
+            sp.GetRequiredService<TorrServeClient>(),
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("torrserve-stream"),
+            sp.GetRequiredService<IOptions<AppConfig>>(),
+            sp.GetRequiredService<ILogger<DownloadManager>>()));
+}
+else
+{
+    // MonoTorrent mode
+    builder.Services.AddSingleton<ClientEngine>(sp =>
+    {
+        var config = sp.GetRequiredService<IOptions<AppConfig>>().Value;
+        var endpoint = new IPEndPoint(IPAddress.Any, config.ListenPort);
+        var settingsBuilder = new EngineSettingsBuilder
+        {
+            FastResumeMode       = FastResumeMode.BestEffort,
+            CacheDirectory       = config.CacheDirectory(),
+            AutoSaveLoadDhtCache = true,
+            AllowPortForwarding  = true,
+            DhtEndPoint          = endpoint,
+            ListenEndPoints      = new Dictionary<string, IPEndPoint> { ["ipv4"] = endpoint },
+        };
+        var factories = Factories.Default
+            .WithStreamingPieceRequesterCreator(() => new PartialStreamingRequester(config));
+        return new ClientEngine(settingsBuilder.ToSettings(), factories);
+    });
+    builder.Services.AddSingleton<DownloadManager>();
+}
 builder.Services.AddSingleton<DownloadQueueService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DownloadQueueService>());
 
