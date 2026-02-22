@@ -3,17 +3,13 @@ using CsvHelper.Configuration;
 
 namespace MyHomeLib.Library;
 
-public class InpReader : IDisposable
+public class InpReader(Stream stream) : IDisposable
 {
-    public readonly string INPX_ITEM_DELIMITER = "" + (char)4;
+    public const string INPX_ITEM_DELIMITER = "\x04";
     public const string INPX_SUBITEM_DELIMITER = ",";
-    public readonly string EOT = $"{(char)4}";
-    public InpReader(Stream stream)
-    {
-        Stream = stream;
-    }
+    public const string EOT = "\x04";
 
-    public Stream Stream { get; }
+    public Stream Stream { get; } = stream;
 
     public async IAsyncEnumerable<BookItem> ReadBooks()
     {
@@ -32,27 +28,9 @@ public class InpReader : IDisposable
         }
     }
 
-    private void Dispose(bool disposing)
-    {
-        if (disposed)
-        {
-            return;
-        }
-
-        if (disposing)
-        {
-            Stream.Dispose();
-        }
-
-        disposed = true;
-    }
-
-    bool disposed = false;
     public void Dispose()
     {
-        // Dispose of unmanaged resources.
-        Dispose(true);
-        // Suppress finalization.
+        Stream.Dispose();
         GC.SuppressFinalize(this);
     }
 }

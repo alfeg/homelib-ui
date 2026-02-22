@@ -28,7 +28,6 @@ builder.Services.AddSingleton<DownloadManager>(sp =>
     new DownloadManager(
         sp.GetRequiredService<TorrServeClient>(),
         new HttpClient(),
-        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AppConfig>>(),
         sp.GetRequiredService<ILogger<DownloadManager>>()));
 
 // Library initialisation runs in the background (downloads INPX, builds DuckDB index)

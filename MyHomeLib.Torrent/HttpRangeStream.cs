@@ -6,20 +6,13 @@ namespace MyHomeListServer.Torrent;
 /// exactly the requested bytes. TorrServe (and any HTTP/1.1 server supporting
 /// Accept-Ranges) will download only the torrent pieces covering that range.
 /// </summary>
-public sealed class HttpRangeStream : Stream
+public sealed class HttpRangeStream(HttpClient http, string url, long hintLength) : Stream
 {
-    private readonly HttpClient _http;
-    private readonly string _url;
+    private readonly HttpClient _http = http;
+    private readonly string _url = url;
     private long _position;
-    private long _length;
+    private long _length = hintLength;
     private bool _lengthResolved;
-
-    public HttpRangeStream(HttpClient http, string url, long hintLength)
-    {
-        _http    = http;
-        _url     = url;
-        _length  = hintLength;
-    }
 
     public override bool CanRead  => true;
     public override bool CanSeek  => true;

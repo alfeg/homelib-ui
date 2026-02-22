@@ -1,25 +1,19 @@
 using System.IO.Compression;
 using Fb2.Document;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace MyHomeListServer.Torrent;
 
-public class DownloadManager
+public class DownloadManager(
+    TorrServeClient torrServe,
+    HttpClient httpClient,
+    ILogger<DownloadManager> logger)
 {
-    private readonly TorrServeClient _torrServe;
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<DownloadManager> _logger;
+    private readonly TorrServeClient _torrServe = torrServe;
+    private readonly HttpClient _httpClient = httpClient;
+    private readonly ILogger<DownloadManager> _logger = logger;
 
     private volatile TorrentStats? _stats;
-
-    public DownloadManager(TorrServeClient torrServe, HttpClient httpClient,
-        IOptions<AppConfig> config, ILogger<DownloadManager> logger)
-    {
-        _torrServe  = torrServe;
-        _httpClient = httpClient;
-        _logger     = logger;
-    }
 
     /// <summary>Registers the library torrent with TorrServe so it is ready for streaming.</summary>
     public async Task StartLibraryAsync(string magnetUri, CancellationToken ct = default)

@@ -5,11 +5,14 @@ using MyHomeListServer.Torrent;
 
 namespace MyHomeLib.Web;
 
-public sealed class LibraryService : BackgroundService, IAsyncDisposable
+public sealed class LibraryService(
+    IOptions<LibraryConfig> config,
+    IServiceProvider sp,
+    ILogger<LibraryService> logger) : BackgroundService, IAsyncDisposable
 {
-    private readonly LibraryConfig _config;
-    private readonly IServiceProvider _sp;
-    private readonly ILogger<LibraryService> _logger;
+    private readonly LibraryConfig _config = config.Value;
+    private readonly IServiceProvider _sp = sp;
+    private readonly ILogger<LibraryService> _logger = logger;
 
     private readonly TaskCompletionSource<BookSearchIndex> _indexTcs = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
@@ -18,16 +21,6 @@ public sealed class LibraryService : BackgroundService, IAsyncDisposable
     public InpxLibrary Metadata { get; } = new();
     public string LoadStatus { get; private set; } = "Initialising…";
     public TorrentStats? InpxStats { get; private set; }
-
-    public LibraryService(
-        IOptions<LibraryConfig> config,
-        IServiceProvider sp,
-        ILogger<LibraryService> logger)
-    {
-        _config = config.Value;
-        _sp     = sp;
-        _logger = logger;
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

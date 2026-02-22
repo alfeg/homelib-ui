@@ -7,12 +7,15 @@ using MyHomeListServer.Torrent;
 
 namespace MyHomeLib.Web;
 
-public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
+public sealed class DownloadQueueService(
+    DownloadManager downloadManager,
+    IOptions<LibraryConfig> config,
+    ILogger<DownloadQueueService> logger) : BackgroundService, IAsyncDisposable
 {
-    private readonly DownloadManager _downloadManager;
-    private readonly LibraryConfig _config;
-    private readonly ILogger<DownloadQueueService> _logger;
-    private readonly DuckDBConnection _db;
+    private readonly DownloadManager _downloadManager = downloadManager;
+    private readonly LibraryConfig _config = config.Value;
+    private readonly ILogger<DownloadQueueService> _logger = logger;
+    private readonly DuckDBConnection _db = InitializeDatabase(config.Value);
     private readonly Channel<Guid> _channel = Channel.CreateUnbounded<Guid>();
     private readonly SemaphoreSlim _dbLock = new(1, 1);
     private readonly ConcurrentDictionary<Guid, TorrentStats> _activeStats = new();
@@ -29,31 +32,22 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
     /// <summary>Number of jobs actively being downloaded right now.</summary>
     public int ActiveDownloadCount => _jobCts.Count;
 
-    public DownloadQueueService(
-        DownloadManager downloadManager,
-        IOptions<LibraryConfig> config,
-        ILogger<DownloadQueueService> logger)
+    private static DuckDBConnection InitializeDatabase(LibraryConfig cfg)
     {
-        _downloadManager = downloadManager;
-        _config = config.Value;
-        _logger = logger;
-
-        var dbPath = string.IsNullOrWhiteSpace(_config.QueueDbPath)
-            ? Path.Combine(_config.DownloadsDirectory, "queue.db")
-            : _config.QueueDbPath;
+        var dbPath = string.IsNullOrWhiteSpace(cfg.QueueDbPath)
+            ? Path.Combine(cfg.DownloadsDirectory, "queue.db")
+            : cfg.QueueDbPath;
 
         var dbDir = Path.GetDirectoryName(Path.GetFullPath(dbPath));
         if (!string.IsNullOrEmpty(dbDir))
             Directory.CreateDirectory(dbDir);
 
-        _db = new DuckDBConnection($"DataSource={dbPath}");
-        _db.Open();
-        InitSchema();
-    }
-
-    private void InitSchema()
-    {
-        Exec("""
+        var db = new DuckDBConnection($"DataSource={dbPath}");
+        db.Open();
+        
+        // Initialize schema
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS download_queue (
                 id            VARCHAR PRIMARY KEY,
                 book_id       INTEGER,
@@ -69,7 +63,10 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
                 added_at      TIMESTAMP DEFAULT now(),
                 completed_at  TIMESTAMP
             )
-            """);
+            """;
+        cmd.ExecuteNonQuery();
+        
+        return db;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
