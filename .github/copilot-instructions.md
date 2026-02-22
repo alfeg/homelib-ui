@@ -1,117 +1,120 @@
-# Copilot Instructions for MyHomeLib / FlibustaCli
+# Copilot Instructions for MyHomeLib
 
 ## Project Overview
 
-**FlibustaCli** is a cross-platform .NET 10 CLI tool for searching and downloading books from the [Flibusta](https://flibusta.is/) e-book library via BitTorrent. Libraries are distributed as magnet-linked torrents containing an INPX index file and ZIP book archives.
+**MyHomeLib** is a .NET 10 Blazor Server web application for searching and downloading books from the [Flibusta](https://flibusta.is/) e-book library. Libraries are distributed as magnet-linked torrents containing an INPX index file and ZIP book archives. Torrent streaming is delegated entirely to **TorrServe** — a separate sidecar process that must be running alongside the app.
 
 ## Solution Structure
 
 ```
 MyHomeLibServer.slnx
-├── FlibustaCli/            # CLI entry point (Exe, net10.0, assembly: flibustaCli)
-├── MyHomeLib.Torrent/      # Torrent + business logic (Library, net10.0)
-└── MyHomeLib.Library/      # Book data models + INPX parser (Library, net10.0)
+├── MyHomeLib.Web/      # Blazor Server web app (Exe, net10.0, Microsoft.NET.Sdk.Web)
+├── MyHomeLib.Torrent/  # TorrServe client + download manager (Library, net10.0)
+└── MyHomeLib.Library/  # Book data models + INPX parser (Library, net10.0)
 ```
 
 ### Project Dependencies
-- `FlibustaCli` → `MyHomeLib.Torrent` → `MyHomeLib.Library`
+- `MyHomeLib.Web` → `MyHomeLib.Torrent` → `MyHomeLib.Library`
 
 ## Key Technologies
 
 | Concern | Library |
 |---|---|
-| CLI framework | `Spectre.Console.Cli` (v0.49.1) |
-| Torrent client | `MonoTorrent` (v3.0.2) |
-| Book index storage | `Parquet.Net` (v5.1.0) via `ParquetSerializer` |
+| Web framework | ASP.NET Core Blazor Server (`Microsoft.NET.Sdk.Web`) |
+| Torrent streaming | TorrServe HTTP API (`TorrServeClient` — plain `HttpClient`) |
+| Book index storage | DuckDB file-backed database (`DuckDB.NET.Data.Full` v1.4.4) |
 | Book index parsing | `CsvHelper` (v33.0.1) + `SharpZipLib` (v1.4.2) |
 | FB2 book parsing | `Fb2.Document` (v2.4.0) |
-| Human-readable output | `Humanizer.Core` (v2.14.1) |
-| DI / configuration | `Microsoft.Extensions.*` via `Microsoft.NET.Sdk.Web` |
+| Human-readable output | `Humanizer.Core` (v3.0.1) |
+| DI / configuration | `Microsoft.Extensions.*` (implicit via Web SDK) |
 
 ## Architecture & Data Flow
 
-1. **Add Library**: User provides a magnet URI → `LibraryIndexer.IndexLibrary()` downloads the `.inpx` file via torrent → parses it with `InpxReader` → serializes book metadata as a `.parquet` file in the cache directory.
-2. **Search**: `LibraryIndexer.SearchLibrary()` reads the `.parquet` file and filters `BookItem` records by title/author/language.
-3. **Download**: `DownloadManager.DownloadFile()` streams the target ZIP archive from the torrent → extracts the specific book file (`.fb2` or other) → saves to disk.
+1. **Startup — Library Indexing** (`LibraryService` BackgroundService):
+   - On first run, registers the magnet URI with TorrServe → polls until the `.inpx` file appears → streams it through `InpxReader` → inserts all `BookItem` rows into a file-backed DuckDB (`.db` file alongside the downloads directory).
+   - On restart, if the DuckDB already contains rows, parsing is skipped entirely and the FTS index is rebuilt from existing data.
+
+2. **Search** (`BookSearchIndex`):
+   - Queries the DuckDB file using a full-text search (FTS) PRAGMA over title/author/series/genre/language columns.
+   - Returns reconstructed `BookItem` records. No in-memory list is kept.
+
+3. **Download** (`DownloadManager` + `DownloadQueueService`):
+   - User enqueues a book → `DownloadQueueService` (BackgroundService) persists the job to a DuckDB queue table → calls `DownloadManager.DownloadFile()`.
+   - `DownloadManager` asks TorrServe for the file list, finds the right ZIP archive, opens an `HttpRangeStream` (seekable HTTP Range request stream) against the TorrServe streaming URL, unzips the specific book entry, and writes it to the downloads directory.
+
+4. **Status** (`TorrentStatusPanel`):
+   - Polls `DownloadQueueService.LibraryStats` every 3 s.
+   - Shows TorrServe connectivity, torrent state, ↓/↑ transfer speeds, peer/seeder counts, and a progress bar of cached bytes vs total torrent size.
 
 ### INPX Format
 An INPX file is a ZIP archive containing `.inp` files (pipe-delimited CSV rows) with book metadata, plus `collection.info` and `version.info` metadata files.
 
-### Cache Layout (configured via `AppConfig.CacheDirectory`)
+### Data Layout (configured via `Library:*` config keys)
 ```
-cache/
-  torrents/
-    <infohash>/          # MonoTorrent download directory
-    <infohash>.torrent   # Saved torrent metadata
-    <infohash>.parquet   # Serialized book index
-```
-
-## Configuration (`appsettings.json` / environment variables)
-
-```json
-{
-  "CacheDirectory": "./cache",
-  "AnnounceUrls": ["http://<tracker-host>/announce"],
-  "SpecialPeers": ["ipv4://<peer-host>:<port>/"]
-}
+<DownloadsDirectory>/
+  queue.db          # Download job queue (DuckDB)
+  books.db          # Book index (DuckDB, file-backed, reused across restarts)
+  <book files>      # Downloaded books
 ```
 
-All settings map to `AppConfig`. Environment variables override `appsettings.json` (standard `IConfiguration` binding).
+## Configuration
 
-## CLI Commands
+All settings are bound via `IConfiguration` (`appsettings.json` + environment variables). Environment variables use double-underscore separators (`Library__MagnetUri`).
 
-| Command | Alias | Description |
-|---|---|---|
-| `lib list` | `lib-list` | List indexed libraries |
-| `lib add <magnet>` | `lib-add <magnet>` | Add a library by magnet URI |
-| `search <name>` | — | Search books by title or author |
-| `download <id>` | `get <id>` | Download a book by its numeric ID |
+### `Library` section → `LibraryConfig`
+| Key | Description |
+|---|---|
+| `MagnetUri` | Magnet URI of the Flibusta INPX library torrent |
+| `DownloadsDirectory` | Where downloaded books and the queue DB are stored |
+| `LibraryDbPath` | Override path for the DuckDB book index file |
+| `QueueDbPath` | Override path for the DuckDB download queue file |
+| `TorrentEnabled` | Computed: true when MagnetUri and DownloadsDirectory are set |
 
-### Search Options
-- `-l / --library <hash>` — target a specific library hash
-- `-m / --max <n>` — max results (default 20, cap 100)
-- `-g / --language <lang>` — filter by language code (e.g. `ru`, `en`)
-- `-a / --author <name>` — restrict match to author field
+### `Torrent` section → `AppConfig`
+| Key | Description |
+|---|---|
+| `TorrServeUrl` | Base URL of the TorrServe instance (default `http://127.0.0.1:8090`) |
 
 ## Core Classes
 
-- **`LibraryIndexer`** (`MyHomeLib.Torrent`) — orchestrates indexing, listing, and searching libraries.
-- **`DownloadManager`** (`MyHomeLib.Torrent`) — wraps MonoTorrent `ClientEngine`; handles streaming download, file search, and cache eviction (archives older than 1 hour are deleted).
-- **`InpxReader`** (`MyHomeLib.Library`) — async streaming parser for INPX archives.
-- **`BookItem`** (`MyHomeLib.Library`) — Parquet-serializable record: `Id`, `Authors`, `Title`, `Genre`, `Series`, `Lang`, `Ext`, `ArchiveFile`, `File`, `Size`, `Date`, `Deleted`, etc.
-- **`AppConfig`** (`MyHomeLib.Torrent`) — strongly-typed configuration POCO.
-- **`Gate`** (`MyHomeLib.Torrent`) — simple async semaphore used to serialize concurrent library reads.
-- **`PartialStreamingRequester`** (`MyHomeLib.Torrent`) — custom MonoTorrent piece requester for partial/streaming downloads.
+- **`LibraryService`** (`MyHomeLib.Web`) — `BackgroundService`; on startup calls `DownloadManager.StartLibraryAsync()` then `BookSearchIndex.BuildAsync()`; exposes `IndexTask` (`TaskCompletionSource`) so UI can await indexing completion.
+- **`BookSearchIndex`** (`MyHomeLib.Web`) — file-backed DuckDB wrapper; `BuildAsync(IAsyncEnumerable<BookItem>)` streams inserts; `SearchAsync()` queries via FTS; skips rebuild if rows already exist.
+- **`DownloadQueueService`** (`MyHomeLib.Web`) — `BackgroundService`; persists download jobs to DuckDB; processes them sequentially; samples `RefreshStatsAsync` every 3 s for the status panel.
+- **`DownloadManager`** (`MyHomeLib.Torrent`) — TorrServe-only download orchestration; `StartLibraryAsync()`, `DownloadFile()`, `RefreshStatsAsync()`, `GetStats()`.
+- **`TorrServeClient`** (`MyHomeLib.Torrent`) — thin HTTP wrapper for the TorrServe API (`/torrents`, `/stream`, `/echo`); handles v1 (`file_stat`) and v2+ (`data.TorrServer.Files`) file-list formats.
+- **`HttpRangeStream`** (`MyHomeLib.Torrent`) — seekable `Stream` backed by HTTP Range requests; issues a HEAD request on first `Length` access to get real `Content-Length` from TorrServe.
+- **`InpxReader`** (`MyHomeLib.Library`) — async streaming parser for INPX archives; yields `BookItem` via `IAsyncEnumerable`.
+- **`BookItem`** (`MyHomeLib.Library`) — book metadata record: `Id`, `Authors`, `Title`, `Genre`, `Series`, `Lang`, `Ext`, `ArchiveFile`, `File`, `Size`, `Date`, `Deleted`, etc.
+- **`AppConfig`** (`MyHomeLib.Torrent`) — strongly-typed config POCO for `Torrent:*` settings.
+- **`MagnetUriHelper`** (`MyHomeLib.Torrent`) — parses the info-hash hex string from a magnet URI via regex.
 
-## Build & CI
+## TorrServe API Notes
 
-Build from the `FlibustaCli` working directory:
+- `POST /torrents` with `{"action":"get","hash":"<hex>"}` returns a `TorrServeTorrent` JSON object.
+  - `stat` int: 2 = preload, 3 = working, 4 = closed, 5 = in DB.
+  - `data` field is a JSON-encoded **string** containing `{"TorrServer":{"Files":[...],"TorrentStats":{...}}}`.
+  - `TorrentStats` inside `data.TorrServer` has: `download_speed`, `upload_speed`, `total_peers`, `active_peers`, `connected_seeders`, `loaded_size`, `torrent_size`.
+- `GET /echo` returns a plain-text version string — used for health checks.
+- `GET /stream?link=<hash>&index=<fileId>&play` streams the file via HTTP Range requests.
+- Use `http://127.0.0.1:8090` (not `localhost`) to avoid IPv6 resolution issues on Windows.
 
-```bash
-dotnet restore
-dotnet build -c release
-```
+## Docker / Deployment
 
-CI (GitHub Actions `.github/workflows/dotnet.yaml`) builds on **ubuntu-latest**, **macos-latest**, and **windows-latest** and publishes two artifacts per OS:
-- **small** — framework-dependent single-file (`--no-self-contained`)
-- **portable** — self-contained, trimmed, compressed single-file
+Run with `docker compose up` from the repo root. The `docker-compose.yml` starts:
+- `yourok/torrserver:latest` on port `8090`
+- `myhomelib` (built from `Dockerfile`) on port `8080`
 
-Releases are created automatically when the `<Version>` in `FlibustaCli/FlibustaCli.csproj` differs from the latest GitHub release tag.
+Volumes: `torrserve_data` for TorrServe state, `books_data` mounted at `/data/books` for downloads and the DuckDB files.
 
-## Docker
-
-A `docker-compose.yml` is provided for deploying a companion server component (`myhomelib` image):
-- Port `16000:80`
-- Volumes: `homelib` for SQLite DB, a bind-mount for the library index file
-- Integrates with a Traefik reverse proxy via the `traefik_default` network
+Minimum VPS requirements: ~512 MB RAM (no large in-memory book list), adequate disk for the downloads directory.
 
 ## Coding Conventions
 
-- **Nullable reference types** enabled (`<Nullable>enable</Nullable>`) — always annotate nullability.
+- **Nullable reference types** enabled — always annotate nullability.
 - **Implicit usings** enabled — avoid redundant `using` directives.
 - Solution file uses the modern **SLNX** format (`MyHomeLibServer.slnx`). Do not regenerate a legacy `.sln` file.
-- DI is constructor-injected; services are registered as `Singleton` in `TorrentsServiceExtension.AddTorrents()`.
-- Commands inherit `AsyncCommand<TSettings>` from `Spectre.Console.Cli`.
-- Use `AnsiConsole` for all console output (not `Console.Write*`).
-- New commands must be registered in `Program.cs` via `app.Configure(...)`.
-- Prefer `IAsyncEnumerable` for streaming data (e.g. search results, book parsing).
+- DI is constructor-injected. `LibraryService` is registered as both `AddSingleton` and `AddHostedService` so it can be injected and lifecycle-managed.
+- Prefer `IAsyncEnumerable` for streaming data (INPX parsing, search results).
+- No MonoTorrent, no Parquet.Net, no Spectre.Console, no CLI commands — all removed.
+- `HttpClient` is registered as `new HttpClient()` directly (not via `IHttpClientFactory`) to avoid socket error 10049 (WSAEADDRNOTAVAIL) on Windows.
+

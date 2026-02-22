@@ -2,18 +2,20 @@ using System.Collections.Concurrent;
 using System.Threading.Channels;
 using DuckDB.NET.Data;
 using Microsoft.Extensions.Options;
-using MonoTorrent;
 using MyHomeLib.Library;
 using MyHomeListServer.Torrent;
 
 namespace MyHomeLib.Web;
 
-public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
+public sealed class DownloadQueueService(
+    DownloadManager downloadManager,
+    IOptions<LibraryConfig> config,
+    ILogger<DownloadQueueService> logger) : BackgroundService, IAsyncDisposable
 {
-    private readonly DownloadManager _downloadManager;
-    private readonly LibraryConfig _config;
-    private readonly ILogger<DownloadQueueService> _logger;
-    private readonly DuckDBConnection _db;
+    private readonly DownloadManager _downloadManager = downloadManager;
+    private readonly LibraryConfig _config = config.Value;
+    private readonly ILogger<DownloadQueueService> _logger = logger;
+    private readonly DuckDBConnection _db = InitializeDatabase(config.Value);
     private readonly Channel<Guid> _channel = Channel.CreateUnbounded<Guid>();
     private readonly SemaphoreSlim _dbLock = new(1, 1);
     private readonly ConcurrentDictionary<Guid, TorrentStats> _activeStats = new();
@@ -27,31 +29,25 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
     /// <summary>Live stats for the library torrent itself (always running when torrent is enabled).</summary>
     public TorrentStats? LibraryStats { get; private set; }
 
-    public DownloadQueueService(
-        DownloadManager downloadManager,
-        IOptions<LibraryConfig> config,
-        ILogger<DownloadQueueService> logger)
-    {
-        _downloadManager = downloadManager;
-        _config = config.Value;
-        _logger = logger;
+    /// <summary>Number of jobs actively being downloaded right now.</summary>
+    public int ActiveDownloadCount => _jobCts.Count;
 
-        var dbPath = string.IsNullOrWhiteSpace(_config.QueueDbPath)
-            ? Path.Combine(_config.DownloadsDirectory, "queue.db")
-            : _config.QueueDbPath;
+    private static DuckDBConnection InitializeDatabase(LibraryConfig cfg)
+    {
+        var dbPath = string.IsNullOrWhiteSpace(cfg.QueueDbPath)
+            ? Path.Combine(cfg.DownloadsDirectory, "queue.db")
+            : cfg.QueueDbPath;
 
         var dbDir = Path.GetDirectoryName(Path.GetFullPath(dbPath));
         if (!string.IsNullOrEmpty(dbDir))
             Directory.CreateDirectory(dbDir);
 
-        _db = new DuckDBConnection($"DataSource={dbPath}");
-        _db.Open();
-        InitSchema();
-    }
-
-    private void InitSchema()
-    {
-        Exec("""
+        var db = new DuckDBConnection($"DataSource={dbPath}");
+        db.Open();
+        
+        // Initialize schema
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS download_queue (
                 id            VARCHAR PRIMARY KEY,
                 book_id       INTEGER,
@@ -67,7 +63,10 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
                 added_at      TIMESTAMP DEFAULT now(),
                 completed_at  TIMESTAMP
             )
-            """);
+            """;
+        cmd.ExecuteNonQuery();
+        
+        return db;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -80,22 +79,21 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
 
         Directory.CreateDirectory(_config.DownloadsDirectory);
 
-        // Start the library torrent proactively so DHT/trackers begin connecting immediately
-        var libraryLink = MagnetLink.Parse(_config.MagnetUri);
-        var libraryHash = libraryLink.InfoHashes.V1OrV2.ToHex();
-        _ = Task.Run(async () =>
-        {
-            try { await _downloadManager.StartLibraryAsync(libraryLink); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Failed to pre-start library torrent"); }
-        }, stoppingToken);
+        var libraryHash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
 
-        // Background sampler: keep LibraryStats updated every second
+        // Background sampler: refresh TorrServe status every 3 seconds
         _ = Task.Run(async () =>
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                LibraryStats = _downloadManager.GetStats(libraryHash);
-                try { await Task.Delay(1000, stoppingToken); } catch { break; }
+                try
+                {
+                    await _downloadManager.RefreshStatsAsync(libraryHash, stoppingToken);
+                    LibraryStats = _downloadManager.GetStats();
+                }
+                catch (OperationCanceledException) { break; }
+                catch { /* swallow transient errors */ }
+                try { await Task.Delay(3000, stoppingToken); } catch { break; }
             }
         }, stoppingToken);
 
@@ -212,11 +210,8 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
             var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
             if (job is null) return;
 
-            var link = MagnetLink.Parse(_config.MagnetUri);
-            var hash = link.InfoHashes.V1OrV2.ToHex();
-
-            var progress = new Progress<TorrentStats>(s => _activeStats[jobId] = s);
-            var request = new DownloadRequest(hash, job.Archive, job.FileName) { Link = link, Progress = progress };
+            var hash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
+            var request = new DownloadRequest(hash, job.Archive, job.FileName) { MagnetUri = _config.MagnetUri };
             var response = await _downloadManager.DownloadFile(request, jobCts.Token);
 
             var ext = Path.GetExtension(response!.Name.Length > 0 ? response.Name : job.FileName);

@@ -7,7 +7,7 @@ public static class ClassMapHelpers
     public static MemberMap<T, string[]> AsArray<T>(this MemberMap<T, string[]> map, int index)
     {
         return map.Index(index)
-            .Convert(row => row.Row
-                .GetField(index).Split(':', StringSplitOptions.RemoveEmptyEntries));
+            .Convert(row => (row.Row
+                .GetField(index) ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries));
     }
 }

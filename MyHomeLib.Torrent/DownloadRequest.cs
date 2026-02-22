@@ -1,11 +1,8 @@
 namespace MyHomeListServer.Torrent;
 
-public record DownloadRequest(string Library, string Archive, string? Book = null) : TorrentRequest(Library)
+public record DownloadRequest(string Library, string Archive, string? Book = null)
+    : TorrentRequest(Library)
 {
-    public override string ToString()
-    {
-        return $"DownloadRequest [{Library}] {Name}";
-    }
-
     public string Name => $"{Archive} => {Book}";
+    public override string ToString() => $"DownloadRequest [{Library}] {Name}";
 }

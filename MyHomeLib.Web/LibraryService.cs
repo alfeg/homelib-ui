@@ -1,102 +1,154 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using MonoTorrent;
 using MyHomeLib.Library;
 using MyHomeListServer.Torrent;
 
 namespace MyHomeLib.Web;
 
-public class LibraryService : IAsyncDisposable
+public sealed class LibraryService(
+    IOptions<LibraryConfig> config,
+    IServiceProvider sp,
+    ILogger<LibraryService> logger) : BackgroundService, IAsyncDisposable
 {
-    public Task<IList<BookItem>> LoadTask { get; }
-    public Task<BookSearchIndex> IndexTask { get; }
+    private readonly LibraryConfig _config = config.Value;
+    private readonly IServiceProvider _sp = sp;
+    private readonly ILogger<LibraryService> _logger = logger;
+
+    private readonly TaskCompletionSource<BookSearchIndex> _indexTcs = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task<BookSearchIndex> IndexTask => _indexTcs.Task;
     public InpxLibrary Metadata { get; } = new();
-
-    /// <summary>Human-readable description of the current loading step.</summary>
     public string LoadStatus { get; private set; } = "Initialising…";
-
-    /// <summary>Live torrent stats when the INPX file itself is being downloaded.</summary>
     public TorrentStats? InpxStats { get; private set; }
 
-    public LibraryService(IOptions<LibraryConfig> config, IServiceProvider sp, ILogger<LibraryService> logger)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        LoadTask = LoadAsync(config.Value, sp, Metadata, logger);
-        IndexTask = BuildIndexAsync(logger);
+        try
+        {
+            if (_config.TorrentEnabled)
+            {
+                var dm = _sp.GetRequiredService<DownloadManager>();
+
+                // Wait until TorrServe is reachable before proceeding
+                await WaitForTorrServeAsync(dm, stoppingToken);
+
+                try { await dm.StartLibraryAsync(_config.MagnetUri, stoppingToken); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to pre-register library torrent"); }
+            }
+
+            var index = await BuildIndexAsync(stoppingToken);
+            _indexTcs.TrySetResult(index);
+        }
+        catch (OperationCanceledException)
+        {
+            _indexTcs.TrySetCanceled();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Library initialisation failed");
+            _indexTcs.TrySetException(ex);
+        }
     }
 
-    private async Task<IList<BookItem>> LoadAsync(
-        LibraryConfig config, IServiceProvider sp, InpxLibrary metadata, ILogger logger)
+    private async Task WaitForTorrServeAsync(DownloadManager dm, CancellationToken ct)
     {
-        var path = await ResolveInpxPathAsync(config, sp, logger);
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await dm.RefreshStatsAsync("", ct);
+                if (dm.GetStats()?.IsConnected == true)
+                {
+                    _logger.LogInformation("TorrServe is reachable");
+                    return;
+                }
+            }
+            catch { /* not ready yet */ }
+
+            LoadStatus = "Waiting for TorrServe…";
+            _logger.LogDebug("TorrServe not reachable, retrying in 3 s…");
+            await Task.Delay(3000, ct);
+        }
+    }
+
+    private async Task<BookSearchIndex> BuildIndexAsync(CancellationToken ct)
+    {
+        var inpxPath = await ResolveInpxPathAsync(ct);
+
+        var dbPath = !string.IsNullOrWhiteSpace(_config.LibraryDbPath)
+            ? _config.LibraryDbPath
+            : Path.ChangeExtension(inpxPath, ".db");
+
         LoadStatus = "Parsing library…";
         var reader = new InpxReader();
-        var books = new List<BookItem>();
-        await foreach (var book in reader.ReadLibraryAsync(path, metadata))
-            books.Add(book);
-        LoadStatus = $"Loaded {books.Count:N0} books.";
-        return books;
+        var books  = reader.ReadLibraryAsync(inpxPath, Metadata);
+
+        return await BookSearchIndex.BuildAsync(
+            books,
+            dbPath,
+            status => LoadStatus = status,
+            _logger);
     }
 
-    private async Task<string> ResolveInpxPathAsync(
-        LibraryConfig config, IServiceProvider sp, ILogger logger)
+    private async Task<string> ResolveInpxPathAsync(CancellationToken ct)
     {
         // 1. Explicit path
-        if (!string.IsNullOrWhiteSpace(config.InpxPath))
+        if (!string.IsNullOrWhiteSpace(_config.InpxPath))
         {
             LoadStatus = "Loading INPX from configured path…";
-            logger.LogInformation("Using configured InpxPath: {Path}", config.InpxPath);
-            return config.InpxPath;
+            _logger.LogInformation("Using configured InpxPath: {Path}", _config.InpxPath);
+            return _config.InpxPath;
         }
 
-        // 2. Already on disk in DownloadsDirectory
-        if (!string.IsNullOrWhiteSpace(config.DownloadsDirectory)
-            && Directory.Exists(config.DownloadsDirectory))
+        // 2. Already on disk
+        if (!string.IsNullOrWhiteSpace(_config.DownloadsDirectory)
+            && Directory.Exists(_config.DownloadsDirectory))
         {
-            var existing = Directory.GetFiles(config.DownloadsDirectory, "*.inpx").FirstOrDefault();
+            var existing = Directory.GetFiles(_config.DownloadsDirectory, "*.inpx").FirstOrDefault();
             if (existing is not null)
             {
                 LoadStatus = $"Loading INPX from {Path.GetFileName(existing)}…";
-                logger.LogInformation("Found existing INPX at {Path}", existing);
+                _logger.LogInformation("Found existing INPX at {Path}", existing);
                 return existing;
             }
         }
 
         // 3. Download from torrent
-        if (!config.TorrentEnabled)
+        if (!_config.TorrentEnabled)
             throw new InvalidOperationException(
-                "No INPX file found. Configure Library:InpxPath, or set Library:MagnetUri " +
-                "and Library:DownloadsDirectory so the INPX can be downloaded automatically.");
+                "No INPX file found. Set Library:InpxPath, or configure Library:MagnetUri " +
+                "and Library:DownloadsDirectory for automatic download.");
 
         LoadStatus = "Searching torrent for INPX file…";
-        logger.LogInformation("No INPX found locally — downloading from torrent…");
-        var dm = sp.GetRequiredService<DownloadManager>();
-        var link = MagnetLink.Parse(config.MagnetUri);
-        var hash = link.InfoHashes.V1OrV2.ToHex();
+        _logger.LogInformation("No INPX found locally — downloading via TorrServe…");
 
-        var searchResp = await dm.SearchFiles(new SearchRequest(hash, "*.inpx") { Link = link });
+        var dm   = _sp.GetRequiredService<DownloadManager>();
+        var hash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
+
+        var searchResp = await dm.SearchFiles(
+            new SearchRequest(hash, "*.inpx") { MagnetUri = _config.MagnetUri }, ct);
         var inpxEntry = searchResp?.Names.FirstOrDefault()
             ?? throw new InvalidOperationException("No *.inpx file found in the torrent.");
 
-        LoadStatus = $"Downloading {Path.GetFileName(inpxEntry)} from torrent…";
-        logger.LogInformation("Downloading INPX {File} from torrent…", inpxEntry);
+        LoadStatus = $"Downloading {Path.GetFileName(inpxEntry)}…";
+        _logger.LogInformation("Downloading INPX {File}…", inpxEntry);
 
         var progress = new Progress<TorrentStats>(s => InpxStats = s);
-        var dlResp = await dm.DownloadFile(
-            new DownloadRequest(hash, inpxEntry, null) { Link = link, Progress = progress });
+        var dlResp   = await dm.DownloadFile(
+            new DownloadRequest(hash, inpxEntry, null)
+            {
+                MagnetUri = _config.MagnetUri,
+                Progress  = progress
+            }, ct);
         InpxStats = null;
 
-        Directory.CreateDirectory(config.DownloadsDirectory);
-        var savePath = Path.Combine(config.DownloadsDirectory, Path.GetFileName(inpxEntry));
-        await File.WriteAllBytesAsync(savePath, dlResp!.Data);
-        logger.LogInformation("INPX saved to {Path}", savePath);
+        Directory.CreateDirectory(_config.DownloadsDirectory);
+        var savePath = Path.Combine(_config.DownloadsDirectory, Path.GetFileName(inpxEntry));
+        await File.WriteAllBytesAsync(savePath, dlResp!.Data, ct);
+        _logger.LogInformation("INPX saved to {Path}", savePath);
 
         return savePath;
-    }
-
-    private async Task<BookSearchIndex> BuildIndexAsync(ILogger logger)
-    {
-        var books = await LoadTask;
-        return await BookSearchIndex.BuildAsync(books, logger);
     }
 
     public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)
@@ -105,7 +157,7 @@ public class LibraryService : IAsyncDisposable
         return await index.SearchAsync(query, max);
     }
 
-    public async ValueTask DisposeAsync()
+    async ValueTask IAsyncDisposable.DisposeAsync()
     {
         if (IndexTask.IsCompletedSuccessfully)
             await IndexTask.Result.DisposeAsync();
