@@ -8,33 +8,39 @@ namespace MyHomeLib.Web;
 
 public class LibraryService : IAsyncDisposable
 {
-    public Task<IList<BookItem>> LoadTask { get; }
     public Task<BookSearchIndex> IndexTask { get; }
     public InpxLibrary Metadata { get; } = new();
 
     /// <summary>Human-readable description of the current loading step.</summary>
     public string LoadStatus { get; private set; } = "Initialising…";
 
-    /// <summary>Live torrent stats when the INPX file itself is being downloaded.</summary>
+    /// <summary>Live torrent stats while the INPX file is being downloaded.</summary>
     public TorrentStats? InpxStats { get; private set; }
 
     public LibraryService(IOptions<LibraryConfig> config, IServiceProvider sp, ILogger<LibraryService> logger)
     {
-        LoadTask = LoadAsync(config.Value, sp, Metadata, logger);
-        IndexTask = BuildIndexAsync(logger);
+        IndexTask = BuildIndexAsync(config.Value, sp, Metadata, logger);
     }
 
-    private async Task<IList<BookItem>> LoadAsync(
+    private async Task<BookSearchIndex> BuildIndexAsync(
         LibraryConfig config, IServiceProvider sp, InpxLibrary metadata, ILogger logger)
     {
-        var path = await ResolveInpxPathAsync(config, sp, logger);
+        var inpxPath = await ResolveInpxPathAsync(config, sp, logger);
+
+        // Derive DB path: explicit config > sibling of INPX file
+        var dbPath = !string.IsNullOrWhiteSpace(config.LibraryDbPath)
+            ? config.LibraryDbPath
+            : Path.ChangeExtension(inpxPath, ".db");
+
         LoadStatus = "Parsing library…";
         var reader = new InpxReader();
-        var books = new List<BookItem>();
-        await foreach (var book in reader.ReadLibraryAsync(path, metadata))
-            books.Add(book);
-        LoadStatus = $"Loaded {books.Count:N0} books.";
-        return books;
+        var books = reader.ReadLibraryAsync(inpxPath, metadata);
+
+        return await BookSearchIndex.BuildAsync(
+            books,
+            dbPath,
+            status => LoadStatus = status,
+            logger);
     }
 
     private async Task<string> ResolveInpxPathAsync(
@@ -91,12 +97,6 @@ public class LibraryService : IAsyncDisposable
         logger.LogInformation("INPX saved to {Path}", savePath);
 
         return savePath;
-    }
-
-    private async Task<BookSearchIndex> BuildIndexAsync(ILogger logger)
-    {
-        var books = await LoadTask;
-        return await BookSearchIndex.BuildAsync(books, logger);
     }
 
     public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)

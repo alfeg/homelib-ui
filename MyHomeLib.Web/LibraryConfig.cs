@@ -24,6 +24,12 @@ public class LibraryConfig
     /// </summary>
     public string QueueDbPath { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Path to the DuckDB book index file.
+    /// Defaults to a <c>.db</c> file alongside the INPX file when left empty.
+    /// </summary>
+    public string LibraryDbPath { get; set; } = string.Empty;
+
     public bool TorrentEnabled =>
         !string.IsNullOrWhiteSpace(MagnetUri) && !string.IsNullOrWhiteSpace(DownloadsDirectory);
 }

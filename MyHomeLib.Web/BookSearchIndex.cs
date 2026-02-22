@@ -7,46 +7,91 @@ namespace MyHomeLib.Web;
 public sealed class BookSearchIndex : IAsyncDisposable
 {
     private readonly DuckDBConnection _conn;
-    private readonly IList<BookItem> _books; // index = DuckDB row id
 
-    private BookSearchIndex(DuckDBConnection conn, IList<BookItem> books)
-    {
-        _conn = conn;
-        _books = books;
-    }
+    private BookSearchIndex(DuckDBConnection conn) => _conn = conn;
 
-    public static async Task<BookSearchIndex> BuildAsync(IList<BookItem> books, ILogger? logger = null)
+    /// <summary>
+    /// Opens or builds a file-backed DuckDB index.
+    /// If the database file already contains books the INPX stream is not consumed at all.
+    /// </summary>
+    public static async Task<BookSearchIndex> BuildAsync(
+        IAsyncEnumerable<BookItem> books,
+        string dbPath,
+        Action<string>? statusCallback = null,
+        ILogger? logger = null)
     {
-        var conn = new DuckDBConnection("DataSource=:memory:");
+        var conn = new DuckDBConnection($"DataSource={dbPath}");
         await conn.OpenAsync();
 
+        // Reuse existing index if it already has books (e.g. on restart)
+        long existing = 0;
+        try
+        {
+            using var chk = conn.CreateCommand();
+            chk.CommandText = "SELECT COUNT(*) FROM books";
+            existing = (long)(await chk.ExecuteScalarAsync() ?? 0L);
+        }
+        catch { /* table not created yet */ }
+
+        if (existing > 0)
+        {
+            logger?.LogInformation("Reusing existing DuckDB index ({Count} books)", existing);
+            statusCallback?.Invoke($"Loaded {existing:N0} books from existing index.");
+            return new BookSearchIndex(conn);
+        }
+
+        await ExecAsync(conn, "DROP TABLE IF EXISTS books");
         await ExecAsync(conn, """
             CREATE TABLE books (
-                id       INTEGER,
-                title    VARCHAR NOT NULL,
-                authors  VARCHAR NOT NULL,
-                series   VARCHAR NOT NULL,
-                keywords VARCHAR NOT NULL
+                id         INTEGER,
+                authors    VARCHAR NOT NULL,
+                genre      VARCHAR NOT NULL,
+                title      VARCHAR NOT NULL,
+                series     VARCHAR NOT NULL,
+                series_no  VARCHAR NOT NULL,
+                archive    VARCHAR NOT NULL,
+                file       VARCHAR NOT NULL,
+                ext        VARCHAR NOT NULL,
+                date       TIMESTAMP,
+                size       BIGINT,
+                lang       VARCHAR NOT NULL,
+                deleted    BOOLEAN,
+                lib_rate   VARCHAR NOT NULL,
+                keywords   VARCHAR NOT NULL
             )
             """);
 
+        long count = 0;
         using (var appender = conn.CreateAppender("books"))
         {
-            for (int i = 0; i < books.Count; i++)
+            await foreach (var book in books)
             {
-                var book = books[i];
                 var row = appender.CreateRow();
-                row.AppendValue(i);
-                row.AppendValue(book.Title ?? "");
-                row.AppendValue(string.Join(", ", book.ParsedAuthors()));
-                row.AppendValue(book.Series ?? "");
-                row.AppendValue(book.Keywords ?? "");
+                row.AppendValue(book.Id);
+                row.AppendValue(book.Authors    ?? "");
+                row.AppendValue(book.Genre      ?? "");
+                row.AppendValue(book.Title      ?? "");
+                row.AppendValue(book.Series     ?? "");
+                row.AppendValue(book.SeriesNo   ?? "");
+                row.AppendValue(book.ArchiveFile ?? "");
+                row.AppendValue(book.File       ?? "");
+                row.AppendValue(book.Ext        ?? "");
+                row.AppendValue(book.Date);
+                row.AppendValue(book.Size);
+                row.AppendValue(book.Lang       ?? "");
+                row.AppendValue(book.Deleted);
+                row.AppendValue(book.LibRate    ?? "");
+                row.AppendValue(book.Keywords   ?? "");
                 row.EndRow();
+                count++;
+                if (count % 50_000 == 0)
+                    statusCallback?.Invoke($"Indexing… {count:N0} books");
             }
         }
 
+        statusCallback?.Invoke("Building full-text search index…");
+
         // Russian Snowball stemmer; custom ignore keeps Cyrillic letters
-        // (default '(\\.|[^a-z])+' would strip all Cyrillic)
         await ExecAsync(conn, @"
             PRAGMA create_fts_index(
                 'books', 'id',
@@ -58,9 +103,9 @@ public sealed class BookSearchIndex : IAsyncDisposable
                 strip_accents = 1
             )");
 
-        logger?.LogInformation("FTS index built for {Count} books", books.Count);
-
-        return new BookSearchIndex(conn, books);
+        logger?.LogInformation("FTS index built for {Count} books", count);
+        statusCallback?.Invoke($"Loaded {count:N0} books.");
+        return new BookSearchIndex(conn);
     }
 
     public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)
@@ -69,30 +114,45 @@ public sealed class BookSearchIndex : IAsyncDisposable
             return ([], 0);
 
         var sql = $"""
-            SELECT id
+            SELECT id, authors, genre, title, series, series_no, archive, file, ext,
+                   date, size, lang, deleted, lib_rate, keywords
             FROM (
-                SELECT id, fts_main_books.match_bm25(id, {Literal(query)}) AS score
+                SELECT *, fts_main_books.match_bm25(id, {Literal(query)}) AS score
                 FROM books
             )
             WHERE score IS NOT NULL
             ORDER BY score DESC
             """;
 
-        var ids = new List<int>();
+        var all = new List<BookItem>();
         using (var cmd = _conn.CreateCommand())
         {
             cmd.CommandText = sql;
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
-                ids.Add(reader.GetInt32(0));
+            {
+                all.Add(new BookItem
+                {
+                    Id          = reader.GetInt32(0),
+                    Authors     = reader.IsDBNull(1)  ? "" : reader.GetString(1),
+                    Genre       = reader.IsDBNull(2)  ? "" : reader.GetString(2),
+                    Title       = reader.IsDBNull(3)  ? "" : reader.GetString(3),
+                    Series      = reader.IsDBNull(4)  ? "" : reader.GetString(4),
+                    SeriesNo    = reader.IsDBNull(5)  ? "" : reader.GetString(5),
+                    ArchiveFile = reader.IsDBNull(6)  ? "" : reader.GetString(6),
+                    File        = reader.IsDBNull(7)  ? "" : reader.GetString(7),
+                    Ext         = reader.IsDBNull(8)  ? "" : reader.GetString(8),
+                    Date        = reader.IsDBNull(9)  ? default : reader.GetDateTime(9),
+                    Size        = reader.IsDBNull(10) ? 0   : reader.GetInt64(10),
+                    Lang        = reader.IsDBNull(11) ? "" : reader.GetString(11),
+                    Deleted     = !reader.IsDBNull(12) && reader.GetBoolean(12),
+                    LibRate     = reader.IsDBNull(13) ? "" : reader.GetString(13),
+                    Keywords    = reader.IsDBNull(14) ? "" : reader.GetString(14),
+                });
+            }
         }
 
-        var page = ids.Take(max)
-            .Where(i => i >= 0 && i < _books.Count)
-            .Select(i => _books[i])
-            .ToList();
-
-        return (page, ids.Count);
+        return (all.Take(max).ToList(), all.Count);
     }
 
     private static string Literal(string s) => $"'{s.Replace("'", "''")}'";

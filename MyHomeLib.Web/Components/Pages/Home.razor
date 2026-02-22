@@ -13,7 +13,7 @@
 {
     <div class="alert alert-danger">@errorMessage</div>
 }
-else if (!libraryReady)
+else if (!indexReady)
 {
     <div class="alert alert-info">
         <div class="d-flex align-items-center gap-2 mb-1">
@@ -43,13 +43,6 @@ else if (!libraryReady)
                 }
             </div>
         }
-    </div>
-}
-else if (!indexReady)
-{
-    <div class="alert alert-info d-flex align-items-center gap-2">
-        <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-        <span>Building search index…</span>
     </div>
 }
 
@@ -142,18 +135,14 @@ else if (!indexReady)
     PeriodicTimer? _loadTimer;
 
     (IReadOnlyList<BookItem> Page, int Total)? results;
-    bool libraryReady;
     bool indexReady;
     string? errorMessage;
 
     protected override void OnInitialized()
     {
-        libraryReady = Library.LoadTask.IsCompletedSuccessfully;
         indexReady   = Library.IndexTask.IsCompletedSuccessfully;
 
-        if (Library.LoadTask.IsFaulted)
-            errorMessage = Library.LoadTask.Exception?.GetBaseException().Message;
-        else if (Library.IndexTask.IsFaulted)
+        if (Library.IndexTask.IsFaulted)
             errorMessage = Library.IndexTask.Exception?.GetBaseException().Message;
         else if (!indexReady)
             _ = WatchProgress();
@@ -167,10 +156,6 @@ else if (!indexReady)
         _loadTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         try
         {
-            await Library.LoadTask;
-            libraryReady = true;
-            await InvokeAsync(StateHasChanged);
-
             await Library.IndexTask;
             indexReady = true;
         }
