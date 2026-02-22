@@ -17,7 +17,7 @@ public class BookItemMap : ClassMap<BookItem>
         Map(m => m.Deleted).Convert(row => row.Row.GetField(8) == "1").Index(8);
         Map(m => m.Ext).Index(9);
         Map(m => m.Date)
-            .Convert(row => DateOnly.ParseExact(row.Row.GetField(10), "yyyy-MM-dd").ToDateTime(TimeOnly.MinValue));
+            .Convert(row => DateOnly.ParseExact(row.Row.GetField(10) ?? "0001-01-01", "yyyy-MM-dd").ToDateTime(TimeOnly.MinValue));
         Map(m => m.Lang).Index(11);
         Map(m => m.LibRate).Index(12).Default(string.Empty);
         Map(m => m.Keywords).Index(13);        

@@ -5,7 +5,7 @@ public class BookItem : IBookItem
     public int Id { get; set; }
 
     /// <summary>Raw authors string in INPX format: Surname,FirstName,MiddleName:AnotherAuthor</summary>
-    public string Authors { get; set; }
+    public string? Authors { get; set; }
 
     /// <summary>
     /// Parses <see cref="Authors"/> into individual display names ("FirstName MiddleName Surname").
@@ -33,26 +33,26 @@ public class BookItem : IBookItem
             .ToList();
     }
 
-    public string Genre { get; set; }
+    public string? Genre { get; set; }
 
-    public string Title { get; set; }
+    public string? Title { get; set; }
 
-    public string Series { get; set; }
+    public string? Series { get; set; }
 
-    public string SeriesNo { get; set; }    
+    public string? SeriesNo { get; set; }    
 
-    public string ArchiveFile { get; set; }
-    public string File { get; set; }
+    public string? ArchiveFile { get; set; }
+    public string? File { get; set; }
     
-    public string Ext { get; set; }
+    public string? Ext { get; set; }
     public DateTime Date { get; set; }
     public long Size { get; set; }
 
-    public string Lang { get; set; }
+    public string? Lang { get; set; }
 
     public bool Deleted { get; set; }
         
-    public string LibRate { get; set; }
+    public string? LibRate { get; set; }
 
-    public string Keywords { get; set; }
+    public string? Keywords { get; set; }
 }
