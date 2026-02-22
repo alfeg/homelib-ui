@@ -11,8 +11,6 @@ public sealed class LibraryService(
     ILogger<LibraryService> logger) : BackgroundService, IAsyncDisposable
 {
     private readonly LibraryConfig _config = config.Value;
-    private readonly IServiceProvider _sp = sp;
-    private readonly ILogger<LibraryService> _logger = logger;
 
     private readonly TaskCompletionSource<BookSearchIndex> _indexTcs = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
@@ -28,13 +26,13 @@ public sealed class LibraryService(
         {
             if (_config.TorrentEnabled)
             {
-                var dm = _sp.GetRequiredService<DownloadManager>();
+                var dm = sp.GetRequiredService<DownloadManager>();
 
                 // Wait until TorrServe is reachable before proceeding
                 await WaitForTorrServeAsync(dm, stoppingToken);
 
                 try { await dm.StartLibraryAsync(_config.MagnetUri, stoppingToken); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to pre-register library torrent"); }
+                catch (Exception ex) { logger.LogWarning(ex, "Failed to pre-register library torrent"); }
             }
 
             var index = await BuildIndexAsync(stoppingToken);
@@ -46,7 +44,7 @@ public sealed class LibraryService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Library initialisation failed");
+            logger.LogError(ex, "Library initialisation failed");
             _indexTcs.TrySetException(ex);
         }
     }
@@ -60,14 +58,14 @@ public sealed class LibraryService(
                 await dm.RefreshStatsAsync("", ct);
                 if (dm.GetStats()?.IsConnected == true)
                 {
-                    _logger.LogInformation("TorrServe is reachable");
+                    logger.LogInformation("TorrServe is reachable");
                     return;
                 }
             }
             catch { /* not ready yet */ }
 
             LoadStatus = "Waiting for TorrServe…";
-            _logger.LogDebug("TorrServe not reachable, retrying in 3 s…");
+            logger.LogDebug("TorrServe not reachable, retrying in 3 s…");
             await Task.Delay(3000, ct);
         }
     }
@@ -88,7 +86,7 @@ public sealed class LibraryService(
             books,
             dbPath,
             status => LoadStatus = status,
-            _logger);
+            logger);
     }
 
     private async Task<string> ResolveInpxPathAsync(CancellationToken ct)
@@ -97,7 +95,7 @@ public sealed class LibraryService(
         if (!string.IsNullOrWhiteSpace(_config.InpxPath))
         {
             LoadStatus = "Loading INPX from configured path…";
-            _logger.LogInformation("Using configured InpxPath: {Path}", _config.InpxPath);
+            logger.LogInformation("Using configured InpxPath: {Path}", _config.InpxPath);
             return _config.InpxPath;
         }
 
@@ -109,7 +107,7 @@ public sealed class LibraryService(
             if (existing is not null)
             {
                 LoadStatus = $"Loading INPX from {Path.GetFileName(existing)}…";
-                _logger.LogInformation("Found existing INPX at {Path}", existing);
+                logger.LogInformation("Found existing INPX at {Path}", existing);
                 return existing;
             }
         }
@@ -121,9 +119,9 @@ public sealed class LibraryService(
                 "and Library:DownloadsDirectory for automatic download.");
 
         LoadStatus = "Searching torrent for INPX file…";
-        _logger.LogInformation("No INPX found locally — downloading via TorrServe…");
+        logger.LogInformation("No INPX found locally — downloading via TorrServe…");
 
-        var dm   = _sp.GetRequiredService<DownloadManager>();
+        var dm   = sp.GetRequiredService<DownloadManager>();
         var hash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
 
         var searchResp = await dm.SearchFiles(
@@ -132,7 +130,7 @@ public sealed class LibraryService(
             ?? throw new InvalidOperationException("No *.inpx file found in the torrent.");
 
         LoadStatus = $"Downloading {Path.GetFileName(inpxEntry)}…";
-        _logger.LogInformation("Downloading INPX {File}…", inpxEntry);
+        logger.LogInformation("Downloading INPX {File}…", inpxEntry);
 
         var progress = new Progress<TorrentStats>(s => InpxStats = s);
         var dlResp   = await dm.DownloadFile(
@@ -146,7 +144,7 @@ public sealed class LibraryService(
         Directory.CreateDirectory(_config.DownloadsDirectory);
         var savePath = Path.Combine(_config.DownloadsDirectory, Path.GetFileName(inpxEntry));
         await File.WriteAllBytesAsync(savePath, dlResp!.Data, ct);
-        _logger.LogInformation("INPX saved to {Path}", savePath);
+        logger.LogInformation("INPX saved to {Path}", savePath);
 
         return savePath;
     }

@@ -8,8 +8,6 @@ namespace MyHomeListServer.Torrent;
 /// </summary>
 public sealed class HttpRangeStream(HttpClient http, string url, long hintLength) : Stream
 {
-    private readonly HttpClient _http = http;
-    private readonly string _url = url;
     private long _position;
     private long _length = hintLength;
     private bool _lengthResolved;
@@ -42,8 +40,8 @@ public sealed class HttpRangeStream(HttpClient http, string url, long hintLength
     {
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Head, _url);
-            using var resp = await _http.SendAsync(req);
+            using var req = new HttpRequestMessage(HttpMethod.Head, url);
+            using var resp = await http.SendAsync(req);
             if (resp.Content.Headers.ContentLength is > 0)
                 return resp.Content.Headers.ContentLength.Value;
         }
@@ -61,10 +59,10 @@ public sealed class HttpRangeStream(HttpClient http, string url, long hintLength
         var end = Math.Min(_position + count - 1, Length - 1);
         if (end < _position) return 0;
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, _url);
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(_position, end);
 
-        using var resp = await _http.SendAsync(req,
+        using var resp = await http.SendAsync(req,
             HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         resp.EnsureSuccessStatusCode();
 

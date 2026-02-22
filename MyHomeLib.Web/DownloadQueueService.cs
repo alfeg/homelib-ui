@@ -12,9 +12,7 @@ public sealed class DownloadQueueService(
     IOptions<LibraryConfig> config,
     ILogger<DownloadQueueService> logger) : BackgroundService, IAsyncDisposable
 {
-    private readonly DownloadManager _downloadManager = downloadManager;
     private readonly LibraryConfig _config = config.Value;
-    private readonly ILogger<DownloadQueueService> _logger = logger;
     private readonly DuckDBConnection _db = InitializeDatabase(config.Value);
     private readonly Channel<Guid> _channel = Channel.CreateUnbounded<Guid>();
     private readonly SemaphoreSlim _dbLock = new(1, 1);
@@ -73,7 +71,7 @@ public sealed class DownloadQueueService(
     {
         if (!IsEnabled)
         {
-            _logger.LogWarning("Torrent downloads disabled: Library:MagnetUri or Library:DownloadsDirectory not set.");
+            logger.LogWarning("Torrent downloads disabled: Library:MagnetUri or Library:DownloadsDirectory not set.");
             return;
         }
 
@@ -88,8 +86,8 @@ public sealed class DownloadQueueService(
             {
                 try
                 {
-                    await _downloadManager.RefreshStatsAsync(libraryHash, stoppingToken);
-                    LibraryStats = _downloadManager.GetStats();
+                    await downloadManager.RefreshStatsAsync(libraryHash, stoppingToken);
+                    LibraryStats = downloadManager.GetStats();
                 }
                 catch (OperationCanceledException) { break; }
                 catch { /* swallow transient errors */ }
@@ -117,7 +115,7 @@ public sealed class DownloadQueueService(
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unhandled error processing job {JobId}", jobId);
+                logger.LogError(ex, "Unhandled error processing job {JobId}", jobId);
             }
         }
     }
@@ -203,7 +201,7 @@ public sealed class DownloadQueueService(
         _jobCts[jobId] = jobCts;
 
         await DbExecAsync($"UPDATE download_queue SET status = 'Downloading' WHERE id = '{jobId}'");
-        _logger.LogInformation("Processing download job {JobId}", jobId);
+        logger.LogInformation("Processing download job {JobId}", jobId);
 
         try
         {
@@ -212,7 +210,7 @@ public sealed class DownloadQueueService(
 
             var hash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
             var request = new DownloadRequest(hash, job.Archive, job.FileName) { MagnetUri = _config.MagnetUri };
-            var response = await _downloadManager.DownloadFile(request, jobCts.Token);
+            var response = await downloadManager.DownloadFile(request, jobCts.Token);
 
             var ext = Path.GetExtension(response!.Name.Length > 0 ? response.Name : job.FileName);
             var friendlyBase = string.IsNullOrWhiteSpace(job.Authors)
@@ -239,12 +237,12 @@ public sealed class DownloadQueueService(
                 WHERE id = '{jobId}'
                 """);
 
-            _logger.LogInformation("Job {JobId} completed → {FilePath}", jobId, filePath);
+            logger.LogInformation("Job {JobId} completed → {FilePath}", jobId, filePath);
         }
         catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
         {
             // User-initiated abort — DeleteAsync already removed from DB; this is a no-op safety net
-            _logger.LogInformation("Job {JobId} aborted by user", jobId);
+            logger.LogInformation("Job {JobId} aborted by user", jobId);
             await DbExecAsync($"DELETE FROM download_queue WHERE id = '{jobId}'");
         }
         catch (OperationCanceledException)
@@ -255,7 +253,7 @@ public sealed class DownloadQueueService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Job {JobId} failed", jobId);
+            logger.LogError(ex, "Job {JobId} failed", jobId);
             await DbExecAsync($"""
                 UPDATE download_queue
                 SET status = 'Failed', error = '{Esc(ex.Message)}', completed_at = now()
