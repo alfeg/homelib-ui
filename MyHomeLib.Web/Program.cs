@@ -38,18 +38,13 @@ builder.Services.PostConfigure<AppConfig>(opts =>
 var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"] ?? "";
 if (!string.IsNullOrWhiteSpace(torrServeUrl))
 {
-    // TorrServe mode: no MonoTorrent ClientEngine needed
-    builder.Services.AddHttpClient("torrserve-api");
-    builder.Services.AddHttpClient("torrserve-stream");
-    builder.Services.AddSingleton<TorrServeClient>(sp =>
-    {
-        var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("torrserve-api");
-        return new TorrServeClient(http, torrServeUrl);
-    });
+    // TorrServe mode: use plain HttpClient instances (avoids SocketsHttpHandler config issues)
+    builder.Services.AddSingleton<TorrServeClient>(_ =>
+        new TorrServeClient(new HttpClient(), torrServeUrl));
     builder.Services.AddSingleton<DownloadManager>(sp =>
         new DownloadManager(
             sp.GetRequiredService<TorrServeClient>(),
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient("torrserve-stream"),
+            new HttpClient(),
             sp.GetRequiredService<IOptions<AppConfig>>(),
             sp.GetRequiredService<ILogger<DownloadManager>>()));
 }
