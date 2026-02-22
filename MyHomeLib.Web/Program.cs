@@ -83,4 +83,19 @@ app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, DownloadQueueService
 // Trigger startup tasks
 _ = app.Services.GetRequiredService<LibraryService>().IndexTask;
 
+// First Ctrl+C → graceful shutdown (default .NET behaviour, cancel handled by host).
+// Second Ctrl+C → force-kill immediately so unreachable trackers can't stall the process.
+var ctrlCCount = 0;
+Console.CancelKeyPress += (_, e) =>
+{
+    if (++ctrlCCount > 1)
+    {
+        Console.Error.WriteLine("Force exit.");
+        Environment.Exit(1);
+    }
+    // First press: let the host lifetime handle it gracefully.
+    e.Cancel = true;
+    app.Lifetime.StopApplication();
+};
+
 app.Run();
