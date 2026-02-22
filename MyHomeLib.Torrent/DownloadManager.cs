@@ -37,6 +37,27 @@ public class DownloadManager : IAsyncDisposable
         return response as DownloadResponse;
     }
 
+    /// <summary>Proactively starts the library torrent so DHT/peers begin connecting at app startup.</summary>
+    public async Task StartLibraryAsync(MagnetLink link) =>
+        await GetOrCreateManagerAsync(link.InfoHashes.V1OrV2.ToHex(), link);
+
+    /// <summary>Returns a snapshot of the current torrent stats for a given info-hash, or null if not running.</summary>
+    public TorrentStats? GetStats(string hash)
+    {
+        if (!_managers.TryGetValue(hash, out var manager))
+            return null;
+        return new TorrentStats(
+            manager.Monitor.DownloadRate,
+            manager.Monitor.UploadRate,
+            manager.Monitor.DataBytesReceived + manager.Monitor.ProtocolBytesReceived,
+            manager.Peers.Seeds,
+            manager.Peers.Leechs,
+            manager.PartialProgress,
+            manager.State.ToString(),
+            _clientEngine.Dht.NodeCount,
+            _clientEngine.Dht.State.ToString());
+    }
+
     /// <summary>
     /// Returns the persistent <see cref="TorrentManager"/> for this hash, creating and starting it
     /// if it doesn't already exist.  The manager is never stopped between requests.

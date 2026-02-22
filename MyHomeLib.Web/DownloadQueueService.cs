@@ -24,6 +24,9 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
     /// <summary>Live torrent stats for jobs currently downloading.</summary>
     public IReadOnlyDictionary<Guid, TorrentStats> ActiveStats => _activeStats;
 
+    /// <summary>Live stats for the library torrent itself (always running when torrent is enabled).</summary>
+    public TorrentStats? LibraryStats { get; private set; }
+
     public DownloadQueueService(
         DownloadManager downloadManager,
         IOptions<LibraryConfig> config,
@@ -76,6 +79,25 @@ public sealed class DownloadQueueService : BackgroundService, IAsyncDisposable
         }
 
         Directory.CreateDirectory(_config.DownloadsDirectory);
+
+        // Start the library torrent proactively so DHT/trackers begin connecting immediately
+        var libraryLink = MagnetLink.Parse(_config.MagnetUri);
+        var libraryHash = libraryLink.InfoHashes.V1OrV2.ToHex();
+        _ = Task.Run(async () =>
+        {
+            try { await _downloadManager.StartLibraryAsync(libraryLink); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Failed to pre-start library torrent"); }
+        }, stoppingToken);
+
+        // Background sampler: keep LibraryStats updated every second
+        _ = Task.Run(async () =>
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                LibraryStats = _downloadManager.GetStats(libraryHash);
+                try { await Task.Delay(1000, stoppingToken); } catch { break; }
+            }
+        }, stoppingToken);
 
         // Reset jobs that were interrupted mid-download back to Pending
         await DbExecAsync("UPDATE download_queue SET status = 'Pending' WHERE status = 'Downloading'");
