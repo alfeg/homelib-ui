@@ -2,7 +2,6 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject DownloadQueueService Queue
 @implements IDisposable
-@using Humanizer
 
 <PageTitle>Downloads — MyHomeLib</PageTitle>
 
@@ -28,7 +27,7 @@ else
                     <th>Title</th>
                     <th>Authors</th>
                     <th>File</th>
-                    <th style="min-width:220px">Status</th>
+                    <th>Status</th>
                     <th>Added</th>
                     <th></th>
                 </tr>
@@ -36,7 +35,6 @@ else
             <tbody>
                 @foreach (var job in jobs)
                 {
-                    var stats = Queue.ActiveStats.GetValueOrDefault(job.Id);
                     <tr>
                         <td>@job.Title</td>
                         <td class="text-muted small">@job.Authors</td>
@@ -48,39 +46,10 @@ else
                                     <span class="badge bg-secondary">Pending</span>
                                     break;
                                 case DownloadStatus.Downloading:
-                                    <div>
-                                        <span class="badge bg-primary mb-1">
-                                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                                            @(stats?.State ?? "Downloading")
-                                        </span>
-                                        @if (stats is not null)
-                                        {
-                                            <div class="mt-1">
-                                                @if (stats.State == "Metadata")
-                                                {
-                                                    <div class="text-muted" style="font-size:0.75rem">
-                                                        Fetching torrent metadata via DHT…
-                                                        <span class="ms-2" title="DHT nodes">🌐 @stats.DhtNodes nodes (@stats.DhtState)</span>
-                                                        <span class="ms-2" title="Seeds / Peers">👤 @stats.Seeds seeds / @stats.Peers peers</span>
-                                                    </div>
-                                                }
-                                                else
-                                                {
-                                                    <div class="progress mb-1" style="height:6px" title="@stats.PartialProgress.ToString("0.0")%">
-                                                        <div class="progress-bar" role="progressbar"
-                                                             style="width:@stats.PartialProgress.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
-                                                    </div>
-                                                    <div class="d-flex gap-2 text-muted" style="font-size:0.75rem">
-                                                        <span title="Download speed">⬇ @FormatRate(stats.DownloadRateBytesPerSec)</span>
-                                                        <span title="Upload speed">⬆ @FormatRate(stats.UploadRateBytesPerSec)</span>
-                                                        <span title="Seeds / Peers">🌱 @stats.Seeds / @stats.Peers</span>
-                                                        <span title="Bytes received">@stats.BytesReceived.Bytes().Humanize("#.#")</span>
-                                                        <span title="DHT nodes">🌐 @stats.DhtNodes (@stats.DhtState)</span>
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                    </div>
+                                    <span class="badge bg-primary">
+                                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                        Downloading
+                                    </span>
                                     break;
                                 case DownloadStatus.Ready:
                                     <span class="badge bg-success">Ready</span>
@@ -154,9 +123,6 @@ else
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         _ = PollAsync();
     }
-
-    static string FormatRate(double bytesPerSec) =>
-        bytesPerSec < 1 ? "0 B/s" : $"{((long)bytesPerSec).Bytes().Humanize("#.#")}/s";
 
     public void Dispose() => _timer?.Dispose();
 }
