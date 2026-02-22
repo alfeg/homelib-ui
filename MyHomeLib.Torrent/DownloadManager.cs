@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using Fb2.Document;
 using Humanizer;
@@ -8,11 +9,14 @@ using MonoTorrent.Client;
 
 namespace MyHomeListServer.Torrent;
 
-public class DownloadManager
+public class DownloadManager : IAsyncDisposable
 {
     private readonly ClientEngine _clientEngine;
     private readonly AppConfig _appConfig;
     private readonly ILogger<DownloadManager> _logger;
+
+    /// <summary>Persistent torrent managers keyed by info-hash hex — started once, kept running.</summary>
+    private readonly ConcurrentDictionary<string, TorrentManager> _managers = new();
 
     public DownloadManager(ClientEngine clientEngine, IOptions<AppConfig> config, ILogger<DownloadManager> logger)
     {
@@ -33,24 +37,54 @@ public class DownloadManager
         return response as DownloadResponse;
     }
 
+    /// <summary>
+    /// Returns the persistent <see cref="TorrentManager"/> for this hash, creating and starting it
+    /// if it doesn't already exist.  The manager is never stopped between requests.
+    /// </summary>
+    private async Task<TorrentManager> GetOrCreateManagerAsync(string hash, MagnetLink link)
+    {
+        if (_managers.TryGetValue(hash, out var existing))
+        {
+            // Restart only if the engine stopped/errored it
+            if (existing.State is TorrentState.Stopped or TorrentState.Error)
+            {
+                _logger.LogInformation("[{Hash}] Restarting stopped/errored manager", hash);
+                await existing.StartAsync();
+            }
+            return existing;
+        }
+
+        // Reuse a manager already registered with the engine (e.g. resumed from fast-resume)
+        var manager = _clientEngine.Torrents.FirstOrDefault(t => t.InfoHashes.V1OrV2.ToHex() == hash)
+                      ?? await _clientEngine.AddStreamingAsync(link, _appConfig.TorrentsFolder(hash));
+
+        _managers[hash] = manager;
+
+        manager.TorrentStateChanged += (_, args) =>
+            _logger.LogInformation("[{Hash}] Torrent state: {Old} → {New}", hash, args.OldState, args.NewState);
+
+        if (manager.State is TorrentState.Stopped or TorrentState.Error || !manager.HasMetadata)
+        {
+            _logger.LogInformation("[{Hash}] Starting persistent streaming manager", hash);
+            await manager.StartAsync();
+        }
+
+        return manager;
+    }
+
     private async Task<TorrentResponse> ProcessQueue(TorrentRequest request,
         CancellationToken cancellationToken = default)
     {
         var hash = request.Link?.InfoHashes.V1OrV2.ToHex() ?? request.Library;
 
         _logger.LogInformation("[{Hash}] Processing request {Request}", hash, request);
-        var manager = _clientEngine.Torrents.FirstOrDefault(t => t.InfoHashes.V1OrV2.ToHex() == hash);
 
-        if (manager == null)
-        {
-            var infoHash = request.Link?.InfoHashes ?? InfoHashes.FromInfoHash(InfoHash.FromHex(hash));
-            var announceUrls = request.Link?.AnnounceUrls ?? new List<string>();
-            announceUrls = announceUrls.Union(_appConfig.AnnounceUrls).ToList();
-            var link = new MagnetLink(infoHash, request.Link?.Name, announceUrls);
+        var infoHash = request.Link?.InfoHashes ?? InfoHashes.FromInfoHash(InfoHash.FromHex(hash));
+        var announceUrls = (request.Link?.AnnounceUrls ?? new List<string>())
+            .Union(_appConfig.AnnounceUrls).ToList();
+        var link = new MagnetLink(infoHash, request.Link?.Name, announceUrls);
 
-            _logger.LogInformation("[{Hash}] Adding streaming manager", hash);
-            manager = await _clientEngine.AddStreamingAsync(link, _appConfig.TorrentsFolder(hash));
-        }
+        var manager = await GetOrCreateManagerAsync(hash, link);
 
         TorrentResponse? response = null;
 
@@ -106,17 +140,11 @@ public class DownloadManager
             }
         }, statsCts.Token);
 
-        void OnTorrentStateChanged(object? sender, TorrentStateChangedEventArgs args)
-            => _logger.LogInformation("[{Hash}] Torrent state: {Old} → {New}", hash, args.OldState, args.NewState);
-
-        manager.TorrentStateChanged += OnTorrentStateChanged;
-
         try
         {
-            if (request.RequireStartStop || !manager.HasMetadata)
+            if (!manager.HasMetadata)
             {
-                _logger.LogInformation("[{Hash}] Starting streaming manager", hash);
-                await manager.StartAsync();
+                _logger.LogInformation("[{Hash}] Waiting for metadata", hash);
                 await manager.WaitForMetadataAsync(cancellationToken);
             }
 
@@ -141,9 +169,7 @@ public class DownloadManager
         finally
         {
             await statsCts.CancelAsync();
-            manager.TorrentStateChanged -= OnTorrentStateChanged;
-            _logger.LogInformation("[{Hash}] Stopping streaming manager", hash);
-            try { await manager.StopAsync(); } catch { }
+            // Manager stays running — do not call StopAsync
             await RemoveOldArchivesPolicy(manager);
         }
 
@@ -223,5 +249,16 @@ public class DownloadManager
         _logger.LogInformation("[{Library}] {Name} Downloaded {Book}", request.Library, request.Name, book);
         return new DownloadResponse(bookStream.ToArray(), "application/fb2", book,
             fileToDownload.DownloadCompleteFullPath);
+    }
+
+    /// <summary>Gracefully stop all running torrent managers on app shutdown.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var manager in _managers.Values)
+        {
+            try { await manager.StopAsync(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Error stopping manager {Hash}", manager.InfoHashes.V1OrV2.ToHex()); }
+        }
+        _managers.Clear();
     }
 }

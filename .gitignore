@@ -371,3 +371,8 @@ FodyWeavers.xsd
 /dist
 .DS_Store
 /FlibustaCli/cache
+
+# Torrent engine runtime data (DHT cache, fast-resume, downloaded torrent files, metadata)
+/MyHomeLib.Web/cache/
+*.fresume
+*.torrent

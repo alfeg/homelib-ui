@@ -21,14 +21,28 @@ builder.Services.AddSingleton<LibraryService>();
 // Torrent services (only DownloadManager + ClientEngine — no LibraryIndexer needed here)
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("Torrent"));
+
+// Derive torrent CacheDirectory from Library:DownloadsDirectory so all torrent data stays
+// in the configured library folder. An explicit Torrent:CacheDirectory in config overrides this.
+builder.Services.PostConfigure<AppConfig>(opts =>
+{
+    if (opts.CacheDirectory == "./cache")
+    {
+        var downloadsDir = builder.Configuration["Library:DownloadsDirectory"];
+        if (!string.IsNullOrWhiteSpace(downloadsDir))
+            opts.CacheDirectory = downloadsDir;
+    }
+});
+
 builder.Services.AddSingleton<ClientEngine>(sp =>
 {
     var config = sp.GetRequiredService<IOptions<AppConfig>>().Value;
     var endpoint = new IPEndPoint(IPAddress.Any, config.ListenPort);
+    // Engine internal cache (DHT nodes, fast-resume) → <downloads>/.cache/
     var settingsBuilder = new EngineSettingsBuilder
     {
         FastResumeMode       = FastResumeMode.BestEffort,
-        CacheDirectory       = config.CacheDirectory,
+        CacheDirectory       = config.CacheDirectory(), // extension method → base/.cache
         AutoSaveLoadDhtCache = true,   // persist DHT routing table across restarts
         AllowPortForwarding  = true,   // enable UPnP / NAT-PMP
         DhtEndPoint          = endpoint,
