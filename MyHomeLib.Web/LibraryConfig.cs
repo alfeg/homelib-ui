@@ -30,6 +30,12 @@ public class LibraryConfig
     /// </summary>
     public string LibraryDbPath { get; set; } = string.Empty;
 
+    /// <summary>
+    /// DuckDB memory cap in MB for each database connection.
+    /// Set to 0 to keep DuckDB defaults.
+    /// </summary>
+    public int DuckDbMemoryLimitMb { get; set; } = 32;
+
     public bool TorrentEnabled =>
         !string.IsNullOrWhiteSpace(MagnetUri) && !string.IsNullOrWhiteSpace(DownloadsDirectory);
 }

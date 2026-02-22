@@ -17,11 +17,15 @@ public sealed class BookSearchIndex : IAsyncDisposable
     public static async Task<BookSearchIndex> BuildAsync(
         IAsyncEnumerable<BookItem> books,
         string dbPath,
+        int duckDbMemoryLimitMb = 0,
         Action<string>? statusCallback = null,
         ILogger? logger = null)
     {
         var conn = new DuckDBConnection($"DataSource={dbPath}");
         await conn.OpenAsync();
+
+        if (duckDbMemoryLimitMb > 0)
+            await ExecAsync(conn, $"PRAGMA memory_limit='{duckDbMemoryLimitMb}MB'");
 
         // Reuse existing index if it already has books (e.g. on restart)
         long existing = 0;

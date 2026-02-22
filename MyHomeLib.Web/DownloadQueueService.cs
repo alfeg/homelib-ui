@@ -42,6 +42,13 @@ public sealed class DownloadQueueService(
 
         var db = new DuckDBConnection($"DataSource={dbPath}");
         db.Open();
+
+        if (cfg.DuckDbMemoryLimitMb > 0)
+        {
+            using var memCmd = db.CreateCommand();
+            memCmd.CommandText = $"PRAGMA memory_limit='{cfg.DuckDbMemoryLimitMb}MB'";
+            memCmd.ExecuteNonQuery();
+        }
         
         // Initialize schema
         using var cmd = db.CreateCommand();

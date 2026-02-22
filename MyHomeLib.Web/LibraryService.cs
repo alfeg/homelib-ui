@@ -85,6 +85,7 @@ public sealed class LibraryService(
         return await BookSearchIndex.BuildAsync(
             books,
             dbPath,
+            _config.DuckDbMemoryLimitMb,
             status => LoadStatus = status,
             logger);
     }

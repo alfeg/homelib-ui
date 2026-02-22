@@ -6,6 +6,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+    <ReadyToRunUseCrossgen2>true</ReadyToRunUseCrossgen2>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\MyHomeLib.Library\MyHomeLib.Library.csproj" />
     <ProjectReference Include="..\MyHomeLib.Torrent\MyHomeLib.Torrent.csproj" />

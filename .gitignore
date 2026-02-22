@@ -378,3 +378,4 @@ FodyWeavers.xsd
 .books/
 
 docker-compose.prod.yml
+.env
