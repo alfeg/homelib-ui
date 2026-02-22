@@ -1,41 +1,49 @@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject DownloadQueueService Queue
 @implements IDisposable
 @using Humanizer
 
-@if (Queue.IsEnabled && _stats is not null)
+@if (Queue.IsEnabled)
 {
-    <div class="torrent-status d-flex flex-wrap align-items-center gap-3 px-3 py-2 bg-body-tertiary border rounded small text-muted mt-3">
+    <div class="torrent-status d-flex flex-wrap align-items-center gap-3 px-3 py-2 bg-body-tertiary border rounded small text-muted mt-3 mb-2">
         <span class="fw-semibold text-body">🔗 Torrent</span>
 
-        <span title="Torrent state">
-            @if (_stats.State is "Downloading" or "Metadata" or "HashChecking")
-            {
-                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-            }
-            @_stats.State
-        </span>
-
-        <span title="DHT state / nodes">
-            🌐&nbsp;@_stats.DhtState
-            @if (_stats.DhtNodes > 0)
-            {
-                <span class="ms-1">(@_stats.DhtNodes nodes)</span>
-            }
-        </span>
-
-        @if (_stats.Seeds > 0 || _stats.Peers > 0)
+        @if (_stats is null)
         {
-            <span title="Seeds / Peers">🌱 @_stats.Seeds seeds&nbsp;/ @_stats.Peers peers</span>
+            <span class="fst-italic">Connecting…</span>
         }
         else
         {
-            <span class="fst-italic">No peers yet</span>
-        }
+            <span title="Torrent state">
+                @if (_stats.State is "Downloading" or "Metadata" or "HashChecking")
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                }
+                @_stats.State
+            </span>
 
-        @if (_stats.DownloadRateBytesPerSec > 1 || _stats.UploadRateBytesPerSec > 1)
-        {
-            <span title="Download speed">⬇&nbsp;@FormatRate(_stats.DownloadRateBytesPerSec)</span>
-            <span title="Upload speed">⬆&nbsp;@FormatRate(_stats.UploadRateBytesPerSec)</span>
+            <span title="DHT state / nodes">
+                🌐&nbsp;@_stats.DhtState
+                @if (_stats.DhtNodes > 0)
+                {
+                    <span class="ms-1">(@_stats.DhtNodes nodes)</span>
+                }
+            </span>
+
+            @if (_stats.Seeds > 0 || _stats.Peers > 0)
+            {
+                <span title="Seeds / Peers">🌱 @_stats.Seeds seeds&nbsp;/ @_stats.Peers peers</span>
+            }
+            else
+            {
+                <span class="fst-italic">No peers yet</span>
+            }
+
+            @if (_stats.DownloadRateBytesPerSec > 1 || _stats.UploadRateBytesPerSec > 1)
+            {
+                <span title="Download speed">⬇&nbsp;@FormatRate(_stats.DownloadRateBytesPerSec)</span>
+                <span title="Upload speed">⬆&nbsp;@FormatRate(_stats.UploadRateBytesPerSec)</span>
+            }
         }
     </div>
 }

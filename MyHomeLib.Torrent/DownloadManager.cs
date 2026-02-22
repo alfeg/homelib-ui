@@ -130,7 +130,6 @@ public class DownloadManager : IAsyncDisposable
                 request.Progress?.Report(stats);
 
                 if (++tick % 5 == 0)
-                {
                     _logger.LogInformation(
                         "[{Hash}] State={State} | DHT={DhtState} nodes={DhtNodes} | " +
                         "Seeds={Seeds} Peers={Peers} | ⬇ {Down:0.0} KB/s ⬆ {Up:0.0} KB/s | " +
@@ -143,19 +142,6 @@ public class DownloadManager : IAsyncDisposable
                         stats.UploadRateBytesPerSec / 1024,
                         stats.BytesReceived / 1024,
                         stats.PartialProgress);
-
-                    foreach (var tier in manager.TrackerManager.Tiers)
-                        foreach (var tracker in tier.Trackers)
-                            _logger.LogInformation(
-                                "[{Hash}] Tracker {Url} | Status={Status} LastAnnounce={Last} Failure={Fail}",
-                                hash,
-                                tracker.Uri,
-                                tracker.Status,
-                                tracker.TimeSinceLastAnnounce.TotalSeconds < 1e6
-                                    ? $"{tracker.TimeSinceLastAnnounce.TotalSeconds:0}s ago"
-                                    : "never",
-                                string.IsNullOrEmpty(tracker.FailureMessage) ? "none" : tracker.FailureMessage);
-                }
 
                 try { await Task.Delay(1000, statsCts.Token); } catch { break; }
             }
