@@ -246,11 +246,14 @@ public class DownloadManager : IAsyncDisposable
     /// <summary>Gracefully stop all running torrent managers on app shutdown.</summary>
     public async ValueTask DisposeAsync()
     {
-        foreach (var manager in _managers.Values)
+        // Use a short timeout so unreachable trackers don't stall shutdown.
+        var stopTimeout = TimeSpan.FromSeconds(3);
+        var tasks = _managers.Values.Select(async manager =>
         {
-            try { await manager.StopAsync(); }
+            try { await manager.StopAsync(stopTimeout); }
             catch (Exception ex) { _logger.LogWarning(ex, "Error stopping manager {Hash}", manager.InfoHashes.V1OrV2.ToHex()); }
-        }
+        });
+        await Task.WhenAll(tasks);
         _managers.Clear();
     }
 }
