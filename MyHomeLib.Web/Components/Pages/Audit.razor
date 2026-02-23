@@ -1,0 +1,87 @@
+@page "/audit"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AuditService Audit
+
+<PageTitle>Audit Log — MyHomeLib</PageTitle>
+
+<MudText Typo="Typo.h5" Class="page-title">Audit Log</MudText>
+
+@if (entries.Count == 0)
+{
+    <MudText Class="mud-text-secondary">No audit events recorded yet.</MudText>
+}
+else
+{
+    <MudTable Items="@entries" Hover="true" Dense="true" Striped="true"
+              Breakpoint="Breakpoint.Sm" FixedHeader="true" Height="700px">
+        <HeaderContent>
+            <MudTh>Time</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Query / Title</MudTh>
+            <MudTh>Details</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Time">
+                <MudText Typo="Typo.caption">@context.Timestamp.ToLocalTime().ToString("g")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Type">
+                @switch (context.EventType)
+                {
+                    case "Search":
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">Search</MudChip>
+                        break;
+                    case "Enqueue":
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">Enqueue</MudChip>
+                        break;
+                    case "Download":
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Download</MudChip>
+                        break;
+                    default:
+                        <MudChip T="string" Size="Size.Small">@context.EventType</MudChip>
+                        break;
+                }
+            </MudTd>
+            <MudTd DataLabel="Query / Title">
+                @if (context.EventType == "Search")
+                {
+                    <MudText Typo="Typo.body2">@context.Query</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">@context.Title</MudText>
+                    @if (!string.IsNullOrEmpty(context.Authors))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Authors</MudText>
+                    }
+                }
+            </MudTd>
+            <MudTd DataLabel="Details">
+                @if (context.EventType == "Search")
+                {
+                    <MudText Typo="Typo.caption">@context.ResultCount results</MudText>
+                }
+                else if (context.EventType == "Enqueue")
+                {
+                    <MudText Typo="Typo.caption" Class="mono-text">@context.Archive</MudText>
+                }
+                else if (context.EventType == "Download")
+                {
+                    <MudText Typo="Typo.caption" Class="mono-text">@context.FileName</MudText>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Showing last @entries.Count events.
+    </MudText>
+}
+
+@code {
+    List<AuditEntry> entries = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        entries = await Audit.GetAllAsync();
+    }
+}
