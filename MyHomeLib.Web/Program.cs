@@ -34,6 +34,7 @@ builder.Services.AddSingleton<DownloadManager>(sp =>
         sp.GetRequiredService<ILogger<DownloadManager>>()));
 
 // Library initialisation runs in the background (downloads INPX, builds DuckDB index)
+builder.Services.AddSingleton<AuditService>();
 builder.Services.AddSingleton<LibraryService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<LibraryService>());
 
@@ -52,7 +53,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 // Serve downloaded files
-app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, DownloadQueueService queue) =>
+app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, DownloadQueueService queue, AuditService audit) =>
 {
     var jobs = await queue.GetAllAsync();
     var job  = jobs.FirstOrDefault(j => j.Id == jobId);
@@ -60,6 +61,7 @@ app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, DownloadQueueService
     if (job.Status != DownloadStatus.Ready || job.FilePath is null) return Results.StatusCode(202);
     if (!File.Exists(job.FilePath)) return Results.NotFound("File not found on disk");
 
+    _ = audit.LogDownloadAsync(jobId, job.Title, job.DownloadName ?? Path.GetFileName(job.FilePath));
     var contentType = string.IsNullOrWhiteSpace(job.ContentType) ? "application/octet-stream" : job.ContentType;
     return Results.File(job.FilePath, contentType, job.DownloadName ?? Path.GetFileName(job.FilePath));
 });

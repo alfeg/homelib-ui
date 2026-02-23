@@ -8,6 +8,7 @@ namespace MyHomeLib.Web;
 public sealed class LibraryService(
     IOptions<LibraryConfig> config,
     IServiceProvider sp,
+    AuditService audit,
     ILogger<LibraryService> logger) : BackgroundService, IAsyncDisposable
 {
     private readonly LibraryConfig _config = config.Value;
@@ -153,7 +154,9 @@ public sealed class LibraryService(
     public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)
     {
         var index = await IndexTask;
-        return await index.SearchAsync(query, max);
+        var result = await index.SearchAsync(query, max);
+        _ = audit.LogSearchAsync(query ?? string.Empty, result.Total);
+        return result;
     }
 
     async ValueTask IAsyncDisposable.DisposeAsync()

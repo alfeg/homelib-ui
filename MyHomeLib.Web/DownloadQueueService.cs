@@ -10,6 +10,7 @@ namespace MyHomeLib.Web;
 public sealed class DownloadQueueService(
     DownloadManager downloadManager,
     IOptions<LibraryConfig> config,
+    AuditService audit,
     ILogger<DownloadQueueService> logger) : BackgroundService, IAsyncDisposable
 {
     private readonly LibraryConfig _config = config.Value;
@@ -169,6 +170,7 @@ public sealed class DownloadQueueService(
 
         _channel.Writer.TryWrite(job.Id);
         Interlocked.Exchange(ref _lastActivityTicks, DateTime.UtcNow.Ticks);
+        _ = audit.LogEnqueueAsync(job.BookId, job.Title, job.Authors, job.Archive, job.FileName);
         return job.Id;
     }
 

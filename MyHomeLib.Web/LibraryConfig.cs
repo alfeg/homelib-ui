@@ -31,6 +31,12 @@ public class LibraryConfig
     public string LibraryDbPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Path to the DuckDB audit log file.
+    /// Defaults to <c>audit.db</c> inside <see cref="DownloadsDirectory"/> when left empty.
+    /// </summary>
+    public string AuditDbPath { get; set; } = string.Empty;
+
+    /// <summary>
     /// DuckDB memory cap in MB for each database connection.
     /// Set to 0 to keep DuckDB defaults.
     /// </summary>
