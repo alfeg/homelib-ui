@@ -20,6 +20,8 @@ public sealed class LibraryService(
     public InpxLibrary Metadata { get; } = new();
     public string LoadStatus { get; private set; } = "Initialising…";
     public TorrentStats? InpxStats { get; private set; }
+    public string MagnetUri => _config.MagnetUri;
+    public long TotalBooks => IndexTask.IsCompletedSuccessfully ? IndexTask.Result.TotalBooks : Metadata.BooksAdded;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

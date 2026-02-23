@@ -26,6 +26,33 @@ else if (!indexReady)
     </MudAlert>
 }
 
+@if (indexReady)
+{
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+        <MudChip T="string" Icon="@Icons.Material.Filled.MenuBook" Color="Color.Primary"
+                 Variant="Variant.Outlined" Size="Size.Small" Class="ma-0">
+            @Library.TotalBooks.ToString("N0") books
+        </MudChip>
+        @if (!string.IsNullOrEmpty(Library.Metadata.Description))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Library.Metadata.Description</MudText>
+        }
+        @if (!string.IsNullOrEmpty(Library.Metadata.Version))
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0">
+                v@Library.Metadata.Version
+            </MudChip>
+        }
+        @if (!string.IsNullOrEmpty(Library.MagnetUri))
+        {
+            <MudTooltip Text="@Library.MagnetUri">
+                <MudIconButton Icon="@Icons.Material.Filled.Link" Size="Size.Small"
+                               Href="@Library.MagnetUri" aria-label="Magnet link" />
+            </MudTooltip>
+        }
+    </div>
+}
+
 <MudTextField T="string"
               Value="@searchQuery"
               Placeholder="Search by title, author or series..."

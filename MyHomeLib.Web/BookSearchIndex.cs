@@ -112,6 +112,16 @@ public sealed class BookSearchIndex : IAsyncDisposable
         return new BookSearchIndex(conn);
     }
 
+    public long TotalBooks
+    {
+        get
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM books";
+            return (long)(cmd.ExecuteScalar() ?? 0L);
+        }
+    }
+
     public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)
     {
         if (string.IsNullOrWhiteSpace(query))
