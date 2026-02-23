@@ -19,6 +19,14 @@ public class DownloadManager(
         await torrServe.AddTorrentAsync(magnetUri, hash, saveToDb: true, ct);
     }
 
+    /// <summary>Removes the library torrent from TorrServe to free resources (sleep mode).</summary>
+    public async Task SleepLibraryAsync(string magnetUri, CancellationToken ct = default)
+    {
+        var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
+        logger.LogInformation("[TorrServe] Removing library torrent {Hash} (idle sleep)", hash);
+        await torrServe.RemoveTorrentAsync(hash, ct);
+    }
+
     public async Task<SearchResponse?> SearchFiles(SearchRequest request, CancellationToken ct = default)
         => await SearchViaTorrServe(request, ct);
 

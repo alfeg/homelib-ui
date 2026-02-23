@@ -19,6 +19,10 @@ public sealed class DownloadQueueService(
     private readonly ConcurrentDictionary<Guid, TorrentStats> _activeStats = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _jobCts = new();
 
+    // Idle sleep tracking
+    private long _lastActivityTicks = DateTime.UtcNow.Ticks;
+    private volatile bool _torrentSleeping;
+
     public bool IsEnabled => _config.TorrentEnabled;
 
     /// <summary>Live torrent stats for jobs currently downloading.</summary>
@@ -89,12 +93,25 @@ public sealed class DownloadQueueService(
         // Background sampler: refresh TorrServe status every 3 seconds
         _ = Task.Run(async () =>
         {
+            var sleepAfter = _config.TorrentSleepAfterMinutes;
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
                     await downloadManager.RefreshStatsAsync(libraryHash, stoppingToken);
                     LibraryStats = downloadManager.GetStats();
+
+                    // Put torrent to sleep when idle
+                    if (!_torrentSleeping && sleepAfter > 0 && _jobCts.IsEmpty)
+                    {
+                        var idleMinutes = (DateTime.UtcNow - new DateTime(Interlocked.Read(ref _lastActivityTicks), DateTimeKind.Utc)).TotalMinutes;
+                        if (idleMinutes >= sleepAfter)
+                        {
+                            _torrentSleeping = true;
+                            logger.LogInformation("[TorrServe] Idle for {Min} min — removing library torrent", sleepAfter);
+                            await downloadManager.SleepLibraryAsync(_config.MagnetUri, stoppingToken);
+                        }
+                    }
                 }
                 catch (OperationCanceledException) { break; }
                 catch { /* swallow transient errors */ }
@@ -151,6 +168,7 @@ public sealed class DownloadQueueService(
             """);
 
         _channel.Writer.TryWrite(job.Id);
+        Interlocked.Exchange(ref _lastActivityTicks, DateTime.UtcNow.Ticks);
         return job.Id;
     }
 
@@ -214,6 +232,14 @@ public sealed class DownloadQueueService(
         {
             var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
             if (job is null) return;
+
+            // Wake the torrent if it was put to sleep due to inactivity
+            if (_torrentSleeping)
+            {
+                logger.LogInformation("[TorrServe] Waking library torrent from sleep");
+                await downloadManager.StartLibraryAsync(_config.MagnetUri, jobCts.Token);
+                _torrentSleeping = false;
+            }
 
             var hash = MagnetUriHelper.ParseInfoHash(_config.MagnetUri);
             var request = new DownloadRequest(hash, job.Archive, job.FileName) { MagnetUri = _config.MagnetUri };

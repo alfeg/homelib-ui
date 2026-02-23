@@ -36,6 +36,12 @@ public class LibraryConfig
     /// </summary>
     public int DuckDbMemoryLimitMb { get; set; } = 32;
 
+    /// <summary>
+    /// How many minutes of inactivity before the library torrent is removed from TorrServe.
+    /// Set to 0 to disable sleep mode. Default is 10 minutes.
+    /// </summary>
+    public int TorrentSleepAfterMinutes { get; set; } = 10;
+
     public bool TorrentEnabled =>
         !string.IsNullOrWhiteSpace(MagnetUri) && !string.IsNullOrWhiteSpace(DownloadsDirectory);
 }

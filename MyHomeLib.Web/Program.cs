@@ -1,5 +1,4 @@
 using System.Text;
-using Microsoft.AspNetCore.Components.Server;
 using MyHomeLib.Web;
 using MyHomeLib.Web.Components;
 using MyHomeListServer.Torrent;
@@ -10,15 +9,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-
-var disconnectedCircuitMaxRetained = builder.Configuration.GetValue<int?>("Performance:DisconnectedCircuitMaxRetained") ?? 10;
-var disconnectedCircuitRetentionSeconds = builder.Configuration.GetValue<int?>("Performance:DisconnectedCircuitRetentionSeconds") ?? 60;
-
-builder.Services.Configure<CircuitOptions>(options =>
-{
-    options.DisconnectedCircuitMaxRetained = Math.Max(0, disconnectedCircuitMaxRetained);
-    options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromSeconds(Math.Max(1, disconnectedCircuitRetentionSeconds));
-});
 
 builder.Services.AddMudServices();
 
