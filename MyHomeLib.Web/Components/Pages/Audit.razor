@@ -1,6 +1,6 @@
 @page "/audit"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
-@inject AuditService Audit
+@inject AuditService AuditSvc
 
 <PageTitle>Audit Log — MyHomeLib</PageTitle>
 
@@ -82,6 +82,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        entries = await Audit.GetAllAsync();
+        entries = await AuditSvc.GetAllAsync();
     }
 }
