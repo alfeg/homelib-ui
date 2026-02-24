@@ -39,10 +39,20 @@ public sealed class BookSearchIndex : IAsyncDisposable
 
         if (existing > 0)
         {
-            await EnsureFtsIndexAsync(conn, statusCallback, logger);
-            logger?.LogInformation("Reusing existing DuckDB index ({Count} books)", existing);
-            statusCallback?.Invoke($"Loaded {existing:N0} books from existing index.");
-            return new BookSearchIndex(conn);
+            try
+            {
+                await EnsureFtsIndexAsync(conn, statusCallback, logger);
+                await ValidateSearchQueryAsync(conn);
+
+                logger?.LogInformation("Reusing existing DuckDB index ({Count} books)", existing);
+                statusCallback?.Invoke($"Loaded {existing:N0} books from existing index.");
+                return new BookSearchIndex(conn);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Existing DuckDB index is invalid, recreating books table from INPX.");
+                statusCallback?.Invoke("Existing index is invalid. Rebuilding library index…");
+            }
         }
 
         await ExecAsync(conn, "DROP TABLE IF EXISTS books");
@@ -218,8 +228,23 @@ public sealed class BookSearchIndex : IAsyncDisposable
                 stopwords  = 'none',
                 ignore     = '(\\.|[^a-zA-Zа-яёА-ЯЁ])+',
                 lower      = 1,
-                strip_accents = 1
+                strip_accents = 1,
+                overwrite = 1
             )");
+    }
+
+    private static async Task ValidateSearchQueryAsync(DuckDBConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*)
+            FROM (
+                SELECT id, fts_main_books.match_bm25(id, 'test') AS score
+                FROM books
+                LIMIT 1
+            )
+            """;
+        await cmd.ExecuteScalarAsync();
     }
 
     private static async Task ExecAsync(DuckDBConnection conn, string sql)
