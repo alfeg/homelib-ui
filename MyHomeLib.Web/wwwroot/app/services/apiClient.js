@@ -2,72 +2,6 @@ const jsonHeaders = {
     "Content-Type": "application/json"
 };
 
-async function requestJson(url, body) {
-    const response = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: jsonHeaders,
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Request failed with ${response.status}`);
-    }
-
-    return response.json();
-}
-
-function mapMetadata(metadata) {
-    if (!metadata || typeof metadata !== "object") return null;
-
-    if ("version" in metadata || "totalBooks" in metadata || "description" in metadata) {
-        return metadata;
-    }
-
-    return {
-        description: metadata.d ?? "",
-        version: metadata.v ?? "",
-        totalBooks: metadata.t ?? 0
-    };
-}
-
-function mapBook(book) {
-    if (!book || typeof book !== "object") return null;
-
-    if ("archiveFile" in book || "title" in book || "authors" in book) {
-        return book;
-    }
-
-    return {
-        id: book.i,
-        title: book.t,
-        authors: book.a,
-        series: book.s,
-        seriesNo: book.n,
-        lang: book.l,
-        file: book.f,
-        ext: book.e,
-        archiveFile: book.r
-    };
-}
-
-function mapLibraryPayload(payload) {
-    if (!payload || typeof payload !== "object") {
-        return { metadata: null, books: [] };
-    }
-
-    const metadataSource = payload.metadata ?? payload.m ?? null;
-    const booksSource = payload.books ?? payload.b ?? [];
-
-    return {
-        metadata: mapMetadata(metadataSource),
-        books: Array.isArray(booksSource)
-            ? booksSource.map(mapBook).filter(Boolean)
-            : []
-    };
-}
-
 async function requestArrayBuffer(url, body, onProgress) {
     const response = await fetch(url, {
         method: "POST",
@@ -136,19 +70,6 @@ function parseDownloadName(contentDisposition) {
 }
 
 export const apiClient = {
-    async fetchBooks(magnetUri, forceReindex = false, onProgress) {
-        const body = { magnetUri, forceReindex };
-        const payload = await requestJson("/api/library/books", body);
-
-        onProgress?.({
-            downloadedBytes: 0,
-            totalBytes: null,
-            percent: 100
-        });
-
-        return mapLibraryPayload(payload);
-    },
-
     async fetchInpx(magnetUri, forceReindex = false, onProgress) {
         return requestArrayBuffer("/api/library/inpx", { magnetUri, forceReindex }, onProgress);
     },

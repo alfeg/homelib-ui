@@ -564,42 +564,28 @@ export function useLibraryState() {
         isReindexing.value = forceReindex;
 
         try {
-            let payload;
-
-            try {
-                payload = await fetchBooksViaInpx(forceReindex);
-            } catch {
-                setProgress({
-                    phase: "loading-backend",
-                    processed: 0,
-                    total: 0,
-                    percent: 0,
-                    downloadedBytes: 0,
-                    totalBytes: null
-                });
-                status.value = "Client-side INPX parse failed. Falling back to backend payload...";
-
-                payload = await apiClient.fetchBooks(magnetUri.value, forceReindex, ({ downloadedBytes, totalBytes, percent }) => {
-                    setProgress({
-                        phase: "loading-backend",
-                        downloadedBytes,
-                        totalBytes,
-                        percent: percent ?? 0
-                    });
-
-                    if (totalBytes) {
-                        status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} / ${formatMegabytes(totalBytes)} (${percent ?? 0}%)`;
-                        return;
-                    }
-
-                    status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} downloaded`;
-                });
-            }
+            const payload = await fetchBooksViaInpx(forceReindex);
 
             status.value = "Library data loaded. Building search index...";
             const { datasetSignature } = await applyBooks(payload, false);
             await cachePayload(magnetHash.value, payload, datasetSignature);
             lastUpdatedAt.value = new Date().toLocaleString();
+        } catch (err) {
+            setProgress({
+                phase: "error",
+                processed: 0,
+                total: 0,
+                percent: 0,
+                downloadedBytes: 0,
+                totalBytes: null
+            });
+            status.value = forceReindex
+                ? "Reindex failed: unable to download or parse INPX."
+                : "Library load failed: unable to download or parse INPX.";
+            error.value = err instanceof Error
+                ? err.message
+                : "Failed to load library from INPX.";
+            throw err;
         } finally {
             isLoading.value = false;
             isReindexing.value = false;
