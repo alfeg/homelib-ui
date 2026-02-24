@@ -56,32 +56,37 @@ else if (!indexReady)
     </div>
 }
 
-<MudTextField T="string"
-              Value="@searchQuery"
-              Placeholder="Search by title, author or series..."
-              Variant="Variant.Outlined"
-              FullWidth="true"
-              Adornment="@(_searching ? Adornment.End : Adornment.None)"
-              AdornmentIcon="@Icons.Material.Filled.HourglassTop"
-              Clearable="true"
-              Disabled="@(!indexReady)"
-              OnKeyDown="OnKeyDown"
-              ValueChanged="OnValueChanged"
-              Class="mb-2" />
+<div class="d-flex align-items-center gap-2 mb-2">
+    <MudTextField T="string"
+                  Value="@searchQuery"
+                  Placeholder="Search by title, author or series..."
+                  Variant="Variant.Outlined"
+                  FullWidth="true"
+                  Adornment="@(_searching ? Adornment.End : Adornment.None)"
+                  AdornmentIcon="@Icons.Material.Filled.HourglassTop"
+                  Clearable="true"
+                  Disabled="@(!indexReady)"
+                  OnKeyDown="OnKeyDown"
+                  ValueChanged="OnValueChanged"
+                  Class="mb-0"
+                  Style="min-width: 0;" />
 
-<MudSelect T="string"
-           Value="@selectedLanguage"
-           ValueChanged="OnLanguageChanged"
-           Placeholder="Language"
-           Variant="Variant.Outlined"
-           Disabled="@(!indexReady)"
-           Class="mb-2">
-    <MudSelectItem T="string" Value="@AllLanguagesValue">All languages</MudSelectItem>
-    @foreach (var lang in languages)
-    {
-        <MudSelectItem T="string" Value="@lang">@lang</MudSelectItem>
-    }
-</MudSelect>
+    <MudSelect T="string"
+               Value="@selectedLanguage"
+               ValueChanged="OnLanguageChanged"
+               Placeholder="Lang"
+               Variant="Variant.Outlined"
+               Margin="Margin.Dense"
+               Disabled="@(!indexReady)"
+               Class="mb-0"
+               Style="width: 130px;">
+        <MudSelectItem T="string" Value="@AllLanguagesValue">All</MudSelectItem>
+        @foreach (var lang in languages)
+        {
+            <MudSelectItem T="string" Value="@lang">@lang</MudSelectItem>
+        }
+    </MudSelect>
+</div>
 
 @if (_searchMs.HasValue && results.HasValue)
 {
