@@ -1,5 +1,32 @@
 const SEARCH_INDEX_WORKER_URL = new URL("../workers/searchIndex.worker.js", import.meta.url);
 
+function toStructuredCloneableBooks(books) {
+    const input = Array.isArray(books) ? books : [];
+
+    try {
+        return JSON.parse(JSON.stringify(input));
+    } catch {
+        return input.map((book) => {
+            if (!book || typeof book !== "object") {
+                return book;
+            }
+
+            try {
+                return JSON.parse(JSON.stringify(book));
+            } catch {
+                return {
+                    id: book.id,
+                    title: book.title,
+                    authors: book.authors,
+                    series: book.series,
+                    lang: book.lang,
+                    file: book.file
+                };
+            }
+        });
+    }
+}
+
 export function createSearchWorkerClient({ onProgress, onError } = {}) {
     if (typeof Worker === "undefined") {
         throw new Error("Web Worker is not supported in this browser.");
@@ -59,8 +86,9 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
             }
 
             return new Promise((resolve, reject) => {
+                const cloneableBooks = toStructuredCloneableBooks(books);
                 pendingBuild = { resolve, reject };
-                worker.postMessage({ type: "build", books });
+                worker.postMessage({ type: "build", books: cloneableBooks });
             });
         },
         search(term, requestId, limit = 1000) {
