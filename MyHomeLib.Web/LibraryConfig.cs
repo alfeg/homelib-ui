@@ -19,30 +19,6 @@ public class LibraryConfig
     public string DownloadsDirectory { get; set; } = string.Empty;
 
     /// <summary>
-    /// Path to the persistent DuckDB queue file.
-    /// Defaults to <c>queue.db</c> inside <see cref="DownloadsDirectory"/> when left empty.
-    /// </summary>
-    public string QueueDbPath { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Path to the DuckDB book index file.
-    /// Defaults to a <c>.db</c> file alongside the INPX file when left empty.
-    /// </summary>
-    public string LibraryDbPath { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Path to the DuckDB audit log file.
-    /// Defaults to <c>audit.db</c> inside <see cref="DownloadsDirectory"/> when left empty.
-    /// </summary>
-    public string AuditDbPath { get; set; } = string.Empty;
-
-    /// <summary>
-    /// DuckDB memory cap in MB for each database connection.
-    /// Set to 0 to keep DuckDB defaults.
-    /// </summary>
-    public int DuckDbMemoryLimitMb { get; set; } = 32;
-
-    /// <summary>
     /// How many minutes of inactivity before the library torrent is removed from TorrServe.
     /// Set to 0 to disable sleep mode. Default is 10 minutes.
     /// </summary>

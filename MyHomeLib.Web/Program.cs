@@ -6,8 +6,6 @@ using MyHomeListServer.Torrent;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddSingleton<DatabaseMigrationService>();
-
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection("Library"));
@@ -34,8 +32,6 @@ builder.Services.AddSingleton<IdleTorrentCleanupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleTorrentCleanupService>());
 
 var app = builder.Build();
-
-await app.Services.GetRequiredService<DatabaseMigrationService>().MigrateAsync();
 
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
