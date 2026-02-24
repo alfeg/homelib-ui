@@ -1,4 +1,4 @@
-import { decode } from "https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.0.0/dist.es5+esm/index.mjs";
+import { decode } from "https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.3/dist.es5+esm/index.mjs";
 
 const jsonHeaders = {
     "Content-Type": "application/json"
