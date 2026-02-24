@@ -153,12 +153,18 @@ public sealed class LibraryService(
         return savePath;
     }
 
-    public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)
+    public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, string? language = null, int max = 200)
     {
         var index = await IndexTask;
-        var result = await index.SearchAsync(query, max);
+        var result = await index.SearchAsync(query, language, max);
         _ = audit.LogSearchAsync(query ?? string.Empty, result.Total);
         return result;
+    }
+
+    public async Task<IReadOnlyList<string>> GetLanguagesAsync()
+    {
+        var index = await IndexTask;
+        return await index.GetLanguagesAsync();
     }
 
     async ValueTask IAsyncDisposable.DisposeAsync()

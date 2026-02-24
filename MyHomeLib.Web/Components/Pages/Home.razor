@@ -68,6 +68,20 @@ else if (!indexReady)
               ValueChanged="OnValueChanged"
               Class="mb-2" />
 
+<MudSelect T="string"
+           Value="@selectedLanguage"
+           ValueChanged="OnLanguageChanged"
+           Label="Language"
+           Variant="Variant.Outlined"
+           Disabled="@(!indexReady)"
+           Class="mb-2">
+    <MudSelectItem T="string" Value="@AllLanguagesValue">All languages</MudSelectItem>
+    @foreach (var lang in languages)
+    {
+        <MudSelectItem T="string" Value="@lang">@lang</MudSelectItem>
+    }
+</MudSelect>
+
 @if (_searchMs.HasValue && results.HasValue)
 {
     <MudText Typo="Typo.caption" Class="results-meta">
@@ -141,6 +155,9 @@ else if (!indexReady)
 
 @code {
     string searchQuery = "";
+    const string AllLanguagesValue = "__all__";
+    string selectedLanguage = AllLanguagesValue;
+    List<string> languages = [];
     PeriodicTimer? _loadTimer;
     CancellationTokenSource? _searchCts;
 
@@ -153,10 +170,14 @@ else if (!indexReady)
     protected override void OnInitialized()
     {
         searchQuery = SearchState.Query;
+        selectedLanguage = string.IsNullOrWhiteSpace(SearchState.Language) ? AllLanguagesValue : SearchState.Language;
         results = SearchState.Results;
         _searchMs = SearchState.SearchMs;
 
         indexReady = Library.IndexTask.IsCompletedSuccessfully;
+
+        if (indexReady)
+            _ = LoadLanguagesAsync();
 
         if (Library.IndexTask.IsFaulted)
             errorMessage = Library.IndexTask.Exception?.GetBaseException().Message;
@@ -173,6 +194,7 @@ else if (!indexReady)
         {
             await Library.IndexTask;
             indexReady = true;
+            await LoadLanguagesAsync();
         }
         catch (Exception ex)
         {
@@ -194,6 +216,15 @@ else if (!indexReady)
         searchQuery = value;
         SearchState.Query = value;
         await TriggerSearch(debounceMs: 300);
+    }
+
+    async Task OnLanguageChanged(string value)
+    {
+        selectedLanguage = value;
+        SearchState.Language = selectedLanguage == AllLanguagesValue ? string.Empty : selectedLanguage;
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+            await TriggerSearch(debounceMs: 0);
     }
 
     async Task OnKeyDown(KeyboardEventArgs e)
@@ -234,13 +265,14 @@ else if (!indexReady)
         var sw = Stopwatch.StartNew();
         try
         {
-            var r = await Library.SearchAsync(searchQuery);
+            var r = await Library.SearchAsync(searchQuery, selectedLanguage == AllLanguagesValue ? null : selectedLanguage);
             sw.Stop();
             if (!cts.IsCancellationRequested)
             {
                 results = r;
                 _searchMs = sw.ElapsedMilliseconds;
                 SearchState.Query = searchQuery;
+                SearchState.Language = selectedLanguage == AllLanguagesValue ? string.Empty : selectedLanguage;
                 SearchState.Results = results;
                 SearchState.SearchMs = _searchMs;
             }
@@ -270,6 +302,19 @@ else if (!indexReady)
         await Queue.EnqueueAsync(book, UserSession.UserId);
         Snackbar.Add($"Queued: {book.Title}", Severity.Success);
         NavigationManager.NavigateTo("/downloads");
+    }
+
+    async Task LoadLanguagesAsync()
+    {
+        try
+        {
+            languages = (await Library.GetLanguagesAsync()).ToList();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            languages = [];
+        }
     }
 
     public void Dispose()

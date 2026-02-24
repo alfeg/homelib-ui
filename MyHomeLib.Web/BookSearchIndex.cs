@@ -122,10 +122,25 @@ public sealed class BookSearchIndex : IAsyncDisposable
         }
     }
 
-    public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, int max = 200)
+    public async Task<IReadOnlyList<string>> GetLanguagesAsync()
+    {
+        var langs = new List<string>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT DISTINCT lang FROM books WHERE lang IS NOT NULL AND trim(lang) <> '' ORDER BY lang";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            langs.Add(reader.GetString(0));
+        return langs;
+    }
+
+    public async Task<(IReadOnlyList<BookItem> Page, int Total)> SearchAsync(string? query, string? language = null, int max = 200)
     {
         if (string.IsNullOrWhiteSpace(query))
             return ([], 0);
+
+        var languageFilter = string.IsNullOrWhiteSpace(language)
+            ? string.Empty
+            : $" AND lower(lang) = lower({Literal(language.Trim())})";
 
         var sql = $"""
             SELECT id, authors, genre, title, series, series_no, archive, file, ext,
@@ -134,7 +149,7 @@ public sealed class BookSearchIndex : IAsyncDisposable
                 SELECT *, fts_main_books.match_bm25(id, {Literal(query)}) AS score
                 FROM books
             )
-            WHERE score IS NOT NULL
+            WHERE score IS NOT NULL{languageFilter}
             ORDER BY score DESC
             """;
 
