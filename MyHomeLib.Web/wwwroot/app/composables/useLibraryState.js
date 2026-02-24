@@ -5,6 +5,7 @@ import { parseHashFromMagnet, magnetStore } from "../services/magnetService.js";
 import { libraryCacheStore } from "../services/storageService.js";
 
 const INDEX_CHUNK_SIZE = 250;
+const INPX_PARSER_WORKER_URL = new URL("../workers/inpxParser.worker.js", import.meta.url);
 
 function formatMegabytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -53,6 +54,49 @@ async function createSearchIndexAsync(books, onProgress) {
     }
 
     return { index, byId };
+}
+
+function parseInpxWithWorker(buffer, onProgress) {
+    if (typeof Worker === "undefined") {
+        return Promise.reject(new Error("Web Worker is not supported in this browser."));
+    }
+
+    return new Promise((resolve, reject) => {
+        const worker = new Worker(INPX_PARSER_WORKER_URL, { type: "module" });
+
+        const cleanup = () => {
+            worker.onmessage = null;
+            worker.onerror = null;
+            worker.terminate();
+        };
+
+        worker.onmessage = (event) => {
+            const message = event?.data ?? {};
+
+            if (message.type === "progress") {
+                onProgress?.(message.payload ?? {});
+                return;
+            }
+
+            if (message.type === "result") {
+                cleanup();
+                resolve(message.payload ?? { metadata: null, books: [] });
+                return;
+            }
+
+            if (message.type === "error") {
+                cleanup();
+                reject(new Error(message.message || "Failed to parse INPX payload."));
+            }
+        };
+
+        worker.onerror = (event) => {
+            cleanup();
+            reject(new Error(event?.message || "Failed to parse INPX payload."));
+        };
+
+        worker.postMessage({ type: "parse", buffer }, [buffer]);
+    });
 }
 
 function saveBlob(blob, fileName) {
@@ -176,10 +220,7 @@ export function useLibraryState() {
         });
     }
 
-    async function fetchAndApply(forceReindex = false) {
-        if (!magnetUri.value || !magnetHash.value) return;
-
-        error.value = "";
+    async function fetchBooksViaInpx(forceReindex) {
         setProgress({
             phase: "loading-backend",
             processed: 0,
@@ -188,26 +229,95 @@ export function useLibraryState() {
             downloadedBytes: 0,
             totalBytes: null
         });
-        status.value = forceReindex ? "Reindexing library: fetching data from backend..." : "Loading library from backend...";
+        status.value = forceReindex
+            ? "Reindexing library: downloading INPX from backend..."
+            : "Loading library: downloading INPX from backend...";
+
+        const inpxBuffer = await apiClient.fetchInpx(magnetUri.value, forceReindex, ({ downloadedBytes, totalBytes, percent }) => {
+            setProgress({
+                phase: "loading-backend",
+                downloadedBytes,
+                totalBytes,
+                percent: percent ?? 0
+            });
+
+            if (totalBytes) {
+                status.value = `Downloading INPX: ${formatMegabytes(downloadedBytes)} / ${formatMegabytes(totalBytes)} (${percent ?? 0}%)`;
+                return;
+            }
+
+            status.value = `Downloading INPX: ${formatMegabytes(downloadedBytes)} downloaded`;
+        });
+
+        setProgress({
+            phase: "parsing",
+            processed: 0,
+            total: 0,
+            percent: 0,
+            downloadedBytes: 0,
+            totalBytes: null
+        });
+        status.value = "INPX downloaded. Parsing on client...";
+
+        return parseInpxWithWorker(inpxBuffer, (progress) => {
+            setProgress({
+                phase: "parsing",
+                processed: progress.processed ?? 0,
+                total: progress.total ?? 0,
+                percent: progress.percent ?? 0,
+                downloadedBytes: 0,
+                totalBytes: null
+            });
+
+            const total = progress.total ?? 0;
+            const processed = progress.processed ?? 0;
+            const percent = progress.percent ?? 0;
+            status.value = total
+                ? `Parsing INPX... ${processed}/${total} (${percent}%)`
+                : `Parsing INPX... (${percent}%)`;
+        });
+    }
+
+    async function fetchAndApply(forceReindex = false) {
+        if (!magnetUri.value || !magnetHash.value) return;
+
+        error.value = "";
         isLoading.value = !forceReindex;
         isReindexing.value = forceReindex;
 
         try {
-            const payload = await apiClient.fetchBooks(magnetUri.value, forceReindex, ({ downloadedBytes, totalBytes, percent }) => {
+            let payload;
+
+            try {
+                payload = await fetchBooksViaInpx(forceReindex);
+            } catch {
                 setProgress({
                     phase: "loading-backend",
-                    downloadedBytes,
-                    totalBytes,
-                    percent: percent ?? 0
+                    processed: 0,
+                    total: 0,
+                    percent: 0,
+                    downloadedBytes: 0,
+                    totalBytes: null
                 });
+                status.value = "Client-side INPX parse failed. Falling back to backend payload...";
 
-                if (totalBytes) {
-                    status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} / ${formatMegabytes(totalBytes)} (${percent ?? 0}%)`;
-                    return;
-                }
+                payload = await apiClient.fetchBooks(magnetUri.value, forceReindex, ({ downloadedBytes, totalBytes, percent }) => {
+                    setProgress({
+                        phase: "loading-backend",
+                        downloadedBytes,
+                        totalBytes,
+                        percent: percent ?? 0
+                    });
 
-                status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} downloaded`;
-            });
+                    if (totalBytes) {
+                        status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} / ${formatMegabytes(totalBytes)} (${percent ?? 0}%)`;
+                        return;
+                    }
+
+                    status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} downloaded`;
+                });
+            }
+
             status.value = "Library data loaded. Building search index...";
             await applyBooks(payload, false);
             await cachePayload(magnetHash.value, payload);

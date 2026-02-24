@@ -19,6 +19,14 @@ export const LibraryControls = defineComponent({
                 return `Indexing: ${this.progress.processed}/${this.progress.total} (${this.progress.percent}%)`;
             }
 
+            if (this.progress.phase === "parsing") {
+                if (this.progress.total) {
+                    return `Parsing INPX: ${this.progress.processed}/${this.progress.total} (${this.progress.percent}%)`;
+                }
+
+                return `Parsing INPX: ${this.progress.percent}%`;
+            }
+
             if (this.progress.phase === "loading-cache") {
                 return "Loading local cache...";
             }
