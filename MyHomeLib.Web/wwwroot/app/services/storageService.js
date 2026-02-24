@@ -19,6 +19,89 @@ function openDb() {
     });
 }
 
+function isPlainObject(value) {
+    if (!value || typeof value !== "object") return false;
+
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+}
+
+function tryFastCloneSafeRecord(value) {
+    if (value === null) {
+        return { ok: true, normalized: null };
+    }
+
+    const valueType = typeof value;
+    if (valueType === "string" || valueType === "number" || valueType === "boolean") {
+        return { ok: true, normalized: value };
+    }
+
+    if (valueType !== "object" || (!Array.isArray(value) && !isPlainObject(value))) {
+        return { ok: false };
+    }
+
+    const stack = [value];
+    const seen = new WeakSet();
+
+    while (stack.length) {
+        const current = stack.pop();
+
+        if (current === null || typeof current !== "object") {
+            continue;
+        }
+
+        if (seen.has(current)) {
+            return { ok: false };
+        }
+
+        seen.add(current);
+
+        if (Array.isArray(current)) {
+            for (let i = 0; i < current.length; i += 1) {
+                const item = current[i];
+                const itemType = typeof item;
+
+                if (item === null || itemType === "string" || itemType === "number" || itemType === "boolean") {
+                    continue;
+                }
+
+                if (itemType === "object" && (Array.isArray(item) || isPlainObject(item))) {
+                    stack.push(item);
+                    continue;
+                }
+
+                return { ok: false };
+            }
+
+            continue;
+        }
+
+        if (!isPlainObject(current)) {
+            return { ok: false };
+        }
+
+        const keys = Object.keys(current);
+        for (let i = 0; i < keys.length; i += 1) {
+            const key = keys[i];
+            const item = current[key];
+            const itemType = typeof item;
+
+            if (item === null || itemType === "string" || itemType === "number" || itemType === "boolean") {
+                continue;
+            }
+
+            if (itemType === "object" && (Array.isArray(item) || isPlainObject(item))) {
+                stack.push(item);
+                continue;
+            }
+
+            return { ok: false };
+        }
+    }
+
+    return { ok: true, normalized: value };
+}
+
 function normalizeForIndexedDb(value, path, issues, seen) {
     if (value === null) return null;
 
@@ -116,6 +199,11 @@ function normalizeForIndexedDb(value, path, issues, seen) {
 }
 
 function normalizeRecordForStorage(record) {
+    const fastPath = tryFastCloneSafeRecord(record);
+    if (fastPath.ok) {
+        return { normalized: fastPath.normalized, issues: [] };
+    }
+
     const issues = [];
     const normalized = normalizeForIndexedDb(record, "$", issues, new WeakSet());
 

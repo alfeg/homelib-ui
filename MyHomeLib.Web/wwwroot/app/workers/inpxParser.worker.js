@@ -66,30 +66,37 @@ function normalizeAuthors(rawAuthors) {
     return parsed.join(", ");
 }
 
+function normalizeString(value) {
+    return typeof value === "string" ? value : String(value ?? "");
+}
+
+function normalizeId(value, fallbackId) {
+    const parsedId = Number.parseInt(normalizeString(value), 10);
+    return Number.isFinite(parsedId) ? parsedId : fallbackId;
+}
+
 function normalizeGenreCodes(rawGenre) {
-    return String(rawGenre ?? "")
+    return normalizeString(rawGenre)
         .split(GENRE_DELIMITER)
-        .map((code) => code.trim())
+        .map((code) => normalizeString(code).trim())
         .filter(Boolean);
 }
 
 function mapBook(fields, archiveFile, fallbackId) {
-    const parsedId = Number.parseInt(fields[7] ?? "", 10);
-    const id = Number.isFinite(parsedId) ? parsedId : fallbackId;
-    const rawGenre = fields[1] ?? "";
+    const rawGenre = normalizeString(fields[1]);
 
     return {
-        id,
-        title: fields[2] ?? "",
+        id: normalizeId(fields[7], fallbackId),
+        title: normalizeString(fields[2]),
         genre: rawGenre,
         genreCodes: normalizeGenreCodes(rawGenre),
-        authors: normalizeAuthors(fields[0] ?? ""),
-        series: fields[3] ?? "",
-        seriesNo: fields[4] ?? "",
-        lang: fields[11] ?? "",
-        file: fields[5] ?? "",
-        ext: fields[9] ?? "",
-        archiveFile
+        authors: normalizeAuthors(normalizeString(fields[0])),
+        series: normalizeString(fields[3]),
+        seriesNo: normalizeString(fields[4]),
+        lang: normalizeString(fields[11]),
+        file: normalizeString(fields[5]),
+        ext: normalizeString(fields[9]),
+        archiveFile: normalizeString(archiveFile)
     };
 }
 
@@ -169,7 +176,8 @@ self.onmessage = (event) => {
             type: "result",
             payload: {
                 metadata,
-                books
+                books,
+                booksNormalized: true
             }
         });
     } catch (error) {

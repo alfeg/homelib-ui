@@ -115,12 +115,20 @@ function normalizeBookGenres(book) {
     };
 }
 
-function normalizeBooksGenres(input) {
+function normalizeBooksGenres(input, { alreadyNormalized = false } = {}) {
     const source = Array.isArray(input) ? input : [];
+    if (alreadyNormalized) {
+        return source;
+    }
+
     return source.map((book) => normalizeBookGenres(book));
 }
 
-function createCacheBooksSnapshot(input) {
+function createCacheBooksSnapshot(input, { alreadyNormalized = false } = {}) {
+    if (alreadyNormalized) {
+        return Array.isArray(input) ? input : [];
+    }
+
     return normalizeBooksGenres(input).map((book) => {
         const genreCodes = Array.isArray(book.genreCodes)
             ? book.genreCodes
@@ -231,6 +239,7 @@ export function useLibraryState() {
 
     let searchRequestId = 0;
     let activeSearchRequestId = 0;
+    let booksNormalizedForCache = false;
 
     function resolveGenreLabel(genreCode) {
         if (genreCode === NO_GENRE_CODE) {
@@ -395,7 +404,9 @@ export function useLibraryState() {
 
     async function applyBooks(payload, fromCache, { tryRestore = false } = {}) {
         metadata.value = payload.metadata ?? null;
-        books.value = normalizeBooksGenres(payload.books ?? []);
+        const parserNormalizedBooks = payload?.booksNormalized === true;
+        books.value = normalizeBooksGenres(payload.books ?? [], { alreadyNormalized: parserNormalizedBooks });
+        booksNormalizedForCache = true;
         searchMatchedBooks.value = searchTerm.value.trim() ? [] : books.value;
         clearGenreFilters();
         recomputeGenreFacets();
@@ -467,7 +478,7 @@ export function useLibraryState() {
     }
 
     async function cachePayload(hash, payload, datasetSignature) {
-        const cacheBooks = createCacheBooksSnapshot(books.value);
+        const cacheBooks = createCacheBooksSnapshot(books.value, { alreadyNormalized: booksNormalizedForCache });
         const cacheMetadata = payload?.metadata && typeof payload.metadata === "object"
             ? { ...payload.metadata }
             : (payload?.metadata ?? null);
@@ -477,6 +488,7 @@ export function useLibraryState() {
             magnetUri: magnetUri.value,
             metadata: cacheMetadata,
             books: cacheBooks,
+            booksNormalized: true,
             indexMeta: {
                 ...(payload.indexMeta ?? {}),
                 count: cacheBooks.length,
@@ -699,6 +711,7 @@ export function useLibraryState() {
         magnetHash.value = "";
         metadata.value = null;
         books.value = [];
+        booksNormalizedForCache = false;
         searchMatchedBooks.value = [];
         filteredBooks.value = [];
         pagedBooks.value = [];
