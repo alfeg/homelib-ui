@@ -2,6 +2,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject DownloadQueueService Queue
 @inject UserSessionContext UserSession
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>Downloads — MyHomeLib</PageTitle>
@@ -96,6 +97,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await EnsureUserSessionAsync();
         await Refresh();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         _ = PollAsync();
@@ -135,6 +137,23 @@ else
         _timer?.Dispose();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         _ = PollAsync();
+    }
+
+    async Task EnsureUserSessionAsync()
+    {
+        if (UserSession.IsLoaded)
+            return;
+
+        try
+        {
+            var userId = await JS.InvokeAsync<string?>("myHomeLibSession.getUserId", "mhl_uid");
+            if (!string.IsNullOrWhiteSpace(userId))
+                UserSession.SetUserId(userId);
+        }
+        catch
+        {
+            // Keep empty user id; page will remain empty until session API is reachable.
+        }
     }
 
     public void Dispose() => _timer?.Dispose();

@@ -1,6 +1,10 @@
 namespace MyHomeLib.Web;
 
-public sealed class UserSessionContext(IHttpContextAccessor httpContextAccessor)
+public sealed class UserSessionContext
 {
-    public string UserId { get; } = httpContextAccessor.HttpContext?.Request.Cookies[UserSessionCookie.CookieName] ?? string.Empty;
+    public string UserId { get; private set; } = string.Empty;
+
+    public bool IsLoaded => !string.IsNullOrWhiteSpace(UserId);
+
+    public void SetUserId(string userId) => UserId = userId;
 }

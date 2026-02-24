@@ -6,6 +6,7 @@
 @inject NavigationManager NavigationManager
 @inject UserSessionContext UserSession
 @inject SearchPageState SearchState
+@inject IJSRuntime JS
 @implements IDisposable
 @using Humanizer
 @using System.Diagnostics
@@ -169,6 +170,8 @@ else if (!indexReady)
 
     protected override void OnInitialized()
     {
+        _ = EnsureUserSessionAsync();
+
         searchQuery = SearchState.Query;
         selectedLanguage = string.IsNullOrWhiteSpace(SearchState.Language) ? AllLanguagesValue : SearchState.Language;
         results = SearchState.Results;
@@ -293,6 +296,8 @@ else if (!indexReady)
 
     async Task Enqueue(BookItem book)
     {
+        await EnsureUserSessionAsync();
+
         if (string.IsNullOrWhiteSpace(UserSession.UserId))
         {
             Snackbar.Add("Session is not ready yet, please try again.", Severity.Warning);
@@ -314,6 +319,23 @@ else if (!indexReady)
         catch
         {
             languages = [];
+        }
+    }
+
+    async Task EnsureUserSessionAsync()
+    {
+        if (UserSession.IsLoaded)
+            return;
+
+        try
+        {
+            var userId = await JS.InvokeAsync<string?>("myHomeLibSession.getUserId", "mhl_uid");
+            if (!string.IsNullOrWhiteSpace(userId))
+                UserSession.SetUserId(userId);
+        }
+        catch
+        {
+            // Keep empty user id; UI already guards queue actions.
         }
     }
 
