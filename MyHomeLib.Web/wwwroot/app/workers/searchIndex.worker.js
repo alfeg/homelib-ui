@@ -122,6 +122,16 @@ function resolveBatchSize(value) {
     return Math.min(MAX_INDEX_BATCH_SIZE, Math.max(MIN_INDEX_BATCH_SIZE, parsed));
 }
 
+async function addToIndexAsync(targetIndex, id, content) {
+    if (typeof targetIndex?.addAsync === "function") {
+        await targetIndex.addAsync(id, content);
+        return;
+    }
+
+    // Compatibility fallback for import shapes that do not expose addAsync.
+    targetIndex.add(id, content);
+}
+
 self.onmessage = async (event) => {
     const message = event?.data ?? {};
 
@@ -164,13 +174,16 @@ self.onmessage = async (event) => {
 
         for (let start = 0; start < total; start += batchSize) {
             const end = Math.min(start + batchSize, total);
+            const batchAdds = [];
 
             for (let i = start; i < end; i += 1) {
                 const book = books[i];
                 const id = String(book.id);
                 booksById.set(id, book);
-                index.add(id, toSearchText(book));
+                batchAdds.push(addToIndexAsync(index, id, toSearchText(book)));
             }
+
+            await Promise.all(batchAdds);
 
             self.postMessage({
                 type: "build-progress",
