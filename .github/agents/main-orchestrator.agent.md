@@ -1,7 +1,7 @@
 ---
 name: MainOrchestrator
 description: Orchestrate BackendCoder, FrontendCoder, and FastCoder to deliver tasks end-to-end
-tools: ['agent', 'codebase', 'search', 'memory']
+tools: [agent, read/readFile, search/codebase, search/fileSearch, search/listDirectory, search/textSearch, memory]
 agents: ['BackendCoder', 'FrontendCoder', 'FastCoder']
 target: vscode
 ---

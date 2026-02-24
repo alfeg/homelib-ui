@@ -1,7 +1,7 @@
 ---
 name: FastCoder
 description: Handle very small, clear coding tasks quickly
-tools: [read/readFile, read/terminalLastCommand, edit/createDirectory, edit/createFile, edit/editFiles, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/searchResults, search/textSearch, search/usages, memory]
+tools: [execute/runInTerminal, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, read/readFile, read/problems, read/terminalLastCommand, edit/createDirectory, edit/createFile, edit/editFiles, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/searchResults, search/textSearch, search/usages, memory]
 target: vscode
 model: GPT-5 mini (copilot)
 ---
