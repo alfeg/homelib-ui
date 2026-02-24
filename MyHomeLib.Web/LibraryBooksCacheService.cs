@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.IO.Compression;
 using System.Text.Json;
+using MessagePack;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Library;
 using MyHomeListServer.Torrent;
@@ -16,30 +18,63 @@ public sealed class LibraryBooksCacheService(
 
     public async Task<LibraryBooksResponse> GetBooksAsync(string magnetUri, bool forceReindex, CancellationToken ct)
     {
-        var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
-        var cachePath = GetCacheFilePath(hash);
+        var cacheFiles = GetCacheFiles(magnetUri);
 
         if (!forceReindex)
         {
-            var cached = await TryReadCacheAsync(cachePath, ct);
+            var cached = await TryReadCacheAsync(cacheFiles.JsonPath, ct);
             if (cached is not null)
                 return cached;
         }
 
-        var gate = _locks.GetOrAdd(hash, static _ => new SemaphoreSlim(1, 1));
+        var gate = _locks.GetOrAdd(cacheFiles.Hash, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct);
         try
         {
             if (!forceReindex)
             {
-                var cached = await TryReadCacheAsync(cachePath, ct);
+                var cached = await TryReadCacheAsync(cacheFiles.JsonPath, ct);
                 if (cached is not null)
                     return cached;
             }
 
-            var indexed = await BuildIndexAsync(hash, magnetUri, ct);
-            await WriteCacheAtomicAsync(cachePath, indexed, ct);
+            var indexed = await BuildIndexAsync(cacheFiles.Hash, magnetUri, ct);
+            await WriteCacheArtifactsAtomicAsync(cacheFiles, indexed, ct);
             return indexed;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<byte[]> GetBooksMsgPackBrAsync(string magnetUri, bool forceReindex, CancellationToken ct)
+    {
+        var cacheFiles = GetCacheFiles(magnetUri);
+
+        if (!forceReindex && File.Exists(cacheFiles.MsgPackBrPath))
+            return await File.ReadAllBytesAsync(cacheFiles.MsgPackBrPath, ct);
+
+        var gate = _locks.GetOrAdd(cacheFiles.Hash, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (!forceReindex && File.Exists(cacheFiles.MsgPackBrPath))
+                return await File.ReadAllBytesAsync(cacheFiles.MsgPackBrPath, ct);
+
+            LibraryBooksResponse response;
+            if (!forceReindex)
+            {
+                response = await TryReadCacheAsync(cacheFiles.JsonPath, ct)
+                    ?? await BuildIndexAsync(cacheFiles.Hash, magnetUri, ct);
+            }
+            else
+            {
+                response = await BuildIndexAsync(cacheFiles.Hash, magnetUri, ct);
+            }
+
+            await WriteCacheArtifactsAtomicAsync(cacheFiles, response, ct);
+            return await File.ReadAllBytesAsync(cacheFiles.MsgPackBrPath, ct);
         }
         finally
         {
@@ -69,38 +104,49 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
-    private async Task WriteCacheAtomicAsync(string cachePath, LibraryBooksResponse response, CancellationToken ct)
+    private async Task WriteCacheArtifactsAtomicAsync(CacheFiles cacheFiles, LibraryBooksResponse response, CancellationToken ct)
     {
         Directory.CreateDirectory(_cacheDirectory);
 
-        var tempPath = Path.Combine(_cacheDirectory, $"{Path.GetFileName(cachePath)}.{Guid.NewGuid():N}.tmp");
+        var jsonTempPath = CreateTempPath(cacheFiles.JsonPath);
+        var msgPackTempPath = CreateTempPath(cacheFiles.MsgPackPath);
+        var msgPackBrTempPath = CreateTempPath(cacheFiles.MsgPackBrPath);
+
         try
         {
-            await using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            await using (var stream = new FileStream(jsonTempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 await JsonSerializer.SerializeAsync(stream, response, cancellationToken: ct);
             }
 
-            File.Move(tempPath, cachePath, overwrite: true);
+            var msgPackBytes = MessagePackSerializer.Serialize(response.ToMsgPack());
+            await File.WriteAllBytesAsync(msgPackTempPath, msgPackBytes, ct);
+
+            var compressedBytes = BrotliCompress(msgPackBytes);
+            await File.WriteAllBytesAsync(msgPackBrTempPath, compressedBytes, ct);
+
+            File.Move(jsonTempPath, cacheFiles.JsonPath, overwrite: true);
+            File.Move(msgPackTempPath, cacheFiles.MsgPackPath, overwrite: true);
+            File.Move(msgPackBrTempPath, cacheFiles.MsgPackBrPath, overwrite: true);
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to clean up temp cache file {Path}", tempPath);
-            }
+            TryDeleteTempFile(jsonTempPath);
+            TryDeleteTempFile(msgPackTempPath);
+            TryDeleteTempFile(msgPackBrTempPath);
         }
     }
 
-    private string GetCacheFilePath(string hash)
+    private CacheFiles GetCacheFiles(string magnetUri)
     {
+        var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
         var normalizedHash = NormalizeHash(hash);
-        return Path.Combine(_cacheDirectory, $"library_{normalizedHash}.json");
+
+        return new CacheFiles(
+            hash,
+            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.json"),
+            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.msgpack"),
+            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.msgpack.br"));
     }
 
     private static string ResolveCacheDirectory(string? downloadsDirectory)
@@ -177,4 +223,33 @@ public sealed class LibraryBooksCacheService(
             }
         }
     }
+
+    private static string CreateTempPath(string targetPath) =>
+        Path.Combine(Path.GetDirectoryName(targetPath)!, $"{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+
+    private void TryDeleteTempFile(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to clean up temp cache file {Path}", tempPath);
+        }
+    }
+
+    private static byte[] BrotliCompress(byte[] input)
+    {
+        using var output = new MemoryStream();
+        using (var brotli = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            brotli.Write(input, 0, input.Length);
+        }
+
+        return output.ToArray();
+    }
+
+    private sealed record CacheFiles(string Hash, string JsonPath, string MsgPackPath, string MsgPackBrPath);
 }

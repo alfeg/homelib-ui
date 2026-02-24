@@ -1,6 +1,4 @@
-using System.IO.Compression;
 using System.Text;
-using MessagePack;
 using Microsoft.AspNetCore.Http;
 using MyHomeLib.Web;
 using MyHomeListServer.Torrent;
@@ -128,22 +126,17 @@ app.MapPost("/api/library/books/msgpack", async (
 
     try
     {
-        var response = await booksCache.GetBooksAsync(request.MagnetUri, request.ForceReindex, ct);
-        var minimizedPayload = response.ToMsgPack();
-
-        var msgPackBytes = MessagePackSerializer.Serialize(minimizedPayload);
-        var compressedBytes = BrotliCompress(msgPackBytes);
-
+        var compressedPayload = await booksCache.GetBooksMsgPackBrAsync(request.MagnetUri, request.ForceReindex, ct);
         httpContext.Response.Headers.ContentEncoding = "br";
-        return Results.File(compressedBytes, "application/msgpack");
+        return Results.File(compressedPayload, "application/msgpack");
     }
-    catch (FormatException ex)
+    catch (FormatException)
     {
-        return Results.BadRequest(ex.Message);
+        return Results.BadRequest("Invalid magnetUri.");
     }
-    catch (InvalidOperationException ex)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(ex.Message);
+        return Results.BadRequest("Unable to prepare library books payload.");
     }
     catch (HttpRequestException)
     {
@@ -287,13 +280,4 @@ static string MakeSafeFileName(string name)
     return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
 }
 
-static byte[] BrotliCompress(byte[] input)
-{
-    using var output = new MemoryStream();
-    using (var brotli = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true))
-    {
-        brotli.Write(input, 0, input.Length);
-    }
 
-    return output.ToArray();
-}
