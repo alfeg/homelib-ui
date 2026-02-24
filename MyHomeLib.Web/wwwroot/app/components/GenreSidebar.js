@@ -35,7 +35,7 @@ export const GenreSidebar = defineComponent({
                             :checked="isSelected(item.genre)"
                             @change="$emit('toggle', item.genre)"
                         />
-                        <span class="genre-name">{{ item.genre }}</span>
+                        <span class="genre-name">{{ item.label || item.genre }}</span>
                         <span class="genre-count">{{ item.count }}</span>
                     </label>
                 </li>

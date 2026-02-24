@@ -1,6 +1,7 @@
 import { unzipSync } from "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js";
 
 const ROW_DELIMITER = "\x04";
+const GENRE_DELIMITER = ":";
 const utf8Decoder = new TextDecoder("utf-8");
 
 let cp1251Decoder = null;
@@ -65,14 +66,23 @@ function normalizeAuthors(rawAuthors) {
     return parsed.join(", ");
 }
 
+function normalizeGenreCodes(rawGenre) {
+    return String(rawGenre ?? "")
+        .split(GENRE_DELIMITER)
+        .map((code) => code.trim())
+        .filter(Boolean);
+}
+
 function mapBook(fields, archiveFile, fallbackId) {
     const parsedId = Number.parseInt(fields[7] ?? "", 10);
     const id = Number.isFinite(parsedId) ? parsedId : fallbackId;
+    const rawGenre = fields[1] ?? "";
 
     return {
         id,
         title: fields[2] ?? "",
-        genre: fields[1] ?? "",
+        genre: rawGenre,
+        genreCodes: normalizeGenreCodes(rawGenre),
         authors: normalizeAuthors(fields[0] ?? ""),
         series: fields[3] ?? "",
         seriesNo: fields[4] ?? "",
