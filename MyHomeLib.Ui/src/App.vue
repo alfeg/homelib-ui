@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, unref } from "vue";
 import { useLibraryState } from "./composables/useLibraryState";
 import MagnetGate from "./components/MagnetGate.vue";
 import LibraryControls from "./components/LibraryControls.vue";
@@ -15,49 +15,50 @@ onMounted(() => state.bootstrap());
   <main>
     <MagnetGate
       v-if="!state.isMagnetSet"
-      :loading="state.isLoading"
-      :error="state.error"
+      :loading="unref(state.isLoading)"
+      :error="unref(state.error)"
       @submit="state.submitMagnet"
       @submit-torrent="state.submitTorrentFile"
     />
 
     <section v-else class="max-w-7xl mx-auto p-5">
       <LibraryControls
-        :hash="state.magnetHash"
-        :metadata="state.metadata"
-        :status="state.status"
-        :progress="state.indexProgress"
-        :has-cache="state.hasCache"
-        :last-updated-at="state.lastUpdatedAt"
-        :reindexing="state.isReindexing"
+        :hash="unref(state.magnetHash)"
+        :metadata="unref(state.metadata)"
+        :status="unref(state.status)"
+        :progress="unref(state.indexProgress)"
+        :has-cache="unref(state.hasCache)"
+        :last-updated-at="unref(state.lastUpdatedAt)"
+        :reindexing="unref(state.isReindexing)"
         @reindex="state.reindexCurrent"
         @reset="state.resetAll"
       />
 
       <div class="grid grid-cols-1 lg:grid-cols-[260px,minmax(0,1fr)] gap-4 items-start">
         <GenreSidebar
-          :genres="state.genreFacets"
-          :selected-genres="state.selectedGenres"
+          :genres="unref(state.genreFacets)"
+          :selected-genres="unref(state.selectedGenres)"
           @toggle="state.toggleGenreFilter"
           @clear="state.clearGenreFilters"
         />
 
         <div class="min-w-0">
           <SearchBar
-            v-model="state.searchTerm"
-            :total="state.books.length"
-            :filtered="state.filteredBooks.length"
+            :model-value="unref(state.searchTerm)"
+            @update:model-value="state.searchTerm = $event"
+            :total="unref(state.books).length"
+            :filtered="unref(state.filteredBooks).length"
           />
 
           <p v-if="state.error" class="text-red-700 mb-2">{{ state.error }}</p>
 
           <BooksTable
-            :books="state.pagedBooks"
-            :downloading-by-id="state.downloadingById"
-            :current-page="state.currentPage"
-            :total-pages="state.totalPages"
-            :visible-range="state.visibleRange"
-            :total-results="state.filteredBooks.length"
+            :books="unref(state.pagedBooks)"
+            :downloading-by-id="unref(state.downloadingById)"
+            :current-page="unref(state.currentPage)"
+            :total-pages="unref(state.totalPages)"
+            :visible-range="unref(state.visibleRange)"
+            :total-results="unref(state.filteredBooks).length"
             @download="state.downloadBook"
             @next-page="state.nextPage"
             @previous-page="state.previousPage"
