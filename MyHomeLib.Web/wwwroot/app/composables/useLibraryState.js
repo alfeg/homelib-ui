@@ -552,12 +552,6 @@ export function useLibraryState() {
     }
 
     async function bootstrap() {
-        try {
-            await apiClient.getUserId();
-        } catch {
-            // session fetch is optional for UI boot
-        }
-
         const stored = magnetStore.get();
         if (!stored) return;
 

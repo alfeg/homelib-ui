@@ -40,32 +40,10 @@ await app.Services.GetRequiredService<DatabaseMigrationService>().MigrateAsync()
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 
-app.Use(async (context, next) =>
-{
-    if (!context.Request.Cookies.ContainsKey(UserSessionCookie.CookieName))
-    {
-        context.Response.Cookies.Append(UserSessionCookie.CookieName, UserSessionCookie.NewUserId(), BuildUserCookieOptions(context));
-    }
-
-    await next();
-});
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapGet("/favicon.ico", () => Results.NoContent());
-
-app.MapGet("/api/session/user-id", (HttpContext httpContext) =>
-{
-    var userId = httpContext.Request.Cookies[UserSessionCookie.CookieName];
-    if (string.IsNullOrWhiteSpace(userId))
-    {
-        userId = UserSessionCookie.NewUserId();
-        httpContext.Response.Cookies.Append(UserSessionCookie.CookieName, userId, BuildUserCookieOptions(httpContext));
-    }
-
-    return Results.Ok(new { userId });
-});
 
 app.MapPost("/api/library/books", async (
     LibraryBooksRequest request,
@@ -306,16 +284,6 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 app.Run();
-
-static CookieOptions BuildUserCookieOptions(HttpContext context) => new()
-{
-    Expires = DateTimeOffset.UtcNow.AddYears(10),
-    HttpOnly = true,
-    IsEssential = true,
-    SameSite = SameSiteMode.Lax,
-    Secure = context.Request.IsHttps
-};
-
 
 static string MakeSafeFileName(string name)
 {

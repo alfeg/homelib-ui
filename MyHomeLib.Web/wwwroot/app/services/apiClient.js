@@ -197,16 +197,6 @@ function parseDownloadName(contentDisposition) {
 }
 
 export const apiClient = {
-    async getUserId() {
-        const response = await fetch("/api/session/user-id", {
-            method: "GET",
-            credentials: "include"
-        });
-
-        if (!response.ok) throw new Error("Failed to initialize session");
-        return response.json();
-    },
-
     async fetchBooks(magnetUri, forceReindex = false, onProgress) {
         const body = { magnetUri, forceReindex };
 
