@@ -398,12 +398,19 @@ export function useLibraryState() {
 
         try {
             magnetHash.value = parseHashFromMagnet(stored);
-            await loadLibraryForCurrentMagnet();
         } catch {
             magnetStore.clear();
             magnetUri.value = "";
             magnetHash.value = "";
             resetProgress();
+            return;
+        }
+
+        try {
+            await loadLibraryForCurrentMagnet();
+        } catch (err) {
+            error.value = err instanceof Error ? err.message : "Failed to load saved library.";
+            status.value = "Failed to load saved library. Please try reindexing.";
         }
     }
 
@@ -501,3 +508,4 @@ export function useLibraryState() {
         previousPage
     };
 }
+
