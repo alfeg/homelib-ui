@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { computed, reactive, ref, watch } from "vue";
+import { computed, proxyRefs, reactive, ref, watch } from "vue";
 import { apiClient } from "../services/apiClient";
 import { parseHashFromMagnet, magnetStore } from "../services/magnetService";
 import { libraryCacheStore } from "../services/storageService";
@@ -771,7 +771,7 @@ export function useLibraryState() {
 
     ensureGenreLabelsLoaded();
 
-    return {
+    return proxyRefs({
         magnetUri,
         magnetHash,
         metadata,
@@ -807,5 +807,5 @@ export function useLibraryState() {
         previousPage,
         toggleGenreFilter,
         clearGenreFilters
-    };
+    });
 }
