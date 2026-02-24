@@ -82,6 +82,38 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
+    public async Task<(byte[] Data, string FileName)> GetInpxFileAsync(string magnetUri, bool forceReindex, CancellationToken ct)
+    {
+        var cacheFiles = GetCacheFiles(magnetUri);
+
+        if (!forceReindex)
+        {
+            var cached = await TryReadCachedBytesAsync(cacheFiles.InpxPath, ct);
+            if (cached is not null)
+                return (cached, Path.GetFileName(cacheFiles.InpxPath));
+        }
+
+        var gate = _locks.GetOrAdd(cacheFiles.Hash, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (!forceReindex)
+            {
+                var cached = await TryReadCachedBytesAsync(cacheFiles.InpxPath, ct);
+                if (cached is not null)
+                    return (cached, Path.GetFileName(cacheFiles.InpxPath));
+            }
+
+            var inpxData = await DownloadInpxAsync(cacheFiles.Hash, magnetUri, ct);
+            await WriteBytesAtomicAsync(cacheFiles.InpxPath, inpxData, ct);
+            return (inpxData, Path.GetFileName(cacheFiles.InpxPath));
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     private async Task<LibraryBooksResponse?> TryReadCacheAsync(string cachePath, CancellationToken ct)
     {
         if (!File.Exists(cachePath))
@@ -96,6 +128,22 @@ public sealed class LibraryBooksCacheService(
         {
             logger.LogWarning(ex, "Cache file is corrupted and will be rebuilt: {Path}", cachePath);
             return null;
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning(ex, "Failed to read cache file, rebuilding: {Path}", cachePath);
+            return null;
+        }
+    }
+
+    private async Task<byte[]?> TryReadCachedBytesAsync(string cachePath, CancellationToken ct)
+    {
+        if (!File.Exists(cachePath))
+            return null;
+
+        try
+        {
+            return await File.ReadAllBytesAsync(cachePath, ct);
         }
         catch (IOException ex)
         {
@@ -146,7 +194,8 @@ public sealed class LibraryBooksCacheService(
             hash,
             Path.Combine(_cacheDirectory, $"library_{normalizedHash}.json"),
             Path.Combine(_cacheDirectory, $"library_{normalizedHash}.msgpack"),
-            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.msgpack.br"));
+            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.msgpack.br"),
+            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.inpx"));
     }
 
     private static string ResolveCacheDirectory(string? downloadsDirectory)
@@ -171,21 +220,12 @@ public sealed class LibraryBooksCacheService(
     private async Task<LibraryBooksResponse> BuildIndexAsync(string hash, string magnetUri, CancellationToken ct)
     {
         logger.LogInformation("Indexing INPX for library {Hash}", hash);
-
-        var searchResponse = await downloadManager.SearchFiles(
-            new SearchRequest(hash, "*.inpx") { MagnetUri = magnetUri }, ct);
-
-        var inpxPath = searchResponse?.Names.FirstOrDefault()
-            ?? throw new InvalidOperationException("No *.inpx file found in the torrent.");
-
-        var downloadResponse = await downloadManager.DownloadFile(
-            new DownloadRequest(hash, inpxPath) { MagnetUri = magnetUri }, ct)
-            ?? throw new InvalidOperationException("Failed to download INPX file.");
+        var inpxData = await DownloadInpxAsync(hash, magnetUri, ct);
 
         var tempFile = Path.Combine(Path.GetTempPath(), $"mhl_{hash}_{Guid.NewGuid():N}.inpx");
         try
         {
-            await File.WriteAllBytesAsync(tempFile, downloadResponse.Data, ct);
+            await File.WriteAllBytesAsync(tempFile, inpxData, ct);
 
             var metadata = new InpxLibrary();
             var reader = new InpxReader();
@@ -224,6 +264,37 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
+    private async Task<byte[]> DownloadInpxAsync(string hash, string magnetUri, CancellationToken ct)
+    {
+        var searchResponse = await downloadManager.SearchFiles(
+            new SearchRequest(hash, "*.inpx") { MagnetUri = magnetUri }, ct);
+
+        var inpxPath = searchResponse?.Names.FirstOrDefault()
+            ?? throw new InvalidOperationException("No *.inpx file found in the torrent.");
+
+        var downloadResponse = await downloadManager.DownloadFile(
+            new DownloadRequest(hash, inpxPath) { MagnetUri = magnetUri }, ct)
+            ?? throw new InvalidOperationException("Failed to download INPX file.");
+
+        return downloadResponse.Data;
+    }
+
+    private async Task WriteBytesAtomicAsync(string targetPath, byte[] data, CancellationToken ct)
+    {
+        Directory.CreateDirectory(_cacheDirectory);
+
+        var tempPath = CreateTempPath(targetPath);
+        try
+        {
+            await File.WriteAllBytesAsync(tempPath, data, ct);
+            File.Move(tempPath, targetPath, overwrite: true);
+        }
+        finally
+        {
+            TryDeleteTempFile(tempPath);
+        }
+    }
+
     private static string CreateTempPath(string targetPath) =>
         Path.Combine(Path.GetDirectoryName(targetPath)!, $"{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
 
@@ -251,5 +322,5 @@ public sealed class LibraryBooksCacheService(
         return output.ToArray();
     }
 
-    private sealed record CacheFiles(string Hash, string JsonPath, string MsgPackPath, string MsgPackBrPath);
+    private sealed record CacheFiles(string Hash, string JsonPath, string MsgPackPath, string MsgPackBrPath, string InpxPath);
 }
