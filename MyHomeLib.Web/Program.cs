@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.FileProviders;
 using MyHomeLib.Web;
 using MyHomeListServer.Torrent;
 
@@ -33,8 +34,32 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleTorrentCleanup
 
 var app = builder.Build();
 
+var spaDistPath = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "MyHomeLib.Ui", "dist"));
+var hasSpaDist = Directory.Exists(spaDistPath);
+var spaIndexRoot = hasSpaDist ? spaDistPath : app.Environment.WebRootPath;
+
+if (hasSpaDist)
+    app.Logger.LogInformation("Serving SPA static assets from {SpaDistPath}", spaDistPath);
+else
+    app.Logger.LogInformation("SPA dist path {SpaDistPath} not found. Falling back to wwwroot ({WebRootPath}).", spaDistPath, app.Environment.WebRootPath);
+
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
+
+if (hasSpaDist)
+{
+    var spaDistProvider = new PhysicalFileProvider(spaDistPath);
+    app.UseDefaultFiles(new DefaultFilesOptions
+    {
+        FileProvider = spaDistProvider,
+        RequestPath = ""
+    });
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = spaDistProvider,
+        RequestPath = ""
+    });
+}
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -166,16 +191,25 @@ app.MapPost("/api/library/download", async (
 
 app.MapFallback(async context =>
 {
-    if (context.Request.Path.StartsWithSegments("/api"))
+    if (!HttpMethods.IsGet(context.Request.Method)
+        && !HttpMethods.IsHead(context.Request.Method))
     {
         context.Response.StatusCode = StatusCodes.Status404NotFound;
         return;
     }
 
-    var indexPath = Path.Combine(app.Environment.WebRootPath, "index.html");
+    if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
+        || Path.HasExtension(context.Request.Path.Value))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    var indexPath = Path.Combine(spaIndexRoot, "index.html");
     if (!File.Exists(indexPath))
     {
         context.Response.StatusCode = StatusCodes.Status404NotFound;
+        await context.Response.WriteAsync("SPA index.html not found. Build MyHomeLib.Ui/dist or provide wwwroot/index.html.");
         return;
     }
 
@@ -199,3 +233,4 @@ static string MakeSafeFileName(string name)
     var invalid = Path.GetInvalidFileNameChars();
     return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
 }
+

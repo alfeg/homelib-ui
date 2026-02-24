@@ -37,6 +37,13 @@ To customise the magnet URI or download directory, set environment variables or 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - TorrServe running on `http://localhost:8090` (download a binary from the [TorrServe releases](https://github.com/YouROK/TorrServer/releases))
 
+### Frontend (MyHomeLib.Ui)
+
+- Standalone frontend app lives in `MyHomeLib.Ui/`.
+- Install dependencies: `npm install`
+- Build static assets: `npm run build`
+- `MyHomeLib.Web` serves `MyHomeLib.Ui/dist` when it exists; otherwise it falls back to `MyHomeLib.Web/wwwroot`.
+
 ### Steps
 
 ```bash
@@ -232,6 +239,13 @@ environment:
   TorrServer-windows-amd64.exe
   ```
   По умолчанию TorrServe слушает на `http://localhost:8090`.
+
+### Фронтенд (MyHomeLib.Ui)
+
+- Отдельное фронтенд-приложение находится в `MyHomeLib.Ui/`.
+- Установка зависимостей: `npm install`
+- Сборка статики: `npm run build`
+- `MyHomeLib.Web` отдаёт `MyHomeLib.Ui/dist`, если папка существует; иначе используется `MyHomeLib.Web/wwwroot`.
 
 ### Шаги
 
