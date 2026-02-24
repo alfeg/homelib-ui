@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Library;
 using MyHomeListServer.Torrent;
@@ -13,39 +12,6 @@ public sealed class LibraryBooksCacheService(
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _cacheDirectory = ResolveCacheDirectory(config.Value.DownloadsDirectory);
-
-    public async Task<LibraryBooksResponse> GetBooksAsync(string magnetUri, bool forceReindex, CancellationToken ct)
-    {
-        var cacheFiles = GetCacheFiles(magnetUri);
-
-        if (!forceReindex)
-        {
-            var cached = await TryReadCacheAsync(cacheFiles.JsonPath, ct);
-            if (cached is not null)
-                return cached;
-        }
-
-        var gate = _locks.GetOrAdd(cacheFiles.Hash, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
-        try
-        {
-            if (!forceReindex)
-            {
-                var cached = await TryReadCacheAsync(cacheFiles.JsonPath, ct);
-                if (cached is not null)
-                    return cached;
-            }
-
-            var indexed = await BuildIndexAsync(cacheFiles.Hash, magnetUri, ct);
-            await WriteCacheArtifactsAtomicAsync(cacheFiles, indexed, ct);
-            return indexed;
-        }
-        finally
-        {
-            gate.Release();
-        }
-    }
-
 
     public async Task<(byte[] Data, string FileName)> GetInpxFileAsync(string magnetUri, bool forceReindex, CancellationToken ct)
     {
@@ -79,28 +45,6 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
-    private async Task<LibraryBooksResponse?> TryReadCacheAsync(string cachePath, CancellationToken ct)
-    {
-        if (!File.Exists(cachePath))
-            return null;
-
-        try
-        {
-            await using var stream = File.OpenRead(cachePath);
-            return await JsonSerializer.DeserializeAsync<LibraryBooksResponse>(stream, cancellationToken: ct);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogWarning(ex, "Cache file is corrupted and will be rebuilt: {Path}", cachePath);
-            return null;
-        }
-        catch (IOException ex)
-        {
-            logger.LogWarning(ex, "Failed to read cache file, rebuilding: {Path}", cachePath);
-            return null;
-        }
-    }
-
     private async Task<byte[]?> TryReadCachedBytesAsync(string cachePath, CancellationToken ct)
     {
         if (!File.Exists(cachePath))
@@ -117,27 +61,6 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
-    private async Task WriteCacheArtifactsAtomicAsync(CacheFiles cacheFiles, LibraryBooksResponse response, CancellationToken ct)
-    {
-        Directory.CreateDirectory(_cacheDirectory);
-
-        var jsonTempPath = CreateTempPath(cacheFiles.JsonPath);
-
-        try
-        {
-            await using (var stream = new FileStream(jsonTempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                await JsonSerializer.SerializeAsync(stream, response, cancellationToken: ct);
-            }
-
-            File.Move(jsonTempPath, cacheFiles.JsonPath, overwrite: true);
-        }
-        finally
-        {
-            TryDeleteTempFile(jsonTempPath);
-        }
-    }
-
     private CacheFiles GetCacheFiles(string magnetUri)
     {
         var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
@@ -145,7 +68,6 @@ public sealed class LibraryBooksCacheService(
 
         return new CacheFiles(
             hash,
-            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.json"),
             Path.Combine(_cacheDirectory, $"library_{normalizedHash}.inpx"));
     }
 
@@ -166,53 +88,6 @@ public sealed class LibraryBooksCacheService(
             .ToArray());
 
         return string.IsNullOrWhiteSpace(normalized) ? "UNKNOWN" : normalized;
-    }
-
-    private async Task<LibraryBooksResponse> BuildIndexAsync(string hash, string magnetUri, CancellationToken ct)
-    {
-        logger.LogInformation("Indexing INPX for library {Hash}", hash);
-        var inpxData = await DownloadInpxAsync(hash, magnetUri, ct);
-
-        var tempFile = Path.Combine(Path.GetTempPath(), $"mhl_{hash}_{Guid.NewGuid():N}.inpx");
-        try
-        {
-            await File.WriteAllBytesAsync(tempFile, inpxData, ct);
-
-            var metadata = new InpxLibrary();
-            var reader = new InpxReader();
-            var books = new List<LibraryBookItem>();
-
-            await foreach (var item in reader.ReadLibraryAsync(tempFile, metadata).WithCancellation(ct))
-            {
-                books.Add(new LibraryBookItem(
-                    item.Id,
-                    item.Title,
-                    item.Authors,
-                    item.Series,
-                    item.SeriesNo,
-                    item.Lang,
-                    item.File,
-                    item.Ext,
-                    item.ArchiveFile));
-            }
-
-            return new LibraryBooksResponse(
-                hash,
-                new LibraryBooksMetadata(metadata.Description, metadata.Version, books.Count),
-                books);
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(tempFile))
-                    File.Delete(tempFile);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to clean up temp INPX file {Path}", tempFile);
-            }
-        }
     }
 
     private async Task<byte[]> DownloadInpxAsync(string hash, string magnetUri, CancellationToken ct)
@@ -262,6 +137,5 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
-
-    private sealed record CacheFiles(string Hash, string JsonPath, string InpxPath);
+    private sealed record CacheFiles(string Hash, string InpxPath);
 }

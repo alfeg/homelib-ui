@@ -41,50 +41,6 @@ app.UseStaticFiles();
 
 app.MapGet("/favicon.ico", () => Results.NoContent());
 
-app.MapPost("/api/library/books", async (
-    LibraryBooksRequest request,
-    LibraryBooksCacheService booksCache,
-    IdleTorrentCleanupService idleTorrentCleanupService,
-    ILogger<Program> logger,
-    CancellationToken ct) =>
-{
-    if (string.IsNullOrWhiteSpace(request.MagnetUri))
-        return Results.BadRequest("magnetUri is required.");
-
-    idleTorrentCleanupService.MarkActivity(request.MagnetUri);
-
-    try
-    {
-        var response = await booksCache.GetBooksAsync(request.MagnetUri, request.ForceReindex, ct);
-        return Results.Ok(response);
-    }
-    catch (FormatException ex)
-    {
-        return Results.BadRequest(ex.Message);
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(ex.Message);
-    }
-    catch (HttpRequestException)
-    {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-    catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-    {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-    catch (TimeoutException)
-    {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Unhandled error in /api/library/books.");
-        return Results.Text("Internal server error.", statusCode: StatusCodes.Status500InternalServerError);
-    }
-});
-
 app.MapPost("/api/library/inpx", async (
     LibraryBooksRequest request,
     LibraryBooksCacheService booksCache,
@@ -108,7 +64,7 @@ app.MapPost("/api/library/inpx", async (
     }
     catch (InvalidOperationException)
     {
-        return Results.BadRequest("Unable to prepare library books payload.");
+        return Results.BadRequest("Unable to prepare INPX file.");
     }
     catch (HttpRequestException)
     {
@@ -128,6 +84,7 @@ app.MapPost("/api/library/inpx", async (
         return Results.Text("Internal server error.", statusCode: StatusCodes.Status500InternalServerError);
     }
 });
+
 app.MapPost("/api/library/download", async (
     LibraryDirectDownloadRequest request,
     DownloadManager downloadManager,
@@ -204,7 +161,6 @@ app.MapPost("/api/library/download", async (
     }
 });
 
-
 app.MapFallback(async context =>
 {
     if (context.Request.Path.StartsWithSegments("/api"))
@@ -240,6 +196,3 @@ static string MakeSafeFileName(string name)
     var invalid = Path.GetInvalidFileNameChars();
     return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
 }
-
-
-
