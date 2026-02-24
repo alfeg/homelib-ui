@@ -125,11 +125,11 @@ function normalizeBooksGenres(input, { alreadyNormalized = false } = {}) {
 }
 
 function createCacheBooksSnapshot(input, { alreadyNormalized = false } = {}) {
-    if (alreadyNormalized) {
-        return Array.isArray(input) ? input : [];
-    }
+    const sourceBooks = alreadyNormalized
+        ? (Array.isArray(input) ? input : [])
+        : normalizeBooksGenres(input);
 
-    return normalizeBooksGenres(input).map((book) => {
+    return sourceBooks.map((book) => {
         const genreCodes = Array.isArray(book.genreCodes)
             ? book.genreCodes
             : parseRawGenreCodes(book.genre);

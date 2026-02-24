@@ -198,6 +198,34 @@ function normalizeForIndexedDb(value, path, issues, seen) {
     return null;
 }
 
+
+function findFirstTopLevelCloneabilityIssue(record) {
+    if (typeof structuredClone !== "function") {
+        return null;
+    }
+
+    if (!record || typeof record !== "object") {
+        return null;
+    }
+
+    const keys = Object.keys(record);
+
+    for (let i = 0; i < keys.length; i += 1) {
+        const key = keys[i];
+
+        try {
+            structuredClone(record[key]);
+        } catch (err) {
+            return {
+                property: key,
+                reason: err?.message ?? "could not be cloned"
+            };
+        }
+    }
+
+    return null;
+}
+
 function normalizeRecordForStorage(record) {
     const fastPath = tryFastCloneSafeRecord(record);
     if (fastPath.ok) {
@@ -233,13 +261,26 @@ async function write(record) {
     const db = await openDb();
     const { normalized, issues } = normalizeRecordForStorage(record);
 
+    let payloadToStore = normalized;
+    const cloneabilityIssue = findFirstTopLevelCloneabilityIssue(payloadToStore);
+
+    if (cloneabilityIssue) {
+        console.warn("[libraryCacheStore] Top-level cache field is not cloneable before IndexedDB save.", {
+            hash: payloadToStore?.hash ?? null,
+            property: cloneabilityIssue.property,
+            reason: cloneabilityIssue.reason
+        });
+
+        payloadToStore = normalizeForIndexedDb(payloadToStore, "$", issues, new WeakSet());
+    }
+
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readwrite");
-        const request = tx.objectStore(STORE_NAME).put(normalized);
+        const request = tx.objectStore(STORE_NAME).put(payloadToStore);
 
         request.onerror = () => {
             console.error("[libraryCacheStore] IndexedDB save failed.", {
-                hash: normalized?.hash ?? null,
+                hash: payloadToStore?.hash ?? null,
                 reason: request.error?.message ?? "unknown",
                 firstIssue: issues[0] ?? null
             });
