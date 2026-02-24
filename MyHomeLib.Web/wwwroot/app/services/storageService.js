@@ -250,6 +250,18 @@ async function write(record) {
     });
 }
 
+async function remove(hash) {
+    const db = await openDb();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).delete(hash);
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error ?? new Error("Failed to remove cache entry"));
+    });
+}
+
 async function clearAll() {
     const db = await openDb();
 
@@ -270,5 +282,6 @@ export const libraryCacheStore = {
             updatedAt: new Date().toISOString()
         });
     },
+    removeByHash: remove,
     clearAll
 };

@@ -471,7 +471,7 @@ export function useLibraryState() {
             downloadedBytes: 0,
             totalBytes: null
         });
-        status.value = fromCache ? "Loaded from local cache." : "Library indexed from backend.";
+        status.value = fromCache ? "Loaded from local cache." : "Library indexed locally from INPX.";
 
         await refreshSearchResults();
         return { datasetSignature, restored: false };
@@ -498,7 +498,7 @@ export function useLibraryState() {
         });
     }
 
-    async function fetchBooksViaInpx(forceReindex) {
+    async function fetchBooksViaInpx({ reindexing = false } = {}) {
         setProgress({
             phase: "loading-backend",
             processed: 0,
@@ -507,11 +507,11 @@ export function useLibraryState() {
             downloadedBytes: 0,
             totalBytes: null
         });
-        status.value = forceReindex
-            ? "Reindexing library: downloading INPX from backend..."
+        status.value = reindexing
+            ? "Reindexing locally: downloading INPX from backend..."
             : "Loading library: downloading INPX from backend...";
 
-        const inpxBuffer = await apiClient.fetchInpx(magnetUri.value, forceReindex, ({ downloadedBytes, totalBytes, percent }) => {
+        const inpxBuffer = await apiClient.fetchInpx(magnetUri.value, ({ downloadedBytes, totalBytes, percent }) => {
             setProgress({
                 phase: "loading-backend",
                 downloadedBytes,
@@ -556,15 +556,15 @@ export function useLibraryState() {
         });
     }
 
-    async function fetchAndApply(forceReindex = false) {
+    async function fetchAndApply({ reindexing = false } = {}) {
         if (!magnetUri.value || !magnetHash.value) return;
 
         error.value = "";
-        isLoading.value = !forceReindex;
-        isReindexing.value = forceReindex;
+        isLoading.value = !reindexing;
+        isReindexing.value = reindexing;
 
         try {
-            const payload = await fetchBooksViaInpx(forceReindex);
+            const payload = await fetchBooksViaInpx({ reindexing });
 
             status.value = "Library data loaded. Building search index...";
             const { datasetSignature } = await applyBooks(payload, false);
@@ -579,8 +579,8 @@ export function useLibraryState() {
                 downloadedBytes: 0,
                 totalBytes: null
             });
-            status.value = forceReindex
-                ? "Reindex failed: unable to download or parse INPX."
+            status.value = reindexing
+                ? "Local reindex failed: unable to download or parse INPX."
                 : "Library load failed: unable to download or parse INPX.";
             error.value = err instanceof Error
                 ? err.message
@@ -611,7 +611,7 @@ export function useLibraryState() {
             return;
         }
 
-        await fetchAndApply(false);
+        await fetchAndApply();
     }
 
     async function submitMagnet(uri) {
@@ -676,10 +676,30 @@ export function useLibraryState() {
     }
 
     async function reindexCurrent() {
+        if (!magnetHash.value || !magnetUri.value) return;
+
+        error.value = "";
+        status.value = "Reindexing locally: clearing cached library and search index...";
+        setProgress({
+            phase: "clearing-local",
+            processed: 0,
+            total: 0,
+            percent: 0,
+            downloadedBytes: 0,
+            totalBytes: null
+        });
+
         try {
-            await fetchAndApply(true);
+            await Promise.all([
+                libraryCacheStore.removeByHash(magnetHash.value),
+                searchWorkerClient.clearPersistedIndex(magnetHash.value)
+            ]);
+
+            status.value = "Local cache cleared. Downloading INPX for rebuild...";
+            await fetchAndApply({ reindexing: true });
         } catch (err) {
             error.value = err instanceof Error ? err.message : "Failed to reindex.";
+            status.value = "Local reindex failed. Please try again.";
         }
     }
 
@@ -788,4 +808,3 @@ export function useLibraryState() {
         clearGenreFilters
     };
 }
-

@@ -70,8 +70,8 @@ function parseDownloadName(contentDisposition) {
 }
 
 export const apiClient = {
-    async fetchInpx(magnetUri, forceReindex = false, onProgress) {
-        return requestArrayBuffer("/api/library/inpx", { magnetUri, forceReindex }, onProgress);
+    async fetchInpx(magnetUri, onProgress) {
+        return requestArrayBuffer("/api/library/inpx", { magnetUri }, onProgress);
     },
 
     async downloadBook(payload) {

@@ -31,15 +31,19 @@ export const LibraryControls = defineComponent({
                 return "Loading local cache...";
             }
 
+            if (this.progress.phase === "clearing-local") {
+                return "Clearing local cache and search index...";
+            }
+
             if (this.progress.phase === "loading-backend") {
                 const downloaded = this.progress.downloadedBytes ?? 0;
                 const total = this.progress.totalBytes;
 
                 if (total) {
-                    return `Downloading library payload: ${this.formatMegabytes(downloaded)} / ${this.formatMegabytes(total)} (${this.progress.percent ?? 0}%)`;
+                    return `Downloading INPX payload: ${this.formatMegabytes(downloaded)} / ${this.formatMegabytes(total)} (${this.progress.percent ?? 0}%)`;
                 }
 
-                return `Downloading library payload: ${this.formatMegabytes(downloaded)} downloaded`;
+                return `Downloading INPX payload: ${this.formatMegabytes(downloaded)} downloaded`;
             }
 
             return "";

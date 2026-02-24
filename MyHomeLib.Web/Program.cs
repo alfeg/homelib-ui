@@ -53,9 +53,12 @@ app.MapPost("/api/library/inpx", async (
 
     idleTorrentCleanupService.MarkActivity(request.MagnetUri);
 
+    if (request.ForceReindex)
+        logger.LogDebug("forceReindex is ignored for /api/library/inpx.");
+
     try
     {
-        var inpxFile = await booksCache.GetInpxFileAsync(request.MagnetUri, request.ForceReindex, ct);
+        var inpxFile = await booksCache.GetInpxFileAsync(request.MagnetUri, ct);
         return Results.File(inpxFile.Data, "application/octet-stream", inpxFile.FileName);
     }
     catch (FormatException)

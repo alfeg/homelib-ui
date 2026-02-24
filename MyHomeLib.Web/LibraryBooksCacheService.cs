@@ -13,27 +13,21 @@ public sealed class LibraryBooksCacheService(
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _cacheDirectory = ResolveCacheDirectory(config.Value.DownloadsDirectory);
 
-    public async Task<(byte[] Data, string FileName)> GetInpxFileAsync(string magnetUri, bool forceReindex, CancellationToken ct)
+    public async Task<(byte[] Data, string FileName)> GetInpxFileAsync(string magnetUri, CancellationToken ct)
     {
         var cacheFiles = GetCacheFiles(magnetUri);
 
-        if (!forceReindex)
-        {
-            var cached = await TryReadCachedBytesAsync(cacheFiles.InpxPath, ct);
-            if (cached is not null)
-                return (cached, Path.GetFileName(cacheFiles.InpxPath));
-        }
+        var cached = await TryReadCachedBytesAsync(cacheFiles.InpxPath, ct);
+        if (cached is not null)
+            return (cached, Path.GetFileName(cacheFiles.InpxPath));
 
         var gate = _locks.GetOrAdd(cacheFiles.Hash, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            if (!forceReindex)
-            {
-                var cached = await TryReadCachedBytesAsync(cacheFiles.InpxPath, ct);
-                if (cached is not null)
-                    return (cached, Path.GetFileName(cacheFiles.InpxPath));
-            }
+            cached = await TryReadCachedBytesAsync(cacheFiles.InpxPath, ct);
+            if (cached is not null)
+                return (cached, Path.GetFileName(cacheFiles.InpxPath));
 
             var inpxData = await DownloadInpxAsync(cacheFiles.Hash, magnetUri, ct);
             await WriteBytesAtomicAsync(cacheFiles.InpxPath, inpxData, ct);
