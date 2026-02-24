@@ -69,6 +69,8 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+app.MapGet("/favicon.ico", () => Results.NoContent());
+
 app.MapGet("/api/session/user-id", (HttpContext httpContext) =>
 {
     var userId = httpContext.Request.Cookies[UserSessionCookie.CookieName];

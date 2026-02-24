@@ -39,6 +39,7 @@ public sealed class BookSearchIndex : IAsyncDisposable
 
         if (existing > 0)
         {
+            await EnsureFtsIndexAsync(conn, statusCallback, logger);
             logger?.LogInformation("Reusing existing DuckDB index ({Count} books)", existing);
             statusCallback?.Invoke($"Loaded {existing:N0} books from existing index.");
             return new BookSearchIndex(conn);
@@ -94,18 +95,7 @@ public sealed class BookSearchIndex : IAsyncDisposable
         }
 
         statusCallback?.Invoke("Building full-text search index…");
-
-        // Russian Snowball stemmer; custom ignore keeps Cyrillic letters
-        await ExecAsync(conn, @"
-            PRAGMA create_fts_index(
-                'books', 'id',
-                'title', 'authors', 'series', 'keywords',
-                stemmer    = 'russian',
-                stopwords  = 'none',
-                ignore     = '(\\.|[^a-zA-Zа-яёА-ЯЁ])+',
-                lower      = 1,
-                strip_accents = 1
-            )");
+        await CreateFtsIndexAsync(conn);
 
         logger?.LogInformation("FTS index built for {Count} books", count);
         statusCallback?.Invoke($"Loaded {count:N0} books.");
@@ -185,6 +175,52 @@ public sealed class BookSearchIndex : IAsyncDisposable
     }
 
     private static string Literal(string s) => $"'{s.Replace("'", "''")}'";
+
+    private static async Task EnsureFtsIndexAsync(
+        DuckDBConnection conn,
+        Action<string>? statusCallback,
+        ILogger? logger)
+    {
+        var hasFts = false;
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT COUNT(*)
+                FROM duckdb_functions()
+                WHERE function_name = 'match_bm25'
+                  AND function_type = 'scalar'
+                  AND schema_name = 'fts_main_books'
+                """;
+            hasFts = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L) > 0;
+        }
+        catch
+        {
+            hasFts = false;
+        }
+
+        if (hasFts)
+            return;
+
+        logger?.LogWarning("FTS index not found in existing books DB; rebuilding it now.");
+        statusCallback?.Invoke("Rebuilding full-text search index…");
+        await CreateFtsIndexAsync(conn);
+    }
+
+    private static async Task CreateFtsIndexAsync(DuckDBConnection conn)
+    {
+        // Russian Snowball stemmer; custom ignore keeps Cyrillic letters
+        await ExecAsync(conn, @"
+            PRAGMA create_fts_index(
+                'books', 'id',
+                'title', 'authors', 'series', 'keywords',
+                stemmer    = 'russian',
+                stopwords  = 'none',
+                ignore     = '(\\.|[^a-zA-Zа-яёА-ЯЁ])+',
+                lower      = 1,
+                strip_accents = 1
+            )");
+    }
 
     private static async Task ExecAsync(DuckDBConnection conn, string sql)
     {

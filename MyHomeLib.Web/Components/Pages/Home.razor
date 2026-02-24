@@ -72,7 +72,7 @@ else if (!indexReady)
 <MudSelect T="string"
            Value="@selectedLanguage"
            ValueChanged="OnLanguageChanged"
-           Label="Language"
+           Placeholder="Language"
            Variant="Variant.Outlined"
            Disabled="@(!indexReady)"
            Class="mb-2">
@@ -329,7 +329,7 @@ else if (!indexReady)
 
         try
         {
-            var userId = await JS.InvokeAsync<string?>("myHomeLibSession.getUserId", "mhl_uid");
+            var userId = await JS.InvokeAsync<string?>("myHomeLibSession.getOrCreateUserId");
             if (!string.IsNullOrWhiteSpace(userId))
                 UserSession.SetUserId(userId);
         }

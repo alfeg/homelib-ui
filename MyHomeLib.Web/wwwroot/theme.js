@@ -8,15 +8,17 @@ window.myHomeLibTheme = {
 };
 
 window.myHomeLibSession = {
-    getUserId: function (cookieName) {
-        const name = cookieName + "=";
-        const parts = document.cookie.split(";");
-        for (let i = 0; i < parts.length; i++) {
-            const cookie = parts[i].trim();
-            if (cookie.startsWith(name)) {
-                return decodeURIComponent(cookie.substring(name.length));
-            }
+    getOrCreateUserId: async function () {
+        const response = await fetch("/api/session/user-id", {
+            method: "GET",
+            credentials: "include"
+        });
+
+        if (!response.ok) {
+            return "";
         }
-        return "";
+
+        const payload = await response.json();
+        return payload?.userId ?? "";
     }
 };

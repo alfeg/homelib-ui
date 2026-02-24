@@ -146,7 +146,7 @@ else
 
         try
         {
-            var userId = await JS.InvokeAsync<string?>("myHomeLibSession.getUserId", "mhl_uid");
+            var userId = await JS.InvokeAsync<string?>("myHomeLibSession.getOrCreateUserId");
             if (!string.IsNullOrWhiteSpace(userId))
                 UserSession.SetUserId(userId);
         }
