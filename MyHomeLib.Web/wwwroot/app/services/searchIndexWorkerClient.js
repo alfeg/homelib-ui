@@ -100,7 +100,7 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
     };
 
     return {
-        buildIndex(books, { hash = "", signature = "" } = {}) {
+        buildIndex(books, { hash = "", signature = "", batchSize } = {}) {
             if (pendingBuild) {
                 pendingBuild.reject(new Error("Index build interrupted by a new build request."));
             }
@@ -108,7 +108,7 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
             return new Promise((resolve, reject) => {
                 const cloneableBooks = toStructuredCloneableBooks(books);
                 pendingBuild = { resolve, reject };
-                worker.postMessage({ type: "build", books: cloneableBooks, hash, signature });
+                worker.postMessage({ type: "build", books: cloneableBooks, hash, signature, batchSize });
             });
         },
         restoreIndex({ books, hash = "", signature = "" } = {}) {

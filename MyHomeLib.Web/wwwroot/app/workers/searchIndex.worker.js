@@ -1,6 +1,9 @@
 import { Index as FlexIndex } from "https://cdn.jsdelivr.net/npm/flexsearch@0.8.212/dist/flexsearch.bundle.module.min.js";
 
-const INDEX_CHUNK_SIZE = 250;
+const DEFAULT_INDEX_BATCH_SIZE = 1024;
+const MIN_INDEX_BATCH_SIZE = 500;
+const MAX_INDEX_BATCH_SIZE = 2000;
+const BATCH_YIELD_DELAY_MS = 0;
 const PERSISTENCE_DB_NAME = "myhomelib-search-index-cache";
 const PERSISTENCE_STORE_NAME = "indexes";
 const PERSISTENCE_DB_VERSION = 1;
@@ -109,6 +112,16 @@ function resetInMemoryIndex() {
     activeSignature = "";
 }
 
+function resolveBatchSize(value) {
+    const parsed = Number.parseInt(value, 10);
+
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_INDEX_BATCH_SIZE;
+    }
+
+    return Math.min(MAX_INDEX_BATCH_SIZE, Math.max(MIN_INDEX_BATCH_SIZE, parsed));
+}
+
 self.onmessage = async (event) => {
     const message = event?.data ?? {};
 
@@ -116,6 +129,7 @@ self.onmessage = async (event) => {
         const books = Array.isArray(message.books) ? message.books : [];
         const hash = typeof message.hash === "string" ? message.hash : "";
         const signature = typeof message.signature === "string" ? message.signature : "";
+        const batchSize = resolveBatchSize(message.batchSize);
         const total = books.length;
 
         index = new FlexIndex({ tokenize: "forward", cache: true });
@@ -148,26 +162,27 @@ self.onmessage = async (event) => {
             return;
         }
 
-        for (let i = 0; i < total; i += 1) {
-            const book = books[i];
-            const id = String(book.id);
-            booksById.set(id, book);
-            index.add(id, toSearchText(book));
+        for (let start = 0; start < total; start += batchSize) {
+            const end = Math.min(start + batchSize, total);
 
-            const processed = i + 1;
-            if (processed % INDEX_CHUNK_SIZE === 0 || processed === total) {
-                self.postMessage({
-                    type: "build-progress",
-                    payload: {
-                        phase: "indexing",
-                        processed,
-                        total,
-                        percent: Math.round((processed / total) * 100)
-                    }
-                });
-
-                await new Promise((resolve) => setTimeout(resolve, 0));
+            for (let i = start; i < end; i += 1) {
+                const book = books[i];
+                const id = String(book.id);
+                booksById.set(id, book);
+                index.add(id, toSearchText(book));
             }
+
+            self.postMessage({
+                type: "build-progress",
+                payload: {
+                    phase: "indexing",
+                    processed: end,
+                    total,
+                    percent: Math.round((end / total) * 100)
+                }
+            });
+
+            await new Promise((resolve) => setTimeout(resolve, BATCH_YIELD_DELAY_MS));
         }
 
         let persisted = false;
