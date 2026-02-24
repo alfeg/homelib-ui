@@ -1,4 +1,4 @@
-import { Index as FlexIndex } from "https://cdn.jsdelivr.net/npm/flexsearch@0.8.212/dist/flexsearch.bundle.module.min.js";
+import { Document as FlexDocument } from "https://cdn.jsdelivr.net/npm/flexsearch@0.8.212/dist/flexsearch.bundle.module.min.js";
 
 const DEFAULT_INDEX_BATCH_SIZE = 1024;
 const MIN_INDEX_BATCH_SIZE = 500;
@@ -18,6 +18,21 @@ function toSearchText(book) {
     return [book.title, book.authors, book.series, book.lang, book.file]
         .filter(Boolean)
         .join(" ");
+}
+
+function createIndex() {
+    return new FlexDocument({
+        cache: true,
+        document: {
+            id: "id",
+            index: [
+                {
+                    field: "content",
+                    tokenize: "forward"
+                }
+            ]
+        }
+    });
 }
 
 function openPersistenceDb() {
@@ -122,14 +137,40 @@ function resolveBatchSize(value) {
     return Math.min(MAX_INDEX_BATCH_SIZE, Math.max(MIN_INDEX_BATCH_SIZE, parsed));
 }
 
-async function addToIndexAsync(targetIndex, id, content) {
+async function addBatchToIndexAsync(targetIndex, documents) {
     if (typeof targetIndex?.addAsync === "function") {
-        await targetIndex.addAsync(id, content);
+        await targetIndex.addAsync(documents);
         return;
     }
 
-    // Compatibility fallback for import shapes that do not expose addAsync.
-    targetIndex.add(id, content);
+    targetIndex.add(documents);
+}
+
+function extractSearchIds(rawResults) {
+    if (!Array.isArray(rawResults)) {
+        return [];
+    }
+
+    const ids = [];
+    const seen = new Set();
+
+    for (let i = 0; i < rawResults.length; i += 1) {
+        const entry = rawResults[i];
+        const resultSet = Array.isArray(entry?.result) ? entry.result : [];
+
+        for (let j = 0; j < resultSet.length; j += 1) {
+            const item = resultSet[j];
+            const value = typeof item === "object" && item !== null ? item.id : item;
+            const id = String(value);
+
+            if (!seen.has(id)) {
+                seen.add(id);
+                ids.push(id);
+            }
+        }
+    }
+
+    return ids;
 }
 
 self.onmessage = async (event) => {
@@ -142,7 +183,7 @@ self.onmessage = async (event) => {
         const batchSize = resolveBatchSize(message.batchSize);
         const total = books.length;
 
-        index = new FlexIndex({ tokenize: "forward", cache: true });
+        index = createIndex();
         booksById = new Map();
         activeHash = hash;
         activeSignature = signature;
@@ -174,16 +215,19 @@ self.onmessage = async (event) => {
 
         for (let start = 0; start < total; start += batchSize) {
             const end = Math.min(start + batchSize, total);
-            const batchAdds = [];
+            const batchDocuments = [];
 
             for (let i = start; i < end; i += 1) {
                 const book = books[i];
                 const id = String(book.id);
                 booksById.set(id, book);
-                batchAdds.push(addToIndexAsync(index, id, toSearchText(book)));
+                batchDocuments.push({
+                    id,
+                    content: toSearchText(book)
+                });
             }
 
-            await Promise.all(batchAdds);
+            await addBatchToIndexAsync(index, batchDocuments);
 
             self.postMessage({
                 type: "build-progress",
@@ -263,7 +307,7 @@ self.onmessage = async (event) => {
                 return;
             }
 
-            const restoredIndex = new FlexIndex({ tokenize: "forward", cache: true });
+            const restoredIndex = createIndex();
             await importIndex(restoredIndex, persisted.chunks);
 
             index = restoredIndex;
@@ -350,7 +394,8 @@ self.onmessage = async (event) => {
             return;
         }
 
-        const books = index.search(term, { limit })
+        const rawResults = index.search(term, { limit });
+        const books = extractSearchIds(rawResults)
             .map((id) => booksById.get(String(id)))
             .filter(Boolean);
 
