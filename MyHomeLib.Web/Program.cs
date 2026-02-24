@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Text;
+using MessagePack;
 using Microsoft.AspNetCore.Http;
 using MyHomeLib.Web;
 using MyHomeListServer.Torrent;
@@ -107,6 +109,57 @@ app.MapPost("/api/library/books", async (
     catch (Exception ex)
     {
         logger.LogError(ex, "Unhandled error in /api/library/books.");
+        return Results.Text("Internal server error.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
+
+app.MapPost("/api/library/books/msgpack", async (
+    HttpContext httpContext,
+    LibraryBooksRequest request,
+    LibraryBooksCacheService booksCache,
+    IdleTorrentCleanupService idleTorrentCleanupService,
+    ILogger<Program> logger,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(request.MagnetUri))
+        return Results.BadRequest("magnetUri is required.");
+
+    idleTorrentCleanupService.MarkActivity(request.MagnetUri);
+
+    try
+    {
+        var response = await booksCache.GetBooksAsync(request.MagnetUri, request.ForceReindex, ct);
+        var minimizedPayload = response.ToMsgPack();
+
+        var msgPackBytes = MessagePackSerializer.Serialize(minimizedPayload);
+        var compressedBytes = BrotliCompress(msgPackBytes);
+
+        httpContext.Response.Headers.ContentEncoding = "br";
+        return Results.File(compressedBytes, "application/msgpack");
+    }
+    catch (FormatException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+    catch (HttpRequestException)
+    {
+        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+    {
+        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (TimeoutException)
+    {
+        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Unhandled error in /api/library/books/msgpack.");
         return Results.Text("Internal server error.", statusCode: StatusCodes.Status500InternalServerError);
     }
 });
@@ -234,3 +287,13 @@ static string MakeSafeFileName(string name)
     return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
 }
 
+static byte[] BrotliCompress(byte[] input)
+{
+    using var output = new MemoryStream();
+    using (var brotli = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true))
+    {
+        brotli.Write(input, 0, input.Length);
+    }
+
+    return output.ToArray();
+}
