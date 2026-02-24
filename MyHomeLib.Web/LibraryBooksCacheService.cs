@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
-using System.IO.Compression;
 using System.Text.Json;
-using MessagePack;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Library;
 using MyHomeListServer.Torrent;
@@ -48,39 +46,6 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
-    public async Task<byte[]> GetBooksMsgPackBrAsync(string magnetUri, bool forceReindex, CancellationToken ct)
-    {
-        var cacheFiles = GetCacheFiles(magnetUri);
-
-        if (!forceReindex && File.Exists(cacheFiles.MsgPackBrPath))
-            return await File.ReadAllBytesAsync(cacheFiles.MsgPackBrPath, ct);
-
-        var gate = _locks.GetOrAdd(cacheFiles.Hash, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
-        try
-        {
-            if (!forceReindex && File.Exists(cacheFiles.MsgPackBrPath))
-                return await File.ReadAllBytesAsync(cacheFiles.MsgPackBrPath, ct);
-
-            LibraryBooksResponse response;
-            if (!forceReindex)
-            {
-                response = await TryReadCacheAsync(cacheFiles.JsonPath, ct)
-                    ?? await BuildIndexAsync(cacheFiles.Hash, magnetUri, ct);
-            }
-            else
-            {
-                response = await BuildIndexAsync(cacheFiles.Hash, magnetUri, ct);
-            }
-
-            await WriteCacheArtifactsAtomicAsync(cacheFiles, response, ct);
-            return await File.ReadAllBytesAsync(cacheFiles.MsgPackBrPath, ct);
-        }
-        finally
-        {
-            gate.Release();
-        }
-    }
 
     public async Task<(byte[] Data, string FileName)> GetInpxFileAsync(string magnetUri, bool forceReindex, CancellationToken ct)
     {
@@ -157,8 +122,6 @@ public sealed class LibraryBooksCacheService(
         Directory.CreateDirectory(_cacheDirectory);
 
         var jsonTempPath = CreateTempPath(cacheFiles.JsonPath);
-        var msgPackTempPath = CreateTempPath(cacheFiles.MsgPackPath);
-        var msgPackBrTempPath = CreateTempPath(cacheFiles.MsgPackBrPath);
 
         try
         {
@@ -167,21 +130,11 @@ public sealed class LibraryBooksCacheService(
                 await JsonSerializer.SerializeAsync(stream, response, cancellationToken: ct);
             }
 
-            var msgPackBytes = MessagePackSerializer.Serialize(response.ToMsgPack());
-            await File.WriteAllBytesAsync(msgPackTempPath, msgPackBytes, ct);
-
-            var compressedBytes = BrotliCompress(msgPackBytes);
-            await File.WriteAllBytesAsync(msgPackBrTempPath, compressedBytes, ct);
-
             File.Move(jsonTempPath, cacheFiles.JsonPath, overwrite: true);
-            File.Move(msgPackTempPath, cacheFiles.MsgPackPath, overwrite: true);
-            File.Move(msgPackBrTempPath, cacheFiles.MsgPackBrPath, overwrite: true);
         }
         finally
         {
             TryDeleteTempFile(jsonTempPath);
-            TryDeleteTempFile(msgPackTempPath);
-            TryDeleteTempFile(msgPackBrTempPath);
         }
     }
 
@@ -193,8 +146,6 @@ public sealed class LibraryBooksCacheService(
         return new CacheFiles(
             hash,
             Path.Combine(_cacheDirectory, $"library_{normalizedHash}.json"),
-            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.msgpack"),
-            Path.Combine(_cacheDirectory, $"library_{normalizedHash}.msgpack.br"),
             Path.Combine(_cacheDirectory, $"library_{normalizedHash}.inpx"));
     }
 
@@ -311,16 +262,6 @@ public sealed class LibraryBooksCacheService(
         }
     }
 
-    private static byte[] BrotliCompress(byte[] input)
-    {
-        using var output = new MemoryStream();
-        using (var brotli = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true))
-        {
-            brotli.Write(input, 0, input.Length);
-        }
 
-        return output.ToArray();
-    }
-
-    private sealed record CacheFiles(string Hash, string JsonPath, string MsgPackPath, string MsgPackBrPath, string InpxPath);
+    private sealed record CacheFiles(string Hash, string JsonPath, string InpxPath);
 }

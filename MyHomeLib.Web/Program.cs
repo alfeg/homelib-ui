@@ -85,52 +85,6 @@ app.MapPost("/api/library/books", async (
     }
 });
 
-app.MapPost("/api/library/books/msgpack", async (
-    HttpContext httpContext,
-    LibraryBooksRequest request,
-    LibraryBooksCacheService booksCache,
-    IdleTorrentCleanupService idleTorrentCleanupService,
-    ILogger<Program> logger,
-    CancellationToken ct) =>
-{
-    if (string.IsNullOrWhiteSpace(request.MagnetUri))
-        return Results.BadRequest("magnetUri is required.");
-
-    idleTorrentCleanupService.MarkActivity(request.MagnetUri);
-
-    try
-    {
-        var compressedPayload = await booksCache.GetBooksMsgPackBrAsync(request.MagnetUri, request.ForceReindex, ct);
-        httpContext.Response.Headers.ContentEncoding = "br";
-        return Results.File(compressedPayload, "application/msgpack");
-    }
-    catch (FormatException)
-    {
-        return Results.BadRequest("Invalid magnetUri.");
-    }
-    catch (InvalidOperationException)
-    {
-        return Results.BadRequest("Unable to prepare library books payload.");
-    }
-    catch (HttpRequestException)
-    {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-    catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-    {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-    catch (TimeoutException)
-    {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Unhandled error in /api/library/books/msgpack.");
-        return Results.Text("Internal server error.", statusCode: StatusCodes.Status500InternalServerError);
-    }
-});
-
 app.MapPost("/api/library/inpx", async (
     LibraryBooksRequest request,
     LibraryBooksCacheService booksCache,

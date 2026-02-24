@@ -1,5 +1,3 @@
-import { decode } from "https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.3/dist.esm/index.mjs";
-
 const jsonHeaders = {
     "Content-Type": "application/json"
 };
@@ -68,65 +66,6 @@ function mapLibraryPayload(payload) {
             ? booksSource.map(mapBook).filter(Boolean)
             : []
     };
-}
-
-async function requestBooksMsgPack(body, onProgress) {
-    const response = await fetch("/api/library/books/msgpack", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-            ...jsonHeaders,
-            Accept: "application/x-msgpack,application/msgpack"
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Request failed with ${response.status}`);
-    }
-
-    const totalHeader = response.headers.get("content-length");
-    const parsedTotal = totalHeader ? Number.parseInt(totalHeader, 10) : NaN;
-    const totalBytes = Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : null;
-
-    if (typeof ReadableStream !== "undefined" && response.body?.getReader) {
-        const reader = response.body.getReader();
-        const chunks = [];
-        let downloadedBytes = 0;
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (!value) continue;
-
-            chunks.push(value);
-            downloadedBytes += value.byteLength;
-            onProgress?.({
-                downloadedBytes,
-                totalBytes,
-                percent: totalBytes ? Math.round((downloadedBytes / totalBytes) * 100) : null
-            });
-        }
-
-        const bytes = new Uint8Array(downloadedBytes);
-        let offset = 0;
-
-        for (const chunk of chunks) {
-            bytes.set(chunk, offset);
-            offset += chunk.byteLength;
-        }
-
-        return mapLibraryPayload(decode(bytes));
-    }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    onProgress?.({
-        downloadedBytes: bytes.byteLength,
-        totalBytes,
-        percent: totalBytes ? Math.round((bytes.byteLength / totalBytes) * 100) : null
-    });
-    return mapLibraryPayload(decode(bytes));
 }
 
 async function requestArrayBuffer(url, body, onProgress) {
@@ -199,12 +138,15 @@ function parseDownloadName(contentDisposition) {
 export const apiClient = {
     async fetchBooks(magnetUri, forceReindex = false, onProgress) {
         const body = { magnetUri, forceReindex };
+        const payload = await requestJson("/api/library/books", body);
 
-        try {
-            return await requestBooksMsgPack(body, onProgress);
-        } catch {
-            return requestJson("/api/library/books", body);
-        }
+        onProgress?.({
+            downloadedBytes: 0,
+            totalBytes: null,
+            percent: 100
+        });
+
+        return mapLibraryPayload(payload);
     },
 
     async fetchInpx(magnetUri, forceReindex = false, onProgress) {
