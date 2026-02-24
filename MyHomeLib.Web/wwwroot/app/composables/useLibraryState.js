@@ -120,6 +120,22 @@ function normalizeBooksGenres(input) {
     return source.map((book) => normalizeBookGenres(book));
 }
 
+function createCacheBooksSnapshot(input) {
+    return normalizeBooksGenres(input).map((book) => {
+        const genreCodes = Array.isArray(book.genreCodes)
+            ? book.genreCodes
+            : parseRawGenreCodes(book.genre);
+
+        return {
+            ...book,
+            genre: typeof book.genre === "string" ? book.genre : "",
+            genreCodes: genreCodes
+                .map((code) => normalizeGenreCode(code))
+                .filter(Boolean)
+        };
+    });
+}
+
 function computeDatasetSignature(metadata, books) {
     const sourceBooks = Array.isArray(books) ? books : [];
     const metadataSeed = metadata && typeof metadata === "object"
@@ -451,14 +467,19 @@ export function useLibraryState() {
     }
 
     async function cachePayload(hash, payload, datasetSignature) {
+        const cacheBooks = createCacheBooksSnapshot(books.value);
+        const cacheMetadata = payload?.metadata && typeof payload.metadata === "object"
+            ? { ...payload.metadata }
+            : (payload?.metadata ?? null);
+
         await libraryCacheStore.save({
             hash,
             magnetUri: magnetUri.value,
-            metadata: payload.metadata,
-            books: books.value,
+            metadata: cacheMetadata,
+            books: cacheBooks,
             indexMeta: {
                 ...(payload.indexMeta ?? {}),
-                count: payload.books?.length ?? 0,
+                count: cacheBooks.length,
                 cachedAt: new Date().toISOString(),
                 datasetSignature
             }
@@ -768,3 +789,4 @@ export function useLibraryState() {
         clearGenreFilters
     };
 }
+
