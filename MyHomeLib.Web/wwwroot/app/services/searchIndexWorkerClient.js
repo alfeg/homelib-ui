@@ -35,6 +35,8 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
     const worker = new Worker(SEARCH_INDEX_WORKER_URL, { type: "module" });
     const pendingSearches = new Map();
     let pendingBuild = null;
+    let pendingRestore = null;
+    let pendingClear = null;
 
     worker.onmessage = (event) => {
         const message = event?.data ?? {};
@@ -52,8 +54,20 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
                 percent: 100
             });
 
-            pendingBuild?.resolve(message.payload ?? { total: 0 });
+            pendingBuild?.resolve(message.payload ?? { total: 0, persisted: false });
             pendingBuild = null;
+            return;
+        }
+
+        if (message.type === "restore-complete") {
+            pendingRestore?.resolve(message.payload ?? { restored: false, reason: "unknown" });
+            pendingRestore = null;
+            return;
+        }
+
+        if (message.type === "clear-persisted-complete") {
+            pendingClear?.resolve(message.payload ?? { cleared: false, reason: "unknown" });
+            pendingClear = null;
             return;
         }
 
@@ -73,6 +87,12 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
         pendingBuild?.reject(err);
         pendingBuild = null;
 
+        pendingRestore?.reject(err);
+        pendingRestore = null;
+
+        pendingClear?.reject(err);
+        pendingClear = null;
+
         pendingSearches.forEach((resolve) => resolve([]));
         pendingSearches.clear();
 
@@ -80,7 +100,7 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
     };
 
     return {
-        buildIndex(books) {
+        buildIndex(books, { hash = "", signature = "" } = {}) {
             if (pendingBuild) {
                 pendingBuild.reject(new Error("Index build interrupted by a new build request."));
             }
@@ -88,7 +108,28 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
             return new Promise((resolve, reject) => {
                 const cloneableBooks = toStructuredCloneableBooks(books);
                 pendingBuild = { resolve, reject };
-                worker.postMessage({ type: "build", books: cloneableBooks });
+                worker.postMessage({ type: "build", books: cloneableBooks, hash, signature });
+            });
+        },
+        restoreIndex({ books, hash = "", signature = "" } = {}) {
+            if (pendingRestore) {
+                pendingRestore.reject(new Error("Index restore interrupted by a new restore request."));
+            }
+
+            return new Promise((resolve, reject) => {
+                const cloneableBooks = toStructuredCloneableBooks(books);
+                pendingRestore = { resolve, reject };
+                worker.postMessage({ type: "restore", books: cloneableBooks, hash, signature });
+            });
+        },
+        clearPersistedIndex(hash) {
+            if (pendingClear) {
+                pendingClear.reject(new Error("Persisted index clear interrupted by a new clear request."));
+            }
+
+            return new Promise((resolve, reject) => {
+                pendingClear = { resolve, reject };
+                worker.postMessage({ type: "clear-persisted", hash });
             });
         },
         search(term, requestId, limit = 1000) {
@@ -101,6 +142,10 @@ export function createSearchWorkerClient({ onProgress, onError } = {}) {
             worker.terminate();
             pendingBuild?.reject(new Error("Search worker terminated."));
             pendingBuild = null;
+            pendingRestore?.reject(new Error("Search worker terminated."));
+            pendingRestore = null;
+            pendingClear?.reject(new Error("Search worker terminated."));
+            pendingClear = null;
             pendingSearches.forEach((resolve) => resolve([]));
             pendingSearches.clear();
         }

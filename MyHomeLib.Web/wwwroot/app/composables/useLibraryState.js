@@ -67,6 +67,50 @@ function saveBlob(blob, fileName) {
     URL.revokeObjectURL(url);
 }
 
+function updateSignatureHash(hash, value) {
+    let next = hash >>> 0;
+
+    for (let i = 0; i < value.length; i += 1) {
+        next ^= value.charCodeAt(i);
+        next = Math.imul(next, 16777619);
+    }
+
+    return next >>> 0;
+}
+
+function computeDatasetSignature(metadata, books) {
+    const sourceBooks = Array.isArray(books) ? books : [];
+    const metadataSeed = metadata && typeof metadata === "object"
+        ? `${metadata.title || ""}|${metadata.collection || ""}|${metadata.version || ""}`
+        : "";
+
+    let hash = 2166136261;
+    hash = updateSignatureHash(hash, metadataSeed);
+
+    for (let i = 0; i < sourceBooks.length; i += 1) {
+        const book = sourceBooks[i] ?? {};
+        const seed = [
+            book.id,
+            book.title,
+            book.authors,
+            book.series,
+            book.lang,
+            book.file,
+            book.archiveFile,
+            book.ext
+        ].map((value) => String(value ?? "")).join("|");
+
+        hash = updateSignatureHash(hash, seed);
+    }
+
+    return `${sourceBooks.length}:${hash.toString(16)}`;
+}
+
+function resolveDatasetSignature(payload) {
+    return payload?.indexMeta?.datasetSignature
+        || computeDatasetSignature(payload?.metadata ?? null, payload?.books ?? []);
+}
+
 export function useLibraryState() {
     const magnetUri = ref("");
     const magnetHash = ref("");
@@ -189,11 +233,42 @@ export function useLibraryState() {
         filteredBooks.value = matches;
     }
 
-    async function applyBooks(payload, fromCache) {
+    async function applyBooks(payload, fromCache, { tryRestore = false } = {}) {
         metadata.value = payload.metadata ?? null;
         books.value = payload.books ?? [];
         filteredBooks.value = searchTerm.value.trim() ? [] : books.value;
         currentPage.value = 1;
+
+        const datasetSignature = resolveDatasetSignature(payload);
+
+        if (tryRestore && magnetHash.value) {
+            status.value = "Cached library loaded. Restoring search index...";
+
+            const restoreResult = await searchWorkerClient.restoreIndex({
+                books: books.value,
+                hash: magnetHash.value,
+                signature: datasetSignature
+            });
+
+            if (restoreResult?.restored) {
+                hasCache.value = fromCache;
+                setProgress({
+                    phase: "ready",
+                    processed: books.value.length,
+                    total: books.value.length,
+                    percent: 100,
+                    downloadedBytes: 0,
+                    totalBytes: null
+                });
+                status.value = "Loaded from local cache.";
+                await refreshSearchResults();
+                return { datasetSignature, restored: true };
+            }
+
+            status.value = restoreResult?.reason === "stale"
+                ? "Cached search index is stale. Rebuilding..."
+                : "Cached search index unavailable. Rebuilding...";
+        }
 
         setProgress({
             phase: "indexing",
@@ -205,7 +280,10 @@ export function useLibraryState() {
         });
         status.value = `Building search index... 0/${books.value.length} (0%)`;
 
-        await searchWorkerClient.buildIndex(books.value);
+        await searchWorkerClient.buildIndex(books.value, {
+            hash: magnetHash.value,
+            signature: datasetSignature
+        });
 
         hasCache.value = fromCache;
         setProgress({
@@ -219,17 +297,20 @@ export function useLibraryState() {
         status.value = fromCache ? "Loaded from local cache." : "Library indexed from backend.";
 
         await refreshSearchResults();
+        return { datasetSignature, restored: false };
     }
 
-    async function cachePayload(hash, payload) {
+    async function cachePayload(hash, payload, datasetSignature) {
         await libraryCacheStore.save({
             hash,
             magnetUri: magnetUri.value,
             metadata: payload.metadata,
             books: payload.books,
             indexMeta: {
+                ...(payload.indexMeta ?? {}),
                 count: payload.books?.length ?? 0,
-                cachedAt: new Date().toISOString()
+                cachedAt: new Date().toISOString(),
+                datasetSignature
             }
         });
     }
@@ -333,8 +414,8 @@ export function useLibraryState() {
             }
 
             status.value = "Library data loaded. Building search index...";
-            await applyBooks(payload, false);
-            await cachePayload(magnetHash.value, payload);
+            const { datasetSignature } = await applyBooks(payload, false);
+            await cachePayload(magnetHash.value, payload, datasetSignature);
             lastUpdatedAt.value = new Date().toLocaleString();
         } finally {
             isLoading.value = false;
@@ -356,8 +437,7 @@ export function useLibraryState() {
         status.value = "Loading library from local cache...";
         const cached = await libraryCacheStore.getByHash(magnetHash.value);
         if (cached?.books?.length) {
-            status.value = "Cached library loaded. Building search index...";
-            await applyBooks(cached, true);
+            await applyBooks(cached, true, { tryRestore: true });
             lastUpdatedAt.value = cached.updatedAt ? new Date(cached.updatedAt).toLocaleString() : "";
             return;
         }
@@ -423,8 +503,14 @@ export function useLibraryState() {
     }
 
     async function resetAll() {
+        const hashToClear = magnetHash.value;
+
         magnetStore.clear();
         await libraryCacheStore.clearAll();
+
+        if (hashToClear) {
+            await searchWorkerClient.clearPersistedIndex(hashToClear);
+        }
 
         magnetUri.value = "";
         magnetHash.value = "";
