@@ -72,6 +72,7 @@ function mapBook(fields, archiveFile, fallbackId) {
     return {
         id,
         title: fields[2] ?? "",
+        genre: fields[1] ?? "",
         authors: normalizeAuthors(fields[0] ?? ""),
         series: fields[3] ?? "",
         seriesNo: fields[4] ?? "",

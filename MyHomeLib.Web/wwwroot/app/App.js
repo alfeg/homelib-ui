@@ -3,6 +3,7 @@ import { useLibraryState } from "./composables/useLibraryState.js";
 import { MagnetGate } from "./components/MagnetGate.js";
 import { LibraryControls } from "./components/LibraryControls.js";
 import { SearchBar } from "./components/SearchBar.js";
+import { GenreSidebar } from "./components/GenreSidebar.js";
 import { BooksTable } from "./components/BooksTable.js";
 
 export const App = defineComponent({
@@ -11,6 +12,7 @@ export const App = defineComponent({
         MagnetGate,
         LibraryControls,
         SearchBar,
+        GenreSidebar,
         BooksTable
     },
     setup() {
@@ -40,26 +42,37 @@ export const App = defineComponent({
                     @reset="resetAll"
                 />
 
-                <SearchBar
-                    v-model="searchTerm"
-                    :total="books.length"
-                    :filtered="filteredBooks.length"
-                />
+                <div class="library-layout">
+                    <GenreSidebar
+                        :genres="genreFacets"
+                        :selected-genres="selectedGenres"
+                        @toggle="toggleGenreFilter"
+                        @clear="clearGenreFilters"
+                    />
 
-                <p v-if="error" class="error-text">{{ error }}</p>
+                    <div class="library-content">
+                        <SearchBar
+                            v-model="searchTerm"
+                            :total="books.length"
+                            :filtered="filteredBooks.length"
+                        />
 
-                <BooksTable
-                    :books="pagedBooks"
-                    :downloading-by-id="downloadingById"
-                    :current-page="currentPage"
-                    :total-pages="totalPages"
-                    :visible-range="visibleRange"
-                    :total-results="filteredBooks.length"
-                    @download="downloadBook"
-                    @go-to-page="goToPage"
-                    @next-page="nextPage"
-                    @previous-page="previousPage"
-                />
+                        <p v-if="error" class="error-text">{{ error }}</p>
+
+                        <BooksTable
+                            :books="pagedBooks"
+                            :downloading-by-id="downloadingById"
+                            :current-page="currentPage"
+                            :total-pages="totalPages"
+                            :visible-range="visibleRange"
+                            :total-results="filteredBooks.length"
+                            @download="downloadBook"
+                            @go-to-page="goToPage"
+                            @next-page="nextPage"
+                            @previous-page="previousPage"
+                        />
+                    </div>
+                </div>
             </section>
         </main>
     `
