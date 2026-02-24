@@ -4,6 +4,8 @@
 @inject DownloadQueueService Queue
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
+@inject UserSessionContext UserSession
+@inject SearchPageState SearchState
 @implements IDisposable
 @using Humanizer
 @using System.Diagnostics
@@ -150,6 +152,10 @@ else if (!indexReady)
 
     protected override void OnInitialized()
     {
+        searchQuery = SearchState.Query;
+        results = SearchState.Results;
+        _searchMs = SearchState.SearchMs;
+
         indexReady = Library.IndexTask.IsCompletedSuccessfully;
 
         if (Library.IndexTask.IsFaulted)
@@ -186,6 +192,7 @@ else if (!indexReady)
     async Task OnValueChanged(string value)
     {
         searchQuery = value;
+        SearchState.Query = value;
         await TriggerSearch(debounceMs: 300);
     }
 
@@ -206,6 +213,7 @@ else if (!indexReady)
             results = null;
             _searchMs = null;
             _searching = false;
+            SearchState.Clear();
             await InvokeAsync(StateHasChanged);
             return;
         }
@@ -232,6 +240,9 @@ else if (!indexReady)
             {
                 results = r;
                 _searchMs = sw.ElapsedMilliseconds;
+                SearchState.Query = searchQuery;
+                SearchState.Results = results;
+                SearchState.SearchMs = _searchMs;
             }
         }
         catch (Exception ex) when (!cts.IsCancellationRequested)
@@ -250,7 +261,13 @@ else if (!indexReady)
 
     async Task Enqueue(BookItem book)
     {
-        await Queue.EnqueueAsync(book);
+        if (string.IsNullOrWhiteSpace(UserSession.UserId))
+        {
+            Snackbar.Add("Session is not ready yet, please try again.", Severity.Warning);
+            return;
+        }
+
+        await Queue.EnqueueAsync(book, UserSession.UserId);
         Snackbar.Add($"Queued: {book.Title}", Severity.Success);
         NavigationManager.NavigateTo("/downloads");
     }

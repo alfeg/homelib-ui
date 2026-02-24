@@ -130,6 +130,8 @@ volumes:
 
 **On restart**: if the DuckDB file exists and already contains books, steps 2–5 are skipped entirely. The index is ready within seconds.
 
+DuckDB schema migrations for `queue.db` and `audit.db` run automatically at application startup, so deployment updates can evolve DB structure without manual SQL steps.
+
 ## Project structure
 
 ```

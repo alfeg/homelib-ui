@@ -160,6 +160,9 @@
     protected override void OnInitialized()
     {
         if (!Queue.IsEnabled) return;
+        _stats = Queue.LibraryStats;
+        if (_stats is not null)
+            (_cachePct, _cacheTitle) = GetCacheDisplay(_stats);
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
         _ = PollAsync();
     }
@@ -167,12 +170,15 @@
     async Task PollAsync()
     {
         if (_timer is null) return;
-        while (await _timer.WaitForNextTickAsync())
+        while (true)
         {
             _stats = Queue.LibraryStats;
             if (_stats is not null)
                 (_cachePct, _cacheTitle) = GetCacheDisplay(_stats);
             await InvokeAsync(StateHasChanged);
+
+            if (!await _timer.WaitForNextTickAsync())
+                break;
         }
     }
 

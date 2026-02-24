@@ -55,27 +55,6 @@ public sealed class DownloadQueueService(
             memCmd.ExecuteNonQuery();
         }
         
-        // Initialize schema
-        using var cmd = db.CreateCommand();
-        cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS download_queue (
-                id            VARCHAR PRIMARY KEY,
-                book_id       INTEGER,
-                title         VARCHAR,
-                authors       VARCHAR,
-                archive       VARCHAR,
-                file_name     VARCHAR,
-                status        VARCHAR DEFAULT 'Pending',
-                error         VARCHAR,
-                file_path     VARCHAR,
-                download_name VARCHAR,
-                content_type  VARCHAR,
-                added_at      TIMESTAMP DEFAULT now(),
-                completed_at  TIMESTAMP
-            )
-            """;
-        cmd.ExecuteNonQuery();
-        
         return db;
     }
 
@@ -145,11 +124,14 @@ public sealed class DownloadQueueService(
         }
     }
 
-    public async Task<Guid> EnqueueAsync(MyHomeLib.Library.BookItem book)
+    public async Task<Guid> EnqueueAsync(MyHomeLib.Library.BookItem book, string userId)
     {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new InvalidOperationException("User id is required for enqueue.");
+
         // Deduplicate by archive + file_name
         var existing = await ScalarAsync<string>(
-            $"SELECT id FROM download_queue WHERE archive = '{Esc(book.ArchiveFile)}' AND file_name = '{Esc(book.File + "." + book.Ext)}' AND status <> 'Failed' LIMIT 1");
+            $"SELECT id FROM download_queue WHERE user_id = '{Esc(userId)}' AND archive = '{Esc(book.ArchiveFile)}' AND file_name = '{Esc(book.File + "." + book.Ext)}' AND status <> 'Failed' LIMIT 1");
         if (existing != null)
             return Guid.Parse(existing);
 
@@ -163,8 +145,8 @@ public sealed class DownloadQueueService(
         };
 
         await DbExecAsync($"""
-            INSERT INTO download_queue (id, book_id, title, authors, archive, file_name)
-            VALUES ('{job.Id}', {job.BookId}, '{Esc(job.Title)}', '{Esc(job.Authors)}',
+            INSERT INTO download_queue (id, user_id, book_id, title, authors, archive, file_name)
+            VALUES ('{job.Id}', '{Esc(userId)}', {job.BookId}, '{Esc(job.Title)}', '{Esc(job.Authors)}',
                     '{Esc(job.Archive)}', '{Esc(job.FileName)}')
             """);
 
@@ -174,14 +156,17 @@ public sealed class DownloadQueueService(
         return job.Id;
     }
 
-    public async Task<IReadOnlyList<DownloadJob>> GetAllAsync()
+    public async Task<IReadOnlyList<DownloadJob>> GetAllAsync(string userId)
     {
+        if (string.IsNullOrWhiteSpace(userId))
+            return [];
+
         var jobs = new List<DownloadJob>();
         await _dbLock.WaitAsync();
         try
         {
             using var cmd = _db.CreateCommand();
-            cmd.CommandText = "SELECT id, book_id, title, authors, archive, file_name, status, error, file_path, download_name, content_type, added_at, completed_at FROM download_queue ORDER BY added_at DESC";
+            cmd.CommandText = $"SELECT id, book_id, title, authors, archive, file_name, status, error, file_path, download_name, content_type, added_at, completed_at FROM download_queue WHERE user_id = '{Esc(userId)}' ORDER BY added_at DESC";
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
@@ -207,18 +192,29 @@ public sealed class DownloadQueueService(
         return jobs;
     }
 
-    public async Task DeleteAsync(Guid jobId)
+    public async Task<DownloadJob?> GetByIdAsync(Guid jobId, string userId)
     {
+        if (string.IsNullOrWhiteSpace(userId))
+            return null;
+
+        return await GetByIdAsync(jobId, userId, includeUserFilter: true);
+    }
+
+    public async Task DeleteAsync(Guid jobId, string userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return;
+
         // Cancel active download if running (fire-and-forget the cancellation)
         if (_jobCts.TryRemove(jobId, out var cts))
             _ = cts.CancelAsync();
 
         // Delete from DB and disk immediately — don't wait for ProcessJobAsync
-        var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
+        var job = await GetByIdAsync(jobId, userId);
         if (job?.FilePath != null && File.Exists(job.FilePath))
             File.Delete(job.FilePath);
 
-        await DbExecAsync($"DELETE FROM download_queue WHERE id = '{jobId}'");
+        await DbExecAsync($"DELETE FROM download_queue WHERE id = '{jobId}' AND user_id = '{Esc(userId)}'");
     }
 
     private async Task ProcessJobAsync(Guid jobId, CancellationToken stoppingToken)
@@ -232,7 +228,7 @@ public sealed class DownloadQueueService(
 
         try
         {
-            var job = (await GetAllAsync()).FirstOrDefault(j => j.Id == jobId);
+            var job = await GetByIdAsync(jobId, null, includeUserFilter: false);
             if (job is null) return;
 
             // Wake the torrent if it was put to sleep due to inactivity
@@ -346,6 +342,40 @@ public sealed class DownloadQueueService(
     }
 
     private static string Esc(string? s) => (s ?? string.Empty).Replace("'", "''");
+
+    private async Task<DownloadJob?> GetByIdAsync(Guid jobId, string? userId, bool includeUserFilter)
+    {
+        await _dbLock.WaitAsync();
+        try
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.CommandText = includeUserFilter
+                ? $"SELECT id, book_id, title, authors, archive, file_name, status, error, file_path, download_name, content_type, added_at, completed_at FROM download_queue WHERE id = '{jobId}' AND user_id = '{Esc(userId)}' LIMIT 1"
+                : $"SELECT id, book_id, title, authors, archive, file_name, status, error, file_path, download_name, content_type, added_at, completed_at FROM download_queue WHERE id = '{jobId}' LIMIT 1";
+
+            using var reader = cmd.ExecuteReader();
+            if (!reader.Read())
+                return null;
+
+            return new DownloadJob
+            {
+                Id = Guid.Parse(reader.GetString(0)),
+                BookId = reader.GetInt32(1),
+                Title = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                Authors = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                Archive = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                FileName = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                Status = Enum.Parse<DownloadStatus>(reader.IsDBNull(6) ? "Pending" : reader.GetString(6)),
+                Error = reader.IsDBNull(7) ? null : reader.GetString(7),
+                FilePath = reader.IsDBNull(8) ? null : reader.GetString(8),
+                DownloadName = reader.IsDBNull(9) ? null : reader.GetString(9),
+                ContentType = reader.IsDBNull(10) ? null : reader.GetString(10),
+                AddedAt = reader.GetDateTime(11),
+                CompletedAt = reader.IsDBNull(12) ? null : reader.GetDateTime(12),
+            };
+        }
+        finally { _dbLock.Release(); }
+    }
 
     private static string MakeSafeFileName(string name)
     {

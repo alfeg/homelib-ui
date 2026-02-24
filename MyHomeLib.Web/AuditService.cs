@@ -23,24 +23,6 @@ public sealed class AuditService : IAsyncDisposable
 
         _db = new DuckDBConnection($"DataSource={dbPath}");
         _db.Open();
-
-        using var cmd = _db.CreateCommand();
-        cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id           VARCHAR PRIMARY KEY,
-                event_type   VARCHAR NOT NULL,
-                timestamp    TIMESTAMPTZ DEFAULT now(),
-                query        VARCHAR,
-                result_count INTEGER,
-                book_id      INTEGER,
-                title        VARCHAR,
-                authors      VARCHAR,
-                archive      VARCHAR,
-                file_name    VARCHAR,
-                job_id       VARCHAR
-            )
-            """;
-        cmd.ExecuteNonQuery();
     }
 
     /// <summary>Logs a search query and its result count.</summary>

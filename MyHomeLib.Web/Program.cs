@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.AspNetCore.Http;
 using MyHomeLib.Web;
 using MyHomeLib.Web.Components;
 using MyHomeListServer.Torrent;
@@ -11,6 +12,10 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddMudServices();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<UserSessionContext>();
+builder.Services.AddScoped<SearchPageState>();
+builder.Services.AddSingleton<DatabaseMigrationService>();
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -43,8 +48,27 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<DownloadQueueServi
 
 var app = builder.Build();
 
+await app.Services.GetRequiredService<DatabaseMigrationService>().MigrateAsync();
+
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
+
+app.Use(async (context, next) =>
+{
+    if (!context.Request.Cookies.ContainsKey(UserSessionCookie.CookieName))
+    {
+        context.Response.Cookies.Append(UserSessionCookie.CookieName, UserSessionCookie.NewUserId(), new CookieOptions
+        {
+            Expires = DateTimeOffset.UtcNow.AddYears(10),
+            HttpOnly = true,
+            IsEssential = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = context.Request.IsHttps
+        });
+    }
+
+    await next();
+});
 
 app.MapStaticAssets();
 app.UseAntiforgery();
@@ -53,10 +77,12 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 // Serve downloaded files
-app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, DownloadQueueService queue, AuditService audit) =>
+app.MapGet("/api/download/{jobId:guid}", async (Guid jobId, HttpContext httpContext, DownloadQueueService queue, AuditService audit) =>
 {
-    var jobs = await queue.GetAllAsync();
-    var job  = jobs.FirstOrDefault(j => j.Id == jobId);
+    var userId = httpContext.Request.Cookies[UserSessionCookie.CookieName];
+    if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+    var job  = await queue.GetByIdAsync(jobId, userId);
     if (job is null) return Results.NotFound();
     if (job.Status != DownloadStatus.Ready || job.FilePath is null) return Results.StatusCode(202);
     if (!File.Exists(job.FilePath)) return Results.NotFound("File not found on disk");
