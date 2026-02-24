@@ -266,3 +266,26 @@ main {
         max-height: none;
     }
 }
+
+
+.gate-card-drag {
+    border: 2px dashed #1d4ed8;
+    background: #eff6ff;
+}
+
+.gate-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.torrent-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}

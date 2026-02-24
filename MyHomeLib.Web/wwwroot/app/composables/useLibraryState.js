@@ -2,6 +2,7 @@ import { computed, reactive, ref, watch } from "https://unpkg.com/vue@3/dist/vue
 import { apiClient } from "../services/apiClient.js";
 import { parseHashFromMagnet, magnetStore } from "../services/magnetService.js";
 import { libraryCacheStore } from "../services/storageService.js";
+import { convertTorrentFileToMagnet } from "../services/torrentMagnetService.js";
 import { createSearchWorkerClient } from "../services/searchIndexWorkerClient.js";
 
 const RESULTS_PAGE_SIZE = 200;
@@ -534,6 +535,22 @@ export function useLibraryState() {
         }
     }
 
+    async function submitTorrentFile(file) {
+        error.value = "";
+
+        if (!file) {
+            error.value = "Please choose a .torrent file.";
+            return;
+        }
+
+        try {
+            const magnetFromFile = await convertTorrentFileToMagnet(file);
+            await submitMagnet(magnetFromFile);
+        } catch (err) {
+            error.value = err instanceof Error ? err.message : "Failed to parse .torrent file.";
+        }
+    }
+
     async function bootstrap() {
         try {
             await apiClient.getUserId();
@@ -661,6 +678,7 @@ export function useLibraryState() {
         visibleRange,
         pageSize: RESULTS_PAGE_SIZE,
         submitMagnet,
+        submitTorrentFile,
         bootstrap,
         reindexCurrent,
         resetAll,

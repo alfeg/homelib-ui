@@ -27,6 +27,7 @@ export const App = defineComponent({
                 :loading="isLoading"
                 :error="error"
                 @submit="submitMagnet"
+                @submit-torrent="submitTorrentFile"
             />
 
             <section v-else class="page">
