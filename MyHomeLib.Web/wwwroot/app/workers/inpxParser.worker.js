@@ -13,6 +13,24 @@ try {
 function decodeText(bytes) {
     if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return "";
 
+    const looksLikeMojibake = (text) => {
+        if (!text) return false;
+
+        const artifacts = text.match(/[РС][\u0080-\u00bf]/g);
+        if (!artifacts || artifacts.length === 0) return false;
+
+        return artifacts.length / text.length > 0.01;
+    };
+
+    try {
+        const utf8Text = utf8Decoder.decode(bytes);
+        if (!looksLikeMojibake(utf8Text)) {
+            return utf8Text;
+        }
+    } catch {
+        // ignored, fallback to windows-1251
+    }
+
     if (cp1251Decoder) {
         try {
             return cp1251Decoder.decode(bytes);
