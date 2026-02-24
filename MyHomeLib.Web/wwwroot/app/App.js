@@ -49,9 +49,16 @@ export const App = defineComponent({
                 <p v-if="error" class="error-text">{{ error }}</p>
 
                 <BooksTable
-                    :books="filteredBooks"
+                    :books="pagedBooks"
                     :downloading-by-id="downloadingById"
+                    :current-page="currentPage"
+                    :total-pages="totalPages"
+                    :visible-range="visibleRange"
+                    :total-results="filteredBooks.length"
                     @download="downloadBook"
+                    @go-to-page="goToPage"
+                    @next-page="nextPage"
+                    @previous-page="previousPage"
                 />
             </section>
         </main>

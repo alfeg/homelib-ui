@@ -170,3 +170,21 @@ main {
         flex-wrap: wrap;
     }
 }
+.table-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.pagination-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pagination-info {
+    margin: 0;
+}

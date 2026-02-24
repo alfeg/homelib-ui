@@ -1,59 +1,15 @@
-import { computed, reactive, ref } from "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js";
-import { Index as FlexIndex } from "https://cdn.jsdelivr.net/npm/flexsearch@0.8.212/dist/flexsearch.bundle.module.min.js";
+import { computed, reactive, ref, watch } from "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js";
 import { apiClient } from "../services/apiClient.js";
 import { parseHashFromMagnet, magnetStore } from "../services/magnetService.js";
 import { libraryCacheStore } from "../services/storageService.js";
+import { createSearchWorkerClient } from "../services/searchIndexWorkerClient.js";
 
-const INDEX_CHUNK_SIZE = 250;
+const RESULTS_PAGE_SIZE = 200;
+const SEARCH_RESULTS_LIMIT = 1000;
 const INPX_PARSER_WORKER_URL = new URL("../workers/inpxParser.worker.js", import.meta.url);
 
 function formatMegabytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function yieldToBrowser() {
-    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-        return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
-    }
-
-    return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-async function createSearchIndexAsync(books, onProgress) {
-    const index = new FlexIndex({ tokenize: "forward", cache: true });
-    const byId = new Map();
-    const total = books.length;
-
-    if (!total) {
-        onProgress?.({ phase: "indexing", processed: 0, total: 0, percent: 100 });
-        return { index, byId };
-    }
-
-    for (let i = 0; i < total; i += 1) {
-        const book = books[i];
-        const id = String(book.id);
-        byId.set(id, book);
-
-        const text = [book.title, book.authors, book.series, book.lang, book.file]
-            .filter(Boolean)
-            .join(" ");
-        index.add(id, text);
-
-        const processed = i + 1;
-        const shouldYield = processed % INDEX_CHUNK_SIZE === 0 || processed === total;
-
-        if (shouldYield) {
-            onProgress?.({
-                phase: "indexing",
-                processed,
-                total,
-                percent: Math.round((processed / total) * 100)
-            });
-            await yieldToBrowser();
-        }
-    }
-
-    return { index, byId };
 }
 
 function parseInpxWithWorker(buffer, onProgress) {
@@ -116,6 +72,8 @@ export function useLibraryState() {
     const magnetHash = ref("");
     const metadata = ref(null);
     const books = ref([]);
+    const filteredBooks = ref([]);
+    const pagedBooks = ref([]);
     const searchTerm = ref("");
     const isLoading = ref(false);
     const isReindexing = ref(false);
@@ -123,8 +81,8 @@ export function useLibraryState() {
     const error = ref("");
     const hasCache = ref(false);
     const lastUpdatedAt = ref("");
+    const currentPage = ref(1);
 
-    const indexState = ref({ index: null, byId: new Map() });
     const downloadingById = reactive({});
     const indexProgress = reactive({
         phase: "idle",
@@ -136,18 +94,33 @@ export function useLibraryState() {
     });
 
     const isMagnetSet = computed(() => !!magnetUri.value);
-    const filteredBooks = computed(() => {
-        const term = searchTerm.value.trim();
-        if (!term) return books.value;
-
-        const idx = indexState.value.index;
-        if (!idx) return [];
-
-        const results = idx.search(term, { limit: 1000 });
-        return results
-            .map((id) => indexState.value.byId.get(String(id)))
-            .filter(Boolean);
+    const totalPages = computed(() => {
+        const totalItems = filteredBooks.value.length;
+        return totalItems ? Math.max(1, Math.ceil(totalItems / RESULTS_PAGE_SIZE)) : 1;
     });
+
+    const visibleRange = computed(() => {
+        if (!filteredBooks.value.length) {
+            return { start: 0, end: 0 };
+        }
+
+        const start = (currentPage.value - 1) * RESULTS_PAGE_SIZE + 1;
+        const end = Math.min(currentPage.value * RESULTS_PAGE_SIZE, filteredBooks.value.length);
+        return { start, end };
+    });
+
+    const searchWorkerClient = createSearchWorkerClient({
+        onProgress: (progress) => {
+            setProgress(progress);
+            status.value = `Building search index... ${progress.processed}/${progress.total} (${progress.percent}%)`;
+        },
+        onError: (err) => {
+            error.value = err instanceof Error ? err.message : "Search index worker failed.";
+        }
+    });
+
+    let searchRequestId = 0;
+    let activeSearchRequestId = 0;
 
     function setProgress(next) {
         indexProgress.phase = next.phase ?? indexProgress.phase;
@@ -175,9 +148,52 @@ export function useLibraryState() {
         });
     }
 
+    function updatePagedBooks() {
+        const startIndex = (currentPage.value - 1) * RESULTS_PAGE_SIZE;
+        pagedBooks.value = filteredBooks.value.slice(startIndex, startIndex + RESULTS_PAGE_SIZE);
+    }
+
+    watch([filteredBooks, currentPage], () => {
+        if (currentPage.value > totalPages.value) {
+            currentPage.value = totalPages.value;
+            return;
+        }
+
+        updatePagedBooks();
+    }, { immediate: true });
+
+    watch(searchTerm, async () => {
+        currentPage.value = 1;
+        await refreshSearchResults();
+    });
+
+    async function refreshSearchResults() {
+        const term = searchTerm.value.trim();
+
+        if (!term) {
+            activeSearchRequestId += 1;
+            filteredBooks.value = books.value;
+            return;
+        }
+
+        if (indexProgress.phase !== "ready") {
+            filteredBooks.value = [];
+            return;
+        }
+
+        const requestId = ++searchRequestId;
+        activeSearchRequestId = requestId;
+        const matches = await searchWorkerClient.search(term, requestId, SEARCH_RESULTS_LIMIT);
+
+        if (requestId !== activeSearchRequestId) return;
+        filteredBooks.value = matches;
+    }
+
     async function applyBooks(payload, fromCache) {
         metadata.value = payload.metadata ?? null;
         books.value = payload.books ?? [];
+        filteredBooks.value = searchTerm.value.trim() ? [] : books.value;
+        currentPage.value = 1;
 
         setProgress({
             phase: "indexing",
@@ -188,12 +204,8 @@ export function useLibraryState() {
             totalBytes: null
         });
         status.value = `Building search index... 0/${books.value.length} (0%)`;
-        indexState.value = { index: null, byId: new Map() };
 
-        indexState.value = await createSearchIndexAsync(books.value, (progress) => {
-            setProgress(progress);
-            status.value = `Building search index... ${progress.processed}/${progress.total} (${progress.percent}%)`;
-        });
+        await searchWorkerClient.buildIndex(books.value);
 
         hasCache.value = fromCache;
         setProgress({
@@ -205,6 +217,8 @@ export function useLibraryState() {
             totalBytes: null
         });
         status.value = fromCache ? "Loaded from local cache." : "Library indexed from backend.";
+
+        await refreshSearchResults();
     }
 
     async function cachePayload(hash, payload) {
@@ -409,13 +423,28 @@ export function useLibraryState() {
         magnetHash.value = "";
         metadata.value = null;
         books.value = [];
+        filteredBooks.value = [];
+        pagedBooks.value = [];
         searchTerm.value = "";
+        currentPage.value = 1;
         status.value = "";
         error.value = "";
         hasCache.value = false;
         lastUpdatedAt.value = "";
-        indexState.value = { index: null, byId: new Map() };
         resetProgress();
+    }
+
+    function goToPage(page) {
+        const nextPageValue = Math.min(Math.max(page, 1), totalPages.value);
+        currentPage.value = nextPageValue;
+    }
+
+    function nextPage() {
+        goToPage(currentPage.value + 1);
+    }
+
+    function previousPage() {
+        goToPage(currentPage.value - 1);
     }
 
     async function downloadBook(book) {
@@ -447,6 +476,7 @@ export function useLibraryState() {
         metadata,
         books,
         filteredBooks,
+        pagedBooks,
         searchTerm,
         isLoading,
         isReindexing,
@@ -457,10 +487,17 @@ export function useLibraryState() {
         lastUpdatedAt,
         indexProgress,
         downloadingById,
+        currentPage,
+        totalPages,
+        visibleRange,
+        pageSize: RESULTS_PAGE_SIZE,
         submitMagnet,
         bootstrap,
         reindexCurrent,
         resetAll,
-        downloadBook
+        downloadBook,
+        goToPage,
+        nextPage,
+        previousPage
     };
 }

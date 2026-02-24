@@ -4,9 +4,13 @@ export const BooksTable = defineComponent({
     name: "BooksTable",
     props: {
         books: { type: Array, required: true },
-        downloadingById: { type: Object, required: true }
+        downloadingById: { type: Object, required: true },
+        currentPage: { type: Number, required: true },
+        totalPages: { type: Number, required: true },
+        visibleRange: { type: Object, required: true },
+        totalResults: { type: Number, required: true }
     },
-    emits: ["download"],
+    emits: ["download", "go-to-page", "next-page", "previous-page"],
     methods: {
         isDownloading(bookId) {
             return !!this.downloadingById[bookId];
@@ -47,6 +51,27 @@ export const BooksTable = defineComponent({
                     </tr>
                 </tbody>
             </table>
+
+            <footer v-if="totalResults" class="table-pagination">
+                <p class="subtle pagination-info">
+                    Showing {{ visibleRange.start }}-{{ visibleRange.end }} of {{ totalResults }} books
+                </p>
+                <div class="pagination-actions">
+                    <button
+                        class="btn"
+                        :disabled="currentPage <= 1"
+                        @click="$emit('previous-page')">
+                        Previous
+                    </button>
+                    <span class="subtle">Page {{ currentPage }} / {{ totalPages }}</span>
+                    <button
+                        class="btn"
+                        :disabled="currentPage >= totalPages"
+                        @click="$emit('next-page')">
+                        Next
+                    </button>
+                </div>
+            </footer>
         </section>
     `
 });
