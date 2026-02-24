@@ -6,6 +6,10 @@ import { libraryCacheStore } from "../services/storageService.js";
 
 const INDEX_CHUNK_SIZE = 250;
 
+function formatMegabytes(bytes) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function yieldToBrowser() {
     if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
         return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -82,7 +86,9 @@ export function useLibraryState() {
         phase: "idle",
         processed: 0,
         total: 0,
-        percent: 0
+        percent: 0,
+        downloadedBytes: 0,
+        totalBytes: null
     });
 
     const isMagnetSet = computed(() => !!magnetUri.value);
@@ -104,6 +110,14 @@ export function useLibraryState() {
         indexProgress.processed = next.processed ?? indexProgress.processed;
         indexProgress.total = next.total ?? indexProgress.total;
         indexProgress.percent = next.percent ?? indexProgress.percent;
+
+        if ("downloadedBytes" in next) {
+            indexProgress.downloadedBytes = next.downloadedBytes;
+        }
+
+        if ("totalBytes" in next) {
+            indexProgress.totalBytes = next.totalBytes;
+        }
     }
 
     function resetProgress() {
@@ -111,7 +125,9 @@ export function useLibraryState() {
             phase: "idle",
             processed: 0,
             total: 0,
-            percent: 0
+            percent: 0,
+            downloadedBytes: 0,
+            totalBytes: null
         });
     }
 
@@ -119,7 +135,14 @@ export function useLibraryState() {
         metadata.value = payload.metadata ?? null;
         books.value = payload.books ?? [];
 
-        setProgress({ phase: "indexing", processed: 0, total: books.value.length, percent: 0 });
+        setProgress({
+            phase: "indexing",
+            processed: 0,
+            total: books.value.length,
+            percent: 0,
+            downloadedBytes: 0,
+            totalBytes: null
+        });
         status.value = `Building search index... 0/${books.value.length} (0%)`;
         indexState.value = { index: null, byId: new Map() };
 
@@ -129,7 +152,14 @@ export function useLibraryState() {
         });
 
         hasCache.value = fromCache;
-        setProgress({ phase: "ready", processed: books.value.length, total: books.value.length, percent: 100 });
+        setProgress({
+            phase: "ready",
+            processed: books.value.length,
+            total: books.value.length,
+            percent: 100,
+            downloadedBytes: 0,
+            totalBytes: null
+        });
         status.value = fromCache ? "Loaded from local cache." : "Library indexed from backend.";
     }
 
@@ -150,13 +180,34 @@ export function useLibraryState() {
         if (!magnetUri.value || !magnetHash.value) return;
 
         error.value = "";
-        setProgress({ phase: "loading-backend", processed: 0, total: 0, percent: 0 });
+        setProgress({
+            phase: "loading-backend",
+            processed: 0,
+            total: 0,
+            percent: 0,
+            downloadedBytes: 0,
+            totalBytes: null
+        });
         status.value = forceReindex ? "Reindexing library: fetching data from backend..." : "Loading library from backend...";
         isLoading.value = !forceReindex;
         isReindexing.value = forceReindex;
 
         try {
-            const payload = await apiClient.fetchBooks(magnetUri.value, forceReindex);
+            const payload = await apiClient.fetchBooks(magnetUri.value, forceReindex, ({ downloadedBytes, totalBytes, percent }) => {
+                setProgress({
+                    phase: "loading-backend",
+                    downloadedBytes,
+                    totalBytes,
+                    percent: percent ?? 0
+                });
+
+                if (totalBytes) {
+                    status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} / ${formatMegabytes(totalBytes)} (${percent ?? 0}%)`;
+                    return;
+                }
+
+                status.value = `Downloading library payload: ${formatMegabytes(downloadedBytes)} downloaded`;
+            });
             status.value = "Library data loaded. Building search index...";
             await applyBooks(payload, false);
             await cachePayload(magnetHash.value, payload);
@@ -170,7 +221,14 @@ export function useLibraryState() {
     async function loadLibraryForCurrentMagnet() {
         if (!magnetHash.value) return;
 
-        setProgress({ phase: "loading-cache", processed: 0, total: 0, percent: 0 });
+        setProgress({
+            phase: "loading-cache",
+            processed: 0,
+            total: 0,
+            percent: 0,
+            downloadedBytes: 0,
+            totalBytes: null
+        });
         status.value = "Loading library from local cache...";
         const cached = await libraryCacheStore.getByHash(magnetHash.value);
         if (cached?.books?.length) {

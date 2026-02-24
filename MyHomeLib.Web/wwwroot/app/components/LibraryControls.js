@@ -24,10 +24,22 @@ export const LibraryControls = defineComponent({
             }
 
             if (this.progress.phase === "loading-backend") {
-                return "Fetching library from backend...";
+                const downloaded = this.progress.downloadedBytes ?? 0;
+                const total = this.progress.totalBytes;
+
+                if (total) {
+                    return `Downloading library payload: ${this.formatMegabytes(downloaded)} / ${this.formatMegabytes(total)} (${this.progress.percent ?? 0}%)`;
+                }
+
+                return `Downloading library payload: ${this.formatMegabytes(downloaded)} downloaded`;
             }
 
             return "";
+        }
+    },
+    methods: {
+        formatMegabytes(bytes) {
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
         }
     },
     emits: ["reindex", "reset"],
