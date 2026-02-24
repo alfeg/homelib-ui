@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <NuGetAudit>false</NuGetAudit>
+    <SpaRoot>..\MyHomeLib.Ui\</SpaRoot>
+    <BuildClientApp Condition="'$(BuildClientApp)' == ''">false</BuildClientApp>
+    <BuildClientApp Condition="'$(Configuration)' == 'Release'">true</BuildClientApp>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -14,8 +17,29 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MyHomeLib.Library\MyHomeLib.Library.csproj" />
     <ProjectReference Include="..\MyHomeLib.Torrent\MyHomeLib.Torrent.csproj" />
   </ItemGroup>
+
+  <Target Name="BuildClientUi" BeforeTargets="Build;Publish" Condition="'$(BuildClientApp)' == 'true'">
+    <Exec Command="npm ci" WorkingDirectory="$(SpaRoot)" Condition="Exists('$(SpaRoot)package-lock.json')" />
+    <Exec Command="npm install" WorkingDirectory="$(SpaRoot)" Condition="!Exists('$(SpaRoot)package-lock.json')" />
+    <Exec Command="npm run build" WorkingDirectory="$(SpaRoot)" />
+
+    <RemoveDir Directories="$(MSBuildProjectDirectory)\wwwroot" />
+    <MakeDir Directories="$(MSBuildProjectDirectory)\wwwroot" />
+
+    <ItemGroup>
+      <SpaDistFiles Include="$(SpaRoot)dist\**\*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(SpaDistFiles)"
+          DestinationFiles="@(SpaDistFiles->'$(MSBuildProjectDirectory)\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

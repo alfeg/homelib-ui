@@ -1,6 +1,5 @@
 using System.Text;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.FileProviders;
 using MyHomeLib.Web;
 using MyHomeListServer.Torrent;
 
@@ -11,6 +10,13 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection("Library"));
 builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("Torrent"));
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services
+        .AddReverseProxy()
+        .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+}
 
 // TorrServe services
 var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"]
@@ -34,37 +40,14 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleTorrentCleanup
 
 var app = builder.Build();
 
-var spaDistPath = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "MyHomeLib.Ui", "dist"));
-var hasSpaDist = Directory.Exists(spaDistPath);
-var spaIndexRoot = hasSpaDist ? spaDistPath : app.Environment.WebRootPath;
-
-if (hasSpaDist)
-    app.Logger.LogInformation("Serving SPA static assets from {SpaDistPath}", spaDistPath);
-else
-    app.Logger.LogInformation("SPA dist path {SpaDistPath} not found. Falling back to wwwroot ({WebRootPath}).", spaDistPath, app.Environment.WebRootPath);
-
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 
-if (hasSpaDist)
+if (!app.Environment.IsDevelopment())
 {
-    var spaDistProvider = new PhysicalFileProvider(spaDistPath);
-    app.UseDefaultFiles(new DefaultFilesOptions
-    {
-        FileProvider = spaDistProvider,
-        RequestPath = ""
-    });
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = spaDistProvider,
-        RequestPath = ""
-    });
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
 }
-
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
-app.MapGet("/favicon.ico", () => Results.NoContent());
 
 app.MapPost("/api/library/inpx", async (
     LibraryBooksRequest request,
@@ -189,33 +172,16 @@ app.MapPost("/api/library/download", async (
     }
 });
 
-app.MapFallback(async context =>
+app.MapFallback("/api/{**catch-all}", () => Results.NotFound());
+
+if (app.Environment.IsDevelopment())
 {
-    if (!HttpMethods.IsGet(context.Request.Method)
-        && !HttpMethods.IsHead(context.Request.Method))
-    {
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-        return;
-    }
-
-    if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
-        || Path.HasExtension(context.Request.Path.Value))
-    {
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-        return;
-    }
-
-    var indexPath = Path.Combine(spaIndexRoot, "index.html");
-    if (!File.Exists(indexPath))
-    {
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-        await context.Response.WriteAsync("SPA index.html not found. Build MyHomeLib.Ui/dist or provide wwwroot/index.html.");
-        return;
-    }
-
-    context.Response.ContentType = "text/html; charset=utf-8";
-    await context.Response.SendFileAsync(indexPath);
-});
+    app.MapReverseProxy();
+}
+else
+{
+    app.MapFallbackToFile("index.html");
+}
 
 // First Ctrl+C → graceful. Second → force exit.
 var ctrlCCount = 0;
@@ -233,4 +199,3 @@ static string MakeSafeFileName(string name)
     var invalid = Path.GetInvalidFileNameChars();
     return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
 }
-
