@@ -12,7 +12,7 @@ const PERSISTENCE_STORE_NAME = "indexes"
 const PERSISTENCE_DB_VERSION = 6
 const LIBRARY_CACHE_DB_NAME = "myhomelib-library-cache"
 const LIBRARY_CACHE_STORE_NAME = "libraries"
-const LIBRARY_CACHE_DB_VERSION = 1
+const LIBRARY_CACHE_DB_VERSION = 2
 
 let index = null // MiniSearch instance
 let booksById = new Map()

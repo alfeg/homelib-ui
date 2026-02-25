@@ -23,6 +23,7 @@ export interface ParsedBook {
     file: string
     ext: string
     archiveFile: string
+    date: string
 }
 
 export interface ParsedMetadata {
@@ -115,6 +116,7 @@ function mapBook(fields: string[], archiveFile: string, fallbackId: number): Par
         file: normalizeString(fields[5]),
         ext: normalizeString(fields[9]),
         archiveFile: normalizeString(archiveFile),
+        date: normalizeString(fields[10]),
     }
 }
 

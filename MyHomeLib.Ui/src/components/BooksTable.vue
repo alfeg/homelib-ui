@@ -25,6 +25,7 @@ const { t } = useI18nState()
                         <th>{{ t("table.series") }}</th>
                         <th>{{ t("table.genres") }}</th>
                         <th>{{ t("table.lang") }}</th>
+                        <th>{{ t("table.date") }}</th>
                         <th>{{ t("table.action") }}</th>
                     </tr>
                 </thead>
@@ -44,12 +45,13 @@ const { t } = useI18nState()
                             <span v-else>—</span>
                         </td>
                         <td
-                            class="max-w-[240px] truncate"
+                            class="max-w-60 truncate"
                             :title="formatGenres ? formatGenres(book) : book.genre || '—'"
                         >
                             {{ formatGenres ? formatGenres(book) : book.genre || "—" }}
                         </td>
                         <td>{{ book.lang || "—" }}</td>
+                        <td class="whitespace-nowrap text-xs text-base-content/60">{{ book.date || "—" }}</td>
                         <td>
                             <button
                                 class="btn btn-primary btn-xs"
@@ -66,7 +68,7 @@ const { t } = useI18nState()
                     <tr v-if="!books.length">
                         <td
                             class="text-base-content/70 p-3 text-center"
-                            colspan="6"
+                            colspan="7"
                         >
                             {{ t("table.noBooks") }}
                         </td>

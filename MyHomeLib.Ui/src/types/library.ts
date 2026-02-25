@@ -15,6 +15,7 @@ export interface BookRecord {
     file: string
     ext: string
     archiveFile: string
+    date?: string
 }
 export interface ProgressState {
     phase: string
