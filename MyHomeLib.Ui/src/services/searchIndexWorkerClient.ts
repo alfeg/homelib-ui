@@ -4,25 +4,28 @@ import SearchIndexWorker from "../workers/searchIndex.worker.ts?worker"
 const _t0 = performance.now()
 const ts = () => `+${(performance.now() - _t0).toFixed(0)}ms`
 
-export interface SearchResult {
+export interface IndexData {
+    chunks: Array<{ key: string; data: unknown }>
     books: BookRecord[]
-    total: number
-    genres: { genre: string; count: number }[]
 }
 
 export function createSearchWorkerClient({
     onProgress,
+    onIndexData,
     onError,
-}: { onProgress?: (payload: any) => void; onError?: (error: Error) => void } = {}) {
+}: {
+    onProgress?: (payload: any) => void
+    onIndexData?: (data: IndexData) => void
+    onError?: (error: Error) => void
+} = {}) {
     const worker = new SearchIndexWorker({ type: "module" })
-    const pendingSearches = new Map<number, (result: SearchResult) => void>()
     let pendingBuild: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
     let pendingRestore: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
     let pendingClear: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
 
     worker.onmessage = (event) => {
         const message = event?.data ?? {}
-        if (message.type !== "build-progress") {
+        if (message.type !== "build-progress" && message.type !== "index-data") {
             console.debug(`[worker ${ts()}] recv type="${message.type}"`, message.payload ?? "")
         }
 
@@ -65,23 +68,11 @@ export function createSearchWorkerClient({
             return
         }
 
-        if (message.type === "search-result") {
-            const requestId = Number(message.payload?.requestId)
+        if (message.type === "index-data") {
             console.debug(
-                `[worker ${ts()}] search-result #${requestId} books=${message.payload?.books?.length ?? 0} total=${message.payload?.total ?? 0} pending=${pendingSearches.size}`,
+                `[worker ${ts()}] index-data chunks=${message.payload?.chunks?.length ?? 0} books=${message.payload?.books?.length ?? 0}`,
             )
-            if (!pendingSearches.has(requestId)) {
-                console.warn(`[worker ${ts()}] search-result #${requestId} has no pending resolve (already cancelled?)`)
-                return
-            }
-
-            const resolve = pendingSearches.get(requestId)!
-            pendingSearches.delete(requestId)
-            resolve({
-                books: message.payload?.books ?? [],
-                total: message.payload?.total ?? 0,
-                genres: message.payload?.genres ?? [],
-            })
+            onIndexData?.(message.payload as IndexData)
         }
     }
 
@@ -95,9 +86,6 @@ export function createSearchWorkerClient({
         pendingRestore = null
         pendingClear?.reject(err)
         pendingClear = null
-
-        pendingSearches.forEach((resolve) => resolve({ books: [], total: 0, genres: [] }))
-        pendingSearches.clear()
 
         onError?.(err)
     }
@@ -131,28 +119,6 @@ export function createSearchWorkerClient({
             return new Promise((resolve, reject) => {
                 pendingClear = { resolve, reject }
                 worker.postMessage({ type: "clear-persisted", hash })
-            })
-        },
-        search(
-            term: string,
-            requestId: number,
-            page = 1,
-            pageSize = 200,
-            genres: string[] = [],
-        ): Promise<SearchResult> {
-            console.debug(
-                `[worker ${ts()}] search send #${requestId} term="${term}" page=${page} pageSize=${pageSize} genres=[${genres}] pending=${pendingSearches.size}`,
-            )
-            return new Promise<SearchResult>((resolve) => {
-                pendingSearches.set(requestId, resolve)
-                worker.postMessage({
-                    type: "search",
-                    term,
-                    requestId,
-                    page,
-                    pageSize,
-                    genres: genres.length ? [...genres] : undefined,
-                })
             })
         },
     }

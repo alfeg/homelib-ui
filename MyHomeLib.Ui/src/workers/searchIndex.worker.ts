@@ -25,13 +25,6 @@ function normalizeSearchValue(value) {
         .replaceAll("ё", "е")
 }
 
-function toSearchText(book) {
-    return [book.title, book.authors, book.series, book.lang, book.file]
-        .filter(Boolean)
-        .map(normalizeSearchValue)
-        .join(" ")
-}
-
 function createIndex() {
     return new FlexDocument({
         cache: true,
@@ -220,34 +213,7 @@ async function addBatchToIndexAsync(targetIndex, documents) {
     targetIndex.add(documents)
 }
 
-function extractSearchIds(rawResults) {
-    if (!Array.isArray(rawResults)) {
-        return []
-    }
-
-    const ids = []
-    const seen = new Set()
-
-    for (let i = 0; i < rawResults.length; i += 1) {
-        const entry = rawResults[i]
-        const resultSet = Array.isArray(entry?.result) ? entry.result : []
-
-        for (let j = 0; j < resultSet.length; j += 1) {
-            const item = resultSet[j]
-            const value = typeof item === "object" && item !== null ? item.id : item
-            const id = String(value)
-
-            if (!seen.has(id)) {
-                seen.add(id)
-                ids.push(id)
-            }
-        }
-    }
-
-    return ids
-}
-
-self.onmessage = async (event) => {
+self.onmessage= async (event) => {
     const message = event?.data ?? {}
 
     if (message.type === "restore") {
@@ -316,6 +282,9 @@ self.onmessage = async (event) => {
                     metadata: persisted.metadata ?? null,
                 },
             })
+
+            // Transfer index + books to main thread for local search
+            self.postMessage({ type: "index-data", payload: { chunks: persisted.chunks, books: persistedBooks } })
         } catch (err) {
             self.postMessage({
                 type: "restore-complete",
@@ -429,13 +398,13 @@ self.onmessage = async (event) => {
                 await new Promise((resolve) => setTimeout(resolve, BATCH_YIELD_DELAY_MS))
             }
 
-            // Phase 3: Persist index chunks + books to IDB
+            // Phase 3: Export index chunks + persist to IDB
+            const chunks = await exportIndex(index)
             let persisted = false
             let persistenceError = ""
 
             if (hash) {
                 try {
-                    const chunks = await exportIndex(index)
                     await Promise.all([
                         writePersistedIndex(hash, datasetSignature, chunks, total, metadata),
                         writePersistedLibraryBooks(hash, books),
@@ -450,6 +419,9 @@ self.onmessage = async (event) => {
                 type: "build-complete",
                 payload: { total, metadata, datasetSignature, persisted, persistenceError },
             })
+
+            // Transfer index + books to main thread for local search
+            self.postMessage({ type: "index-data", payload: { chunks, books } })
         } catch (err) {
             resetInMemoryIndex()
             self.postMessage({
@@ -458,68 +430,6 @@ self.onmessage = async (event) => {
             })
         }
 
-        return
-    }
-
-    if (message.type === "search") {
-        const requestId = message.requestId
-        const term = typeof message.term === "string" ? normalizeSearchValue(message.term).trim() : ""
-        const genres = Array.isArray(message.genres) && message.genres.length ? message.genres : null
-        const page = Number.isFinite(message.page) && message.page >= 1 ? message.page : 1
-        const pageSize = Number.isFinite(message.pageSize) && message.pageSize >= 1 ? message.pageSize : 30
-        const MAX_IDS = 10_000
-
-        if (!index) {
-            self.postMessage({ type: "search-result", payload: { requestId, books: [], total: 0, genres: [] } })
-            return
-        }
-
-        // --- collect matched books ---
-        let matched
-
-        if (!term) {
-            // No query — iterate all books, apply optional genre filter
-            matched = []
-            for (const book of booksById.values()) {
-                if (genres && !book.genreCodes?.some((c) => genres.includes(c))) continue
-                matched.push(book)
-            }
-        } else {
-            const rawResults = index.search(term, { limit: MAX_IDS })
-            const ids = extractSearchIds(rawResults)
-            matched = ids.map((id) => booksById.get(String(id))).filter(Boolean)
-
-            // Linear fallback when FlexSearch finds nothing
-            if (!matched.length) {
-                for (const book of booksById.values()) {
-                    if (toSearchText(book).includes(term)) {
-                        matched.push(book)
-                        if (matched.length >= MAX_IDS) break
-                    }
-                }
-            }
-
-            if (genres) {
-                matched = matched.filter((book) => book.genreCodes?.some((c) => genres.includes(c)))
-            }
-        }
-
-        // --- genre facets from matched set ---
-        const genreCounts = new Map()
-        for (const book of matched) {
-            const codes = Array.isArray(book.genreCodes) && book.genreCodes.length ? book.genreCodes : ["__no_genre__"]
-            for (const code of codes) {
-                genreCounts.set(code, (genreCounts.get(code) ?? 0) + 1)
-            }
-        }
-        const resultGenres = Array.from(genreCounts.entries()).map(([genre, count]) => ({ genre, count }))
-
-        // --- paginate ---
-        const total = matched.length
-        const start = (page - 1) * pageSize
-        const books = matched.slice(start, start + pageSize)
-
-        self.postMessage({ type: "search-result", payload: { requestId, books, total, genres: resultGenres } })
         return
     }
 }

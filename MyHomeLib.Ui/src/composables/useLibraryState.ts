@@ -9,6 +9,7 @@ import { getCurrentLocale, localeRef, translate } from "../services/i18n"
 import { parseHashFromMagnet, magnetStore } from "../services/magnetService"
 import { createSearchWorkerClient } from "../services/searchIndexWorkerClient"
 import { convertTorrentFileToMagnet } from "../services/torrentMagnetService"
+import * as mainThreadSearch from "../search/mainThreadSearch"
 
 const RESULTS_PAGE_SIZE = 30
 const NO_GENRE_CODE = "__no_genre__"
@@ -107,14 +108,14 @@ export const useLibraryState = createGlobalState(() => {
                 percent: progress.percent,
             })
         },
+        onIndexData: async ({ chunks, books }) => {
+            await mainThreadSearch.importIndexData(chunks, books)
+            refreshSearchResults()
+        },
         onError: (err) => {
             error.value = err instanceof Error ? err.message : t("error.searchWorkerFailed")
         },
     })
-
-    // Single monotonic counter — every search (including empty-term) increments it.
-    // After await, stale responses are discarded by comparing against the counter.
-    let searchRequestId = 0
 
     function resolveGenreLabel(genreCode) {
         if (genreCode === NO_GENRE_CODE) {
@@ -188,62 +189,51 @@ export const useLibraryState = createGlobalState(() => {
         })
     }
 
-    watch(searchTerm, async () => {
+    watch(searchTerm, () => {
         currentPage.value = 1
-        await refreshSearchResults()
+        refreshSearchResults()
     })
 
     watch(
         selectedGenres,
-        async () => {
+        () => {
             currentPage.value = 1
-            await refreshSearchResults()
+            refreshSearchResults()
         },
         { deep: true },
     )
 
     watch(
         () => indexProgress.phase,
-        async (phase) => {
+        (phase) => {
             if (phase === "ready") {
-                await refreshSearchResults()
+                refreshSearchResults()
             }
         },
     )
 
-    watch(currentPage, async () => {
-        await refreshSearchResults()
+    watch(currentPage, () => {
+        refreshSearchResults()
     })
 
     watch(localeRef, async () => {
         await ensureGenreLabelsLoaded()
     })
 
-    async function refreshSearchResults() {
-        if (indexProgress.phase !== "ready") {
-            console.debug(`[search ${ts()}] skip — phase="${indexProgress.phase}"`)
+    function refreshSearchResults() {
+        if (!mainThreadSearch.isReady()) {
             return
         }
 
         const term = searchTerm.value.trim()
         const genres = selectedGenres.value
         const page = currentPage.value
-        const requestId = ++searchRequestId
         const t0 = performance.now()
 
-        console.debug(`[search ${ts()}] #${requestId} start term="${term}" page=${page} genres=[${genres}]`)
-
-        const result = await searchWorkerClient.search(term, requestId, page, RESULTS_PAGE_SIZE, genres)
-
-        if (requestId !== searchRequestId) {
-            console.debug(
-                `[search ${ts()}] #${requestId} discarded (current=#${searchRequestId}) after ${(performance.now() - t0).toFixed(0)}ms`,
-            )
-            return
-        }
+        const result = mainThreadSearch.search(term, page, RESULTS_PAGE_SIZE, genres)
 
         console.debug(
-            `[search ${ts()}] #${requestId} done page=${page} books=${result.books.length} total=${result.total} in ${(performance.now() - t0).toFixed(0)}ms`,
+            `[search ${ts()}] done page=${page} books=${result.books.length} total=${result.total} in ${(performance.now() - t0).toFixed(0)}ms`,
         )
         filteredBooks.value = result.books
         totalFilteredBooks.value = result.total
@@ -317,8 +307,7 @@ export const useLibraryState = createGlobalState(() => {
                 totalBytes: null,
             })
             status.value = t("status.libraryIndexed")
-
-            await refreshSearchResults()
+        } catch (err) {
             setProgress({ phase: "error", processed: 0, total: 0, percent: 0, downloadedBytes: 0, totalBytes: null })
             status.value = reindexing ? t("status.reindexFailed") : t("status.loadFailed")
             error.value = err instanceof Error ? err.message : t("error.inpxLoadFailed")
@@ -359,7 +348,6 @@ export const useLibraryState = createGlobalState(() => {
                 totalBytes: null,
             })
             status.value = t("status.loadedFromCache")
-            await refreshSearchResults()
             return
         }
 
