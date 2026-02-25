@@ -1,0 +1,14 @@
+{
+    "endOfLine": "auto",
+    "importOrder": ["(^vue$)", "^@/(.*)$", "\\./(.*)$"],
+    "importOrderSeparation": true,
+    "jsonRecursiveSort": true,
+    "plugins": ["prettier-plugin-sort-json", "@trivago/prettier-plugin-sort-imports", "prettier-plugin-tailwindcss"],
+    "printWidth": 120,
+    "semi": false,
+    "singleAttributePerLine": true,
+    "singleQuote": false,
+    "tabWidth": 4,
+    "trailingComma": "all",
+    "useTabs": false
+}
