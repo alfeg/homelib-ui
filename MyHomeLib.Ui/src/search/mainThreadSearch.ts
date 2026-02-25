@@ -8,11 +8,7 @@ const NO_GENRE_CODE = "__no_genre__"
 let index: InstanceType<typeof FlexDocument> | null = null
 let booksById = new Map<string, BookRecord>()
 
-function norm(value: unknown): string {
-    return String(value ?? "")
-        .toLocaleLowerCase("ru-RU")
-        .replaceAll("ё", "е")
-}
+const encodeText = (str: string): string => str.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
 
 function createIndex(): InstanceType<typeof FlexDocument> {
     return new FlexDocument({
@@ -20,11 +16,11 @@ function createIndex(): InstanceType<typeof FlexDocument> {
         document: {
             id: "id",
             index: [
-                { field: "title",   tokenize: "forward", encode: false },
-                { field: "authors", tokenize: "forward", encode: false },
-                { field: "series",  tokenize: "forward", encode: false },
-                { field: "lang",    tokenize: "strict",  encode: false },
-                { field: "file",    tokenize: "forward", encode: false },
+                { field: "title",   tokenize: "forward", encode: encodeText },
+                { field: "authors", tokenize: "forward", encode: encodeText },
+                { field: "series",  tokenize: "forward", encode: encodeText },
+                { field: "lang",    tokenize: "strict",  encode: encodeText },
+                { field: "file",    tokenize: "forward", encode: encodeText },
             ],
         },
     })
@@ -62,6 +58,25 @@ export async function importIndexData(chunks: Array<{ key: string; data: unknown
     index = newIndex
 }
 
+/** Build the search index directly from BookRecord array (used in tests and future direct-build path). */
+export async function buildIndex(books: BookRecord[]): Promise<void> {
+    const newIndex = createIndex()
+
+    for (const book of books) {
+        await newIndex.add({
+            id: String(book.id),
+            title: String(book.title ?? ""),
+            authors: String(book.authors ?? ""),
+            series: String(book.series ?? ""),
+            lang: String(book.lang ?? ""),
+            file: String(book.file ?? ""),
+        })
+    }
+
+    booksById = new Map(books.map((b) => [String(b.id), b]))
+    index = newIndex
+}
+
 export function isReady(): boolean {
     return index !== null && booksById.size > 0
 }
@@ -75,57 +90,39 @@ export interface SearchResult {
 export function search(term: string, page: number, pageSize: number, genres: string[]): SearchResult {
     if (!index) return { books: [], total: 0, genres: [] }
 
-    const normalizedTerm = norm(term).trim()
     const genreFilter = genres.length ? genres : null
 
-    let matched: BookRecord[]
+    // Step 1: match by search term only (no genre filter yet)
+    let termMatched: BookRecord[]
 
-    if (!normalizedTerm) {
-        matched = []
-        for (const book of booksById.values()) {
-            if (genreFilter && !book.genreCodes?.some((c) => genreFilter.includes(c))) continue
-            matched.push(book)
-        }
+    if (!term.trim()) {
+        termMatched = Array.from(booksById.values())
     } else {
-        // Search each field separately — title matches rank first, then authors, series, file
         const rawResults = index.search([
-            { field: "title",   query: normalizedTerm, limit: MAX_IDS },
-            { field: "authors", query: normalizedTerm, limit: MAX_IDS },
-            { field: "series",  query: normalizedTerm, limit: MAX_IDS },
-            { field: "file",    query: normalizedTerm, limit: MAX_IDS },
+            { field: "title",   query: term, limit: MAX_IDS },
+            { field: "authors", query: term, limit: MAX_IDS },
+            { field: "series",  query: term, limit: MAX_IDS },
+            { field: "lang",    query: term, limit: MAX_IDS },
+            { field: "file",    query: term, limit: MAX_IDS },
         ])
         const ids = extractSearchIds(rawResults)
-        matched = ids.map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
-
-        // Linear fallback when index finds nothing
-        if (!matched.length) {
-            for (const book of booksById.values()) {
-                if (
-                    norm(book.title).includes(normalizedTerm) ||
-                    norm(book.authors).includes(normalizedTerm) ||
-                    norm((book as any).series).includes(normalizedTerm) ||
-                    norm(book.file).includes(normalizedTerm)
-                ) {
-                    matched.push(book)
-                    if (matched.length >= MAX_IDS) break
-                }
-            }
-        }
-
-        if (genreFilter) {
-            matched = matched.filter((book) => book.genreCodes?.some((c) => genreFilter.includes(c)))
-        }
+        termMatched = ids.map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
     }
 
-    // Genre facets from full matched set
+    // Step 2: genre facets from the pre-filter set — stable regardless of selection
     const genreCounts = new Map<string, number>()
-    for (const book of matched) {
+    for (const book of termMatched) {
         const codes = Array.isArray(book.genreCodes) && book.genreCodes.length ? book.genreCodes : [NO_GENRE_CODE]
         for (const code of codes) {
             genreCounts.set(code, (genreCounts.get(code) ?? 0) + 1)
         }
     }
     const resultGenres = Array.from(genreCounts.entries()).map(([genre, count]) => ({ genre, count }))
+
+    // Step 3: apply genre filter (OR — book matches if it belongs to ANY selected genre)
+    const matched = genreFilter
+        ? termMatched.filter((book) => book.genreCodes?.some((c) => genreFilter.includes(c)))
+        : termMatched
 
     const total = matched.length
     const start = (page - 1) * pageSize

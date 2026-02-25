@@ -19,21 +19,16 @@ let activeHash = ""
 let persistenceDbPromise = null
 let libraryCacheDbPromise = null
 
-function normalizeSearchValue(value) {
-    return String(value ?? "")
-        .toLocaleLowerCase("ru-RU")
-        .replaceAll("ё", "е")
-}
+const encodeText = (str) => str.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
 
 function toIndexDoc(book) {
-    const norm = normalizeSearchValue
     return {
         id: String(book.id),
-        title: norm(book.title),
-        authors: norm(book.authors),
-        series: norm(book.series),
-        lang: norm(book.lang),
-        file: norm(book.file),
+        title: String(book.title ?? ""),
+        authors: String(book.authors ?? ""),
+        series: String(book.series ?? ""),
+        lang: String(book.lang ?? ""),
+        file: String(book.file ?? ""),
     }
 }
 
@@ -43,11 +38,11 @@ function createIndex() {
         document: {
             id: "id",
             index: [
-                { field: "title",   tokenize: "forward", encode: false },
-                { field: "authors", tokenize: "forward", encode: false },
-                { field: "series",  tokenize: "forward", encode: false },
-                { field: "lang",    tokenize: "strict",  encode: false },
-                { field: "file",    tokenize: "forward", encode: false },
+                { field: "title",   tokenize: "forward", encode: encodeText },
+                { field: "authors", tokenize: "forward", encode: encodeText },
+                { field: "series",  tokenize: "forward", encode: encodeText },
+                { field: "lang",    tokenize: "strict",  encode: encodeText },
+                { field: "file",    tokenize: "forward", encode: encodeText },
             ],
         },
     })
