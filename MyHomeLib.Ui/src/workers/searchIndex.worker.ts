@@ -8,7 +8,7 @@ const MAX_INDEX_BATCH_SIZE = 2000
 const BATCH_YIELD_DELAY_MS = 0
 const PERSISTENCE_DB_NAME = "myhomelib-search-index-cache"
 const PERSISTENCE_STORE_NAME = "indexes"
-const PERSISTENCE_DB_VERSION = 4
+const PERSISTENCE_DB_VERSION = 5
 const LIBRARY_CACHE_DB_NAME = "myhomelib-library-cache"
 const LIBRARY_CACHE_STORE_NAME = "libraries"
 const LIBRARY_CACHE_DB_VERSION = 1
@@ -40,11 +40,11 @@ function createIndex() {
             id: "id",
             tag: "genreCodes",
             index: [
-                { field: "title",   tokenize: "forward", encode: encodeText },
+                { field: "title", tokenize: "forward", encode: encodeText },
                 { field: "authors", tokenize: "forward", encode: encodeText },
-                { field: "series",  tokenize: "forward", encode: encodeText },
-                { field: "lang",    tokenize: "strict",  encode: encodeText },
-                { field: "file",    tokenize: "forward", encode: encodeText },
+                { field: "series", tokenize: "forward", encode: encodeText },
+                { field: "lang", tokenize: "strict", encode: encodeText },
+                { field: "file", tokenize: "forward", encode: encodeText },
             ],
         },
     })
@@ -215,12 +215,9 @@ function resolveBatchSize(value) {
 }
 
 async function addBatchToIndexAsync(targetIndex, documents) {
-    if (typeof targetIndex?.addAsync === "function") {
-        await targetIndex.addAsync(documents)
-        return
+    for (const doc of documents) {
+        targetIndex.add(doc)
     }
-
-    targetIndex.add(documents)
 }
 
 self.onmessage = async (event) => {
