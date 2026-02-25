@@ -3,6 +3,7 @@ import { setLocale, useI18nState } from "../services/i18n"
 
 const props = defineProps<{
     hash: string
+    magnetUri: string
     metadata: any
     status: string
     progress: any
@@ -22,6 +23,17 @@ const onLocaleToggle = (event: Event) => {
 
 function formatMegabytes(bytes: number) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function booksCountText(n: number): string {
+    if (locale.value === "ru") {
+        const mod10 = n % 10
+        const mod100 = n % 100
+        if (mod10 === 1 && mod100 !== 11) return `${n.toLocaleString("ru")} книга`
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n.toLocaleString("ru")} книги`
+        return `${n.toLocaleString("ru")} книг`
+    }
+    return `${n.toLocaleString("en")} ${n === 1 ? "book" : "books"}`
 }
 
 function progressText() {
@@ -96,13 +108,46 @@ function phaseStatus() {
         <div>
             <h1 class="text-2xl font-semibold">{{ t("app.title") }}</h1>
             <p class="text-base-content/70">
-                {{ t("common.hash") }}: <span class="font-mono">{{ hash }}</span>
+                {{ t("common.hash") }}:
+                <a
+                    class="hover:text-primary inline-flex items-center gap-1 font-mono transition-colors"
+                    :href="magnetUri"
+                    :title="magnetUri"
+                >
+                    <svg
+                        class="inline-block h-3.5 w-3.5 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <path d="M6 3h2v8a4 4 0 0 0 8 0V3h2v8a6 6 0 0 1-12 0V3z" />
+                        <line
+                            x1="6"
+                            x2="9"
+                            y1="20"
+                            y2="20"
+                        />
+                        <line
+                            x1="15"
+                            x2="18"
+                            y1="20"
+                            y2="20"
+                        />
+                    </svg>
+                    {{ hash }}
+                </a>
             </p>
             <p
                 v-if="metadata"
                 class="text-base-content/70"
             >
-                {{ t("common.versionBooks", { version: metadata.version, count: metadata.totalBooks }) }}
+                {{
+                    t("common.versionBooks", { version: metadata.version, count: booksCountText(metadata.totalBooks) })
+                }}
             </p>
             <p
                 v-if="lastUpdatedAt"

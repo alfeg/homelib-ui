@@ -21,6 +21,7 @@ const {
     submitMagnet,
     submitTorrentFile,
     magnetHash,
+    magnetUri,
     metadata,
     status,
     indexProgress,
@@ -94,6 +95,7 @@ onMounted(() => {
                 :hasCache="hasCache"
                 :hash="magnetHash"
                 :lastUpdatedAt="lastUpdatedAt"
+                :magnetUri="magnetUri"
                 :metadata="metadata"
                 :progress="indexProgress"
                 :reindexing="isReindexing"

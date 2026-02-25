@@ -382,7 +382,7 @@ export const useLibraryState = createGlobalState(() => {
                 downloadedBytes: 0,
                 totalBytes: null,
             })
-            status.value = t("status.loadedFromCache")
+            status.value = null // t("status.loadedFromCache")
             refreshSearchResults()
             return
         }

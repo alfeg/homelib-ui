@@ -16,7 +16,7 @@ const messages = {
         app: { title: "Поиск MyHomeLib" },
         common: {
             hash: "Хеш",
-            versionBooks: "Версия {version} · {count} книг",
+            versionBooks: "Версия {version} · {count}",
             lastUpdate: "Последнее обновление: {value}",
             cache: "кэш",
             backend: "сервер",
@@ -59,6 +59,7 @@ const messages = {
         },
         gate: {
             title: "Подключите библиотеку",
+            titleLoading: "Загружаем библиотеку",
             subtitle: "Вставьте magnet URI или загрузите .torrent файл для открытия библиотеки.",
             openLibrary: "Открыть библиотеку",
             loading: "Загрузка...",
@@ -68,7 +69,7 @@ const messages = {
             dismiss: "Закрыть",
         },
         status: {
-            indexing: "Индексация: {processed}/{total} ({percent}%)",
+            indexing: "Индексация книг: {processed}/{total} ({percent}%)",
             parsingWithTotal: "Парсинг INPX: {processed}/{total} ({percent}%)",
             parsingSimple: "Парсинг INPX: {percent}%",
             loadingCache: "Загрузка локального кэша...",
@@ -109,7 +110,7 @@ const messages = {
         app: { title: "MyHomeLib Search" },
         common: {
             hash: "Hash",
-            versionBooks: "Version {version} · {count} books",
+            versionBooks: "Version {version} · {count}",
             lastUpdate: "Last update: {value}",
             cache: "cache",
             backend: "backend",
@@ -152,6 +153,7 @@ const messages = {
         },
         gate: {
             title: "Connect your library",
+            titleLoading: "Loading library...",
             subtitle: "Paste a magnet URI or upload a .torrent file to open this library.",
             openLibrary: "Open Library",
             loading: "Loading...",

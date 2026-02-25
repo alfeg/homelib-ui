@@ -16,6 +16,9 @@ RUN dotnet restore MyHomeLib.Web/MyHomeLib.Web.csproj
 COPY MyHomeLib.Library/ MyHomeLib.Library/
 COPY MyHomeLib.Torrent/  MyHomeLib.Torrent/
 COPY MyHomeLib.Web/      MyHomeLib.Web/
+
+RUN dotnet build MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --no-restore -p:BuildClientApp=false
+
 COPY --from=ui-build /src/MyHomeLib.Ui/dist/ MyHomeLib.Web/wwwroot/
 RUN dotnet publish MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --self-contained false -o /app \
 	-p:BuildClientApp=false

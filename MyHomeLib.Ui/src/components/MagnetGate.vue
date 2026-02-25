@@ -77,7 +77,7 @@ const onLocaleToggle = (event: Event) => {
                 }
             "
         >
-            <h1 class="text-2xl font-semibold">{{ t("gate.title") }}</h1>
+            <h1 class="text-2xl font-semibold">{{ isLoadingMode ? t("gate.titleLoading") : t("gate.title") }}</h1>
             <div class="flex items-center justify-between gap-2">
                 <p class="text-slate-500">{{ isLoadingMode ? "" : t("gate.subtitle") }}</p>
                 <label class="swap btn btn-ghost btn-sm border-base-300 border px-2">
