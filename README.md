@@ -1,4 +1,6 @@
-# MyHomeLib
+# MyHomeLib-UI
+
+![MyHomeLib Preview](./docs/preview.png)
 
 Самохостируемое веб-приложение для поиска и скачивания книг с библиотеки [Флибуста](https://flibusta.is/), распространяемой через BitTorrent.
 
@@ -8,13 +10,13 @@
 
 ## Как это работает
 
-Библиотека Флибусты — один большой торрент (~400 ГБ), содержащий тысячи ZIP-архивов с книгами в формате FB2, а также INPX-файл с метаданными всех книг.
+Библиотека Флибусты — один большой торрент (~600 ГБ), содержащий тысячи ZIP-архивов с книгами в формате FB2, а также INPX-файл с метаданными всех книг.
 
 MyHomeLib **не скачивает весь торрент**. Вместо этого:
 
-1. **При первом запуске** — скачивает только INPX-файл (~100 МБ) через [TorrServe](https://github.com/YouROK/TorrServer), парсит его на клиенте (Web Worker) и строит полнотекстовый поисковый индекс [MiniSearch](https://lucaong.github.io/minisearch/) прямо в браузере. Индекс сохраняется в IndexedDB — следующие открытия страницы работают мгновенно.
+1. **При первом запуске** — скачивает только INPX-файл (~35 МБ) через [TorrServe](https://github.com/YouROK/TorrServer), парсит его на клиенте (Web Worker) и строит полнотекстовый поисковый индекс [MiniSearch](https://lucaong.github.io/minisearch/) прямо в браузере. Индекс сохраняется в IndexedDB — следующие открытия страницы работают мгновенно.
 2. **При поиске** — запрос к MiniSearch-индексу в Web Worker (AND по всем токенам, prefix-matching, BM25-ранжирование). Результаты выдаются в реальном времени без запросов к серверу.
-3. **При скачивании** — сервер через TorrServe HTTP Range запросы скачивает только нужный ZIP-архив с запрошенной книгой (~5–30 МБ вместо всего архива).
+3. **При скачивании** — сервер через TorrServe HTTP Range запросы скачивает только нужную книгу из ZIP-архива (из каждого архива весом ~2–2,5 ГБ, загружается лишь нужный диапазон байт с книгой).
 
 ---
 
@@ -42,7 +44,7 @@ docker compose up -d
 
 ```yaml
 environment:
-  Library__DownloadsDirectory: /data/books          # куда сохранять книги
+  Library__DownloadsDirectory: /data/books          # папка для кеша INPX
   Torrent__TorrServeUrl: http://torrserve:8090      # адрес TorrServe
 ```
 
@@ -107,10 +109,8 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 | Ключ | Обязательно | По умолчанию | Описание |
 |------|-------------|--------------|----------|
-| `DownloadsDirectory` | Да | — | Папка для скачанных книг и файлов базы данных |
+| `DownloadsDirectory` | Нет | `<папка приложения>` | Папка для кеша INPX (`app_data/library_cache/`) |
 | `InpxPath` | Нет | — | Путь к уже скачанному `.inpx`-файлу. Если указан — торрент для индексации не используется |
-| `QueueDbPath` | Нет | `<DownloadsDirectory>/queue.db` | Путь к базе очереди скачивания (DuckDB) |
-| `LibraryDbPath` | Нет | `<путь_к_inpx>.db` | Путь к базе поискового индекса (DuckDB) |
 
 ### Секция `Torrent`
 
@@ -137,7 +137,7 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 Если вы просто хотите пользоваться библиотекой, не поднимая собственный сервер — используйте standalone-сборку.
 
-1. Скачайте файл `index.html` из раздела [Releases](../../releases).
+1. Скачайте файл [`MyHomeLib.Ui/dist-standalone/index.html`](MyHomeLib.Ui/dist-standalone/index.html).
 2. Откройте его в браузере (двойной клик или `file://`).
 3. По умолчанию приложение подключается к публичному серверу **books.alfeg.net**.
 
@@ -155,7 +155,7 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 1. Откройте браузер — вы увидите экран подключения библиотеки.
 2. Введите магнет-ссылку на торрент библиотеки в появившейся форме.
-3. MyHomeLib скачивает INPX-файл (~100 МБ) через TorrServe. Прогресс-бар показывает скорость загрузки (↓/↑), количество пиров и кэш-прогресс.
+3. MyHomeLib скачивает INPX-файл (~35 МБ) через TorrServe. Прогресс-бар показывает скорость загрузки (↓/↑), количество пиров и кэш-прогресс.
 4. Браузер распарсит INPX и построит MiniSearch-индекс (~545 000 книг, ~30–60 сек).
 5. Строка поиска становится активной.
 
@@ -174,8 +174,9 @@ Vite dev-сервер проксирует API-запросы на `http://local
 ## Скачивание книг
 
 1. Найдите книгу в поиске.
-2. Нажмите ⬇ рядом с нужной книгой — она добавится в очередь скачивания.
-3. Файл сохраняется в `DownloadsDirectory`.
+2. Нажмите ⬇ рядом с нужной книгой — сервер стримит книгу из TorrServe напрямую в браузер.
+
+Ничего не сохраняется на сервере.
 
 TorrServe загружает только те фрагменты торрента, которые содержат нужную книгу. Типичное время — несколько секунд.
 
@@ -183,7 +184,7 @@ TorrServe загружает только те фрагменты торрент
 
 ## Использование памяти
 
-- **Сервер** (~100–150 МБ): поисковый индекс хранится в файловой базе DuckDB, в RAM — только результаты запросов.
+- **Сервер** (~50–100 МБ): INPX-файл кешируется на диск; в RAM ничего не держится постоянно — только текущие запросы.
 - **Браузер**: MiniSearch-индекс (~545 000 книг) хранится в IndexedDB и загружается в Web Worker. RAM браузера — ~300–500 МБ при открытом индексе.
 
 ---
@@ -194,7 +195,7 @@ TorrServe загружает только те фрагменты торрент
 MyHomeLibServer.slnx
 ├── MyHomeLib.Library/   # Модель данных книги + парсер INPX (.NET)
 ├── MyHomeLib.Torrent/   # Клиент TorrServe, менеджер загрузок, HTTP Range Stream (.NET)
-├── MyHomeLib.Web/       # ASP.NET Core backend: API, очередь загрузок, раздача фронтенда
+├── MyHomeLib.Web/       # ASP.NET Core backend: API, проксирование загрузок, раздача фронтенда
 └── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA (поиск, фильтры, UI)
 ```
 
@@ -224,19 +225,19 @@ MyHomeLibServer.slnx
 
 ---
 
-# MyHomeLib — English
+# MyHomeLib-UI — English
 
 A self-hosted web application for searching and downloading books from the [Flibusta](https://flibusta.is/) e-book library distributed as a BitTorrent.
 
 ## How it works
 
-The Flibusta library is a single large torrent (~400 GB) containing thousands of ZIP archives with FB2 books and an INPX index file with metadata for all books.
+The Flibusta library is a single large torrent (~600 GB) containing thousands of ZIP archives with FB2 books and an INPX index file with metadata for all books.
 
 MyHomeLib **never downloads the full torrent**. Instead:
 
-1. **On first load** — downloads only the INPX index (~100 MB) via [TorrServe](https://github.com/YouROK/TorrServer), parses it in the browser (Web Worker), and builds a [MiniSearch](https://lucaong.github.io/minisearch/) full-text index stored in IndexedDB. Subsequent visits restore the index instantly from cache.
+1. **On first load** — downloads only the INPX index (~35 MB) via [TorrServe](https://github.com/YouROK/TorrServer), parses it in the browser (Web Worker), and builds a [MiniSearch](https://lucaong.github.io/minisearch/) full-text index stored in IndexedDB. Subsequent visits restore the index instantly from cache.
 2. **On search** — queries MiniSearch in the Web Worker (AND across all tokens, prefix matching, BM25). Results appear in real time with no server round-trips.
-3. **On download** — the server streams only the specific ZIP archive via TorrServe HTTP Range requests (~5–30 MB instead of the full archive).
+3. **On download** — the server streams only the needed bytes from a ZIP archive (~2–2.5 GB each) via TorrServe HTTP Range requests, fetching just the one book.
 
 ---
 
@@ -244,7 +245,7 @@ MyHomeLib **never downloads the full torrent**. Instead:
 
 The easiest way to start — no installation or server required.
 
-1. Download `index.html` from the [Releases](../../releases) page.
+1. Download [`MyHomeLib.Ui/dist-standalone/index.html`](MyHomeLib.Ui/dist-standalone/index.html).
 2. Open it in any browser (double-click or `file://`).
 3. By default it connects to the public server **books.alfeg.net**.
 
@@ -272,7 +273,7 @@ This starts:
 
 Open [http://localhost:8080](http://localhost:8080) in your browser.
 
-Books are stored in a named Docker volume mounted at `/data/books`.
+The INPX cache is stored in a named Docker volume mounted at `/data/books`.
 
 ### Customising settings
 
@@ -340,10 +341,8 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `DownloadsDirectory` | Yes | — | Directory for downloaded books and DB files |
+| `DownloadsDirectory` | No | `<app folder>` | Folder for the INPX cache (`app_data/library_cache/`) |
 | `InpxPath` | No | — | Path to a pre-downloaded `.inpx` file. When set, the torrent is not needed for indexing |
-| `QueueDbPath` | No | `<DownloadsDirectory>/queue.db` | Download queue DuckDB path |
-| `LibraryDbPath` | No | `<inpx_path>.db` | Search index DuckDB path |
 
 ### `Torrent` section
 
@@ -368,7 +367,7 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 
 ## Memory usage
 
-- **Server** (~100–150 MB): search index stored in a file-backed DuckDB database. Only queried rows are loaded into RAM.
+- **Server** (~50–100 MB): the INPX file is cached to disk; nothing is kept in RAM permanently beyond the current request.
 - **Browser**: MiniSearch index (~545 000 books) lives in IndexedDB and is loaded into a Web Worker. Expect ~300–500 MB browser RAM while the index is active.
 
 ---
@@ -379,7 +378,7 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 MyHomeLibServer.slnx
 ├── MyHomeLib.Library/   # Book data model + INPX parser (.NET)
 ├── MyHomeLib.Torrent/   # TorrServe client, download manager, HTTP Range Stream (.NET)
-├── MyHomeLib.Web/       # ASP.NET Core backend: API, download queue, frontend serving
+├── MyHomeLib.Web/       # ASP.NET Core backend: API, download proxy, frontend serving
 └── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA (search, filters, UI)
 ```
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 
-import { setLocale, useI18nState } from "../services/i18n"
 import { IS_STANDALONE } from "../services/endpointStore"
+import { setLocale, useI18nState } from "../services/i18n"
 import EndpointSettings from "./EndpointSettings.vue"
 
 const props = defineProps<{

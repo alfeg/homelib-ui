@@ -6,7 +6,7 @@ export default defineConfig({
     server: {
         proxy: {
             "/api": {
-                target: "https://localhost:7080",
+                target: "https://books.alfeg.net",
                 changeOrigin: true,
                 secure: false,
             },

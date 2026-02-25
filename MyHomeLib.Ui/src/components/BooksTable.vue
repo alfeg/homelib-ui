@@ -83,8 +83,8 @@ const { t } = useI18nState()
             :totalPages="totalPages"
             :totalResults="totalResults"
             :visibleRange="visibleRange"
-            @next-page="$emit('next-page')"
-            @previous-page="$emit('previous-page')"
+            @nextPage="$emit('next-page')"
+            @previousPage="$emit('previous-page')"
         />
     </section>
 </template>

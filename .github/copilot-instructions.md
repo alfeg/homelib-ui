@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-**MyHomeLib** is a self-hosted web application for searching and downloading books from the [Flibusta](https://flibusta.is/) e-book library, which is distributed as a BitTorrent (~400 GB, ~545 000 books). It consists of:
+**MyHomeLib** is a self-hosted web application for searching and downloading books from the [Flibusta](https://flibusta.is/) e-book library, which is distributed as a BitTorrent (~600 GB, ~545 000 books). It consists of:
 
-- **`MyHomeLib.Web`** — ASP.NET Core 10 Minimal API backend. Serves the Vue SPA, streams the INPX index to the client, manages a download queue, and proxies file downloads via TorrServe.
+- **`MyHomeLib.Web`** — ASP.NET Core 10 Minimal API backend. Serves the Vue SPA, streams the INPX index to the client, and proxies book file downloads directly to the browser via TorrServe.
 - **`MyHomeLib.Ui`** — Vue 3 + TypeScript SPA. Parses the INPX in a Web Worker, builds a MiniSearch full-text index stored in IndexedDB, and handles all search/filter interactions client-side.
 - **TorrServe** — separate sidecar process. Handles all BitTorrent work. MyHomeLib communicates with it over HTTP.
 
-The key design principle: **no full torrent download**. Only the INPX index (~100 MB) is fetched for indexing; individual books are streamed on demand via HTTP Range requests.
+The key design principle: **no full torrent download**. Only the INPX index (~35 MB) is fetched for indexing; individual books are streamed on demand via HTTP Range requests into ~2–2.5 GB ZIP archives.
 
 ## Solution Structure
 
@@ -21,6 +21,7 @@ MyHomeLibServer.slnx
 ```
 
 ### Project Dependencies
+
 - `MyHomeLib.Web` → `MyHomeLib.Torrent` → `MyHomeLib.Library`
 - `MyHomeLib.Ui` is a standalone frontend; `MyHomeLib.Web` serves its `dist/` output
 
@@ -28,27 +29,27 @@ MyHomeLibServer.slnx
 
 ### Backend (.NET)
 
-| Concern | Library |
-|---|---|
-| Web framework | ASP.NET Core 10 Minimal API (`Microsoft.NET.Sdk.Web`) |
-| Torrent streaming | TorrServe HTTP API (`TorrServeClient` — plain `HttpClient`) |
+| Concern            | Library                                                     |
+| ------------------ | ----------------------------------------------------------- |
+| Web framework      | ASP.NET Core 10 Minimal API (`Microsoft.NET.Sdk.Web`)       |
+| Torrent streaming  | TorrServe HTTP API (`TorrServeClient` — plain `HttpClient`) |
 | Book index storage | DuckDB file-backed database (`DuckDB.NET.Data.Full` v1.4.4) |
-| INPX parsing | `CsvHelper` (v33.0.1) + `SharpZipLib` (v1.4.2) |
-| FB2 book parsing | `Fb2.Document` (v2.4.0) |
-| DI / configuration | `Microsoft.Extensions.*` (implicit via Web SDK) |
+| INPX parsing       | `CsvHelper` (v33.0.1) + `SharpZipLib` (v1.4.2)              |
+| FB2 book parsing   | `Fb2.Document` (v2.4.0)                                     |
+| DI / configuration | `Microsoft.Extensions.*` (implicit via Web SDK)             |
 
 ### Frontend (Node / Browser)
 
-| Concern | Library |
-|---|---|
-| Framework | Vue 3 (Composition API, `<script setup>`) |
-| Language | TypeScript |
-| Build | Vite |
-| CSS | Tailwind CSS v4 + DaisyUI |
-| Search | MiniSearch (BM25, AND, prefix) in a Web Worker |
-| ZIP parsing | fflate (streaming) |
-| State | VueUse `createGlobalState` |
-| i18n | Custom `i18n.ts` (ru / en message maps) |
+| Concern     | Library                                          |
+| ----------- | ------------------------------------------------ |
+| Framework   | Vue 3 (Composition API, `<script setup>`)        |
+| Language    | TypeScript                                       |
+| Build       | Vite                                             |
+| CSS         | Tailwind CSS v4 + DaisyUI                        |
+| Search      | MiniSearch (BM25, AND, prefix) in a Web Worker   |
+| ZIP parsing | fflate (streaming)                               |
+| State       | VueUse `createGlobalState`                       |
+| i18n        | Custom `i18n.ts` (ru / en message maps)          |
 | Persistence | IndexedDB (parsed INPX cache + MiniSearch index) |
 
 ## Architecture & Data Flow
@@ -56,18 +57,21 @@ MyHomeLibServer.slnx
 ### 1. Backend — INPX delivery
 
 `LibraryService` (`BackgroundService` in `MyHomeLib.Web`):
-- On first run: registers the magnet URI with TorrServe → polls until the `.inpx` file appears → streams it through `InpxReader` → inserts all `BookItem` rows into a file-backed DuckDB.
-- On restart: if DuckDB already contains rows, re-indexing is skipped; serves existing data immediately.
+
+- On first run: registers the magnet URI with TorrServe → polls until the `.inpx` file appears → caches the raw bytes to disk (`DownloadsDirectory/app_data/library_cache/`).
+- On restart: if the cached `.inpx` file exists on disk, the TorrServe download is skipped; the cached file is served immediately.
 - Exposes `IndexTask` (`TaskCompletionSource`) so the API can wait for readiness.
 
 `Program.cs` Minimal API endpoints:
+
 - `GET /api/library/inpx` — streams the INPX archive to the browser.
 - `GET /api/library/status` — returns current indexing / torrent status as JSON.
-- `POST /api/library/download` — enqueues a book download request.
+- `POST /api/library/download` — streams the requested book directly to the browser via TorrServe (nothing saved on server).
 
 ### 2. Frontend — parsing and search (Web Worker)
 
 `searchIndex.worker.ts` (Web Worker):
+
 - Receives the INPX stream from the server, parses it with `inpxParser.ts` (fflate streaming unzip + pipe-delimited row parsing).
 - Builds a MiniSearch index over `title`, `authors`, `series`, `genre`, `lang` fields.
 - Persists the parsed books and the MiniSearch index in IndexedDB (keyed by `LIBRARY_CACHE_DB_VERSION`).
@@ -80,17 +84,20 @@ MyHomeLibServer.slnx
 ### 3. Global state
 
 `useLibraryState.ts` — `createGlobalState` composable exposing:
+
 - `searchTerm`, `selectedGenres`, `selectedYearFrom`, `selectedYearTo`, `availableYearRange`
 - `results`, `currentPage`, `isLoading`, `isIndexing`, `indexingProgress`
 - `search()`, `clearFilters()`
 
 ### 4. Download flow
 
-User clicks download → `POST /api/library/download` → `DownloadQueueService` persists job to DuckDB → `DownloadManager.DownloadFile()`:
+User clicks download → `POST /api/library/download` → `DownloadManager.DownloadFile()`:
+
 - Asks TorrServe for the file list of the torrent.
 - Finds the right ZIP archive by filename (`ArchiveFile` from INPX).
 - Opens `HttpRangeStream` against the TorrServe streaming URL.
-- Uses `ZipArchive` to unzip only the specific book entry without downloading the full archive.
+- Uses `ZipArchive` to read only the specific book entry via HTTP Range, without downloading the full archive.
+- Returns `Results.File(bytes, contentType, fileName)` — the file is streamed directly to the browser. Nothing is written to disk on the server.
 
 ### 5. INPX field layout
 
@@ -105,38 +112,37 @@ Authors inside a field are `:` separated; each author is `LastName,FirstName,Mid
 
 ## Core Classes — Backend
 
-| Class | Project | Role |
-|---|---|---|
-| `LibraryService` | Web | BackgroundService; downloads INPX, inserts into DuckDB, exposes `IndexTask` |
-| `DownloadQueueService` | Web | BackgroundService; persists and processes download jobs sequentially |
-| `LibraryConfig` | Web | Strongly-typed config POCO for `Library:*` settings |
-| `DownloadManager` | Torrent | Orchestrates book download via TorrServe |
-| `TorrServeClient` | Torrent | HTTP wrapper for TorrServe API (`/torrents`, `/stream`, `/echo`) |
-| `HttpRangeStream` | Torrent | Seekable `Stream` backed by HTTP Range requests |
-| `MagnetUriHelper` | Torrent | Parses info-hash hex from a magnet URI (regex) |
-| `AppConfig` | Torrent | Strongly-typed config POCO for `Torrent:*` settings |
-| `InpxReader` | Library | Async streaming INPX parser; yields `BookItem` via `IAsyncEnumerable` |
-| `BookItem` | Library | Book metadata record: `Id`, `Authors`, `Title`, `Genre`, `Series`, `Lang`, `Ext`, `ArchiveFile`, `File`, `Size`, `Date`, `Deleted` |
+| Class                  | Project | Role                                                                                                                               |
+| ---------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `LibraryService`       | Web     | BackgroundService; downloads INPX and caches it to disk (`app_data/library_cache/`), exposes `IndexTask`                           |
+| `LibraryConfig`        | Web     | Strongly-typed config POCO for `Library:*` settings                                                                                |
+| `DownloadManager`      | Torrent | Orchestrates book download via TorrServe                                                                                           |
+| `TorrServeClient`      | Torrent | HTTP wrapper for TorrServe API (`/torrents`, `/stream`, `/echo`)                                                                   |
+| `HttpRangeStream`      | Torrent | Seekable `Stream` backed by HTTP Range requests                                                                                    |
+| `MagnetUriHelper`      | Torrent | Parses info-hash hex from a magnet URI (regex)                                                                                     |
+| `AppConfig`            | Torrent | Strongly-typed config POCO for `Torrent:*` settings                                                                                |
+| `InpxReader`           | Library | Async streaming INPX parser; yields `BookItem` via `IAsyncEnumerable`                                                              |
+| `BookItem`             | Library | Book metadata record: `Id`, `Authors`, `Title`, `Genre`, `Series`, `Lang`, `Ext`, `ArchiveFile`, `File`, `Size`, `Date`, `Deleted` |
 
 ## Core Files — Frontend (`MyHomeLib.Ui/src/`)
 
-| File | Role |
-|---|---|
-| `workers/searchIndex.worker.ts` | MiniSearch Web Worker — parse, index, search, persist |
-| `workers/inpxParser.ts` | INPX archive parser (fflate + streaming) |
-| `services/searchIndexWorkerClient.ts` | Typed message bridge to the worker |
-| `services/i18n.ts` | `ru`/`en` message maps; `useI18n()` composable |
-| `composables/useLibraryState.ts` | Global reactive state via VueUse `createGlobalState` |
-| `types/library.ts` | `BookRecord`, `SearchQuery`, `SearchResult` shared types |
-| `App.vue` | Root component |
-| `components/LibraryControls.vue` | Search bar + toolbar |
-| `components/GenreSidebar.vue` | Left sidebar: genre list + year range filter |
-| `components/GenreList.vue` | Scrollable genre checkboxes |
-| `components/YearRangeFilter.vue` | Year-from / year-to inputs |
-| `components/BooksTable.vue` | Results table with download button |
-| `components/TablePagination.vue` | Page controls |
-| `components/MagnetGate.vue` | Landing screen when no library is configured |
-| `components/SearchBar.vue` | Search input with debounce |
+| File                                  | Role                                                     |
+| ------------------------------------- | -------------------------------------------------------- |
+| `workers/searchIndex.worker.ts`       | MiniSearch Web Worker — parse, index, search, persist    |
+| `workers/inpxParser.ts`               | INPX archive parser (fflate + streaming)                 |
+| `services/searchIndexWorkerClient.ts` | Typed message bridge to the worker                       |
+| `services/i18n.ts`                    | `ru`/`en` message maps; `useI18n()` composable           |
+| `composables/useLibraryState.ts`      | Global reactive state via VueUse `createGlobalState`     |
+| `types/library.ts`                    | `BookRecord`, `SearchQuery`, `SearchResult` shared types |
+| `App.vue`                             | Root component                                           |
+| `components/LibraryControls.vue`      | Search bar + toolbar                                     |
+| `components/GenreSidebar.vue`         | Left sidebar: genre list + year range filter             |
+| `components/GenreList.vue`            | Scrollable genre checkboxes                              |
+| `components/YearRangeFilter.vue`      | Year-from / year-to inputs                               |
+| `components/BooksTable.vue`           | Results table with download button                       |
+| `components/TablePagination.vue`      | Page controls                                            |
+| `components/MagnetGate.vue`           | Landing screen when no library is configured             |
+| `components/SearchBar.vue`            | Search input with debounce                               |
 
 ## TorrServe API Notes
 
@@ -155,33 +161,34 @@ All settings are bound via `IConfiguration` (`appsettings.json` + environment va
 
 ### `Library` section → `LibraryConfig`
 
-| Key | Description |
-|---|---|
-| `MagnetUri` | Magnet URI of the library torrent |
-| `DownloadsDirectory` | Where downloaded books and DB files are stored |
-| `InpxPath` | Optional path to a pre-downloaded `.inpx` file |
-| `LibraryDbPath` | Override path for the DuckDB book index file |
-| `QueueDbPath` | Override path for the DuckDB download queue file |
-| `TorrentEnabled` | Computed: true when `MagnetUri` and `DownloadsDirectory` are set |
+| Key                  | Description                                                      |
+| -------------------- | ---------------------------------------------------------------- |
+| `MagnetUri`          | Magnet URI of the library torrent                                                                      |
+| `DownloadsDirectory` | Base folder for the INPX cache (`app_data/library_cache/`); defaults to app base directory             |
+| `InpxPath`           | Optional path to a pre-downloaded `.inpx` file                                                         |
+| `TorrentEnabled`     | Computed: true when `MagnetUri` is set                                                                 |
 
 ### `Torrent` section → `AppConfig`
 
-| Key | Description |
-|---|---|
+| Key            | Description                                                          |
+| -------------- | -------------------------------------------------------------------- |
 | `TorrServeUrl` | Base URL of the TorrServe instance (default `http://127.0.0.1:8090`) |
 
 ## Data Layout
 
 ```
 <DownloadsDirectory>/
-  queue.db          # Download job queue (DuckDB)
-  books.db          # Book index (DuckDB, file-backed, reused across restarts)
-  <book files>      # Downloaded books
+  app_data/
+    library_cache/
+      library_<hash>.inpx   # Cached INPX file (raw bytes, keyed by torrent info-hash)
 ```
+
+No database files. No book files saved on the server — downloads stream directly to the browser.
 
 ## Docker / Deployment
 
 Run with `docker compose up` from the repo root. The `docker-compose.yml` starts:
+
 - `yourok/torrserver:latest` on port `8090`
 - `myhomelib` (built from `Dockerfile`) on port `8080`
 
@@ -196,6 +203,7 @@ Minimum VPS requirements: ~512 MB RAM server-side. Browser requires ~300–500 M
 ## Coding Conventions
 
 ### Backend (.NET)
+
 - **Nullable reference types** enabled — always annotate nullability.
 - **Implicit usings** enabled — avoid redundant `using` directives.
 - Solution file uses the modern **SLNX** format (`MyHomeLibServer.slnx`). Do not regenerate a legacy `.sln` file.
@@ -205,6 +213,7 @@ Minimum VPS requirements: ~512 MB RAM server-side. Browser requires ~300–500 M
 - No MonoTorrent, no Parquet.Net, no Spectre.Console — all removed.
 
 ### Frontend (Vue / TypeScript)
+
 - Vue 3 Composition API with `<script setup lang="ts">` in all components.
 - All props and emits must be typed; avoid `any`.
 - Tailwind v4 utility classes (no `tailwind.config.js` class generation quirks — use standard v4 syntax).

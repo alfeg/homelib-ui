@@ -6,7 +6,7 @@ const { t } = useI18nState()
 </script>
 
 <template>
-    <div class="collapse collapse-arrow border-base-300 rounded-box border text-sm">
+    <div class="collapse-arrow border-base-300 rounded-box collapse border text-sm">
         <input
             class="min-h-0"
             type="checkbox"

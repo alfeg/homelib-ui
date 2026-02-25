@@ -1,5 +1,5 @@
-import { getCurrentLocale } from "./i18n"
 import { getApiBase } from "./endpointStore"
+import { getCurrentLocale } from "./i18n"
 
 function getJsonHeaders() {
     return {
