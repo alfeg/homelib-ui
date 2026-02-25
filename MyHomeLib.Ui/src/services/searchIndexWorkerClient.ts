@@ -1,5 +1,13 @@
-import type { BookRecord } from "../types/library"
+import type { BookRecord, LibraryMetadata } from "../types/library"
 import SearchIndexWorker from "../workers/searchIndex.worker.ts?worker"
+
+export interface RestoreResult {
+    restored: boolean
+    reason?: string
+    metadata?: LibraryMetadata
+    total?: number
+    persistedAt?: string
+}
 
 const _t0 = performance.now()
 const ts = () => `+${(performance.now() - _t0).toFixed(0)}ms`
@@ -28,7 +36,11 @@ export function createSearchWorkerClient({
     let pendingBuild: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
     let pendingRestore: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
     let pendingClear: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
-    let pendingSearch: { resolve: (value: SearchResult) => void; reject: (reason?: unknown) => void; requestId: number } | null = null
+    let pendingSearch: {
+        resolve: (value: SearchResult) => void
+        reject: (reason?: unknown) => void
+        requestId: number
+    } | null = null
     let searchRequestCounter = 0
 
     worker.onmessage = (event) => {
@@ -108,11 +120,14 @@ export function createSearchWorkerClient({
                 worker.postMessage({ type: "parse-and-build", buffer, hash, batchSize }, [buffer])
             })
         },
-        restoreIndex({ hash = "", signature = "" }: { hash?: string; signature?: string } = {}) {
+        restoreIndex({
+            hash = "",
+            signature = "",
+        }: { hash?: string; signature?: string } = {}): Promise<RestoreResult> {
             if (pendingRestore) {
                 pendingRestore.reject(new Error("Index restore interrupted by a new restore request."))
             }
-            return new Promise((resolve, reject) => {
+            return new Promise<RestoreResult>((resolve, reject) => {
                 pendingRestore = { resolve, reject }
                 worker.postMessage({ type: "restore", hash, signature })
             })
@@ -137,4 +152,3 @@ export function createSearchWorkerClient({
         },
     }
 }
-

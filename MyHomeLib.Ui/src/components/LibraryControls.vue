@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { setLocale, useI18nState } from "../services/i18n"
+import type { LibraryMetadata } from "../types/library"
+
+interface IndexProgress {
+    phase: string
+    processed: number
+    total: number
+    percent: number
+    downloadedBytes?: number
+    totalBytes?: number | null
+}
 
 const props = defineProps<{
     hash: string
     magnetUri: string
-    metadata: any
+    metadata: LibraryMetadata | null
     status: string
-    progress: any
+    progress: IndexProgress
     hasCache: boolean
     lastUpdatedAt: string
     reindexing: boolean

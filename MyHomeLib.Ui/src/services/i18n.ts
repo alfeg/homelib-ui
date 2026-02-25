@@ -206,12 +206,12 @@ function normalizeLocale(value: string): AppLocale {
     return value === "en" ? "en" : "ru"
 }
 
-function getByPath(source: any, path: string): string | undefined {
+function getByPath(source: Record<string, unknown>, path: string): string | undefined {
     const parts = path.split(".")
-    let cursor = source
+    let cursor: unknown = source
     for (let i = 0; i < parts.length; i += 1) {
-        cursor = cursor?.[parts[i]]
-        if (cursor == null) return undefined
+        if (cursor == null || typeof cursor !== "object") return undefined
+        cursor = (cursor as Record<string, unknown>)[parts[i]]
     }
     return typeof cursor === "string" ? cursor : undefined
 }

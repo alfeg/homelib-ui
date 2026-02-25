@@ -89,7 +89,7 @@ onMounted(() => {
 
         <section
             v-else
-            class="mx-auto max-w-[1800px] p-5"
+            class="mx-auto max-w-450 p-5"
         >
             <LibraryControls
                 :hasCache="hasCache"

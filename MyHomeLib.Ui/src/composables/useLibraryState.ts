@@ -37,12 +37,6 @@ function normalizeGenreCode(code) {
     return String(code ?? "").trim()
 }
 
-function normalizeSearchText(value) {
-    return String(value ?? "")
-        .toLocaleLowerCase("ru-RU")
-        .replaceAll("ё", "е")
-}
-
 function uniqueStrings(values) {
     return Array.from(new Set(values.filter(Boolean)))
 }
