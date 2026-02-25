@@ -11,6 +11,14 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection("Library"));
 builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("Torrent"));
 
+// CORS — allow any origin for /api/* so the standalone HTML build works from
+// file:// or any external host. Credentials are not used cross-origin.
+builder.Services.AddCors(options =>
+    options.AddPolicy("Api", policy => policy
+        .AllowAnyOrigin()
+        .AllowAnyMethod()
+        .AllowAnyHeader()));
+
 if (builder.Environment.IsDevelopment())
 {
     builder.Services
@@ -42,6 +50,8 @@ var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
+
+app.UseCors();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -95,7 +105,7 @@ app.MapPost("/api/library/inpx", async (
         logger.LogError(ex, "Unhandled error in /api/library/inpx.");
         return Results.Text(L(httpContext, "Internal server error.", "Внутренняя ошибка сервера."), statusCode: StatusCodes.Status500InternalServerError);
     }
-});
+}).RequireCors("Api");
 
 app.MapPost("/api/library/download", async (
     LibraryDirectDownloadRequest request,
@@ -178,7 +188,7 @@ app.MapPost("/api/library/download", async (
         logger.LogError(ex, "Unhandled error in /api/library/download.");
         return Results.Text(L(httpContext, "Internal server error.", "Внутренняя ошибка сервера."), statusCode: StatusCodes.Status500InternalServerError);
     }
-});
+}).RequireCors("Api");
 
 app.MapFallback("/api/{**catch-all}", () => Results.NotFound());
 
