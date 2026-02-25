@@ -42,12 +42,13 @@ docker compose up -d
 
 ```yaml
 environment:
-  Library__MagnetUri: "magnet:?xt=urn:btih:..."   # магнет-ссылка на торрент библиотеки
   Library__DownloadsDirectory: /data/books          # куда сохранять книги
   Torrent__TorrServeUrl: http://torrserve:8090      # адрес TorrServe
 ```
 
 > Разделитель для вложенных ключей в переменных окружения — двойное подчёркивание (`__`).
+
+Магнет-ссылка на торрент вводится прямо в браузере при первом открытии.
 
 ### Production Compose
 
@@ -83,7 +84,7 @@ npm run build
 ### Запуск бэкенда
 
 ```bash
-# Отредактируйте appsettings.json (MagnetUri, DownloadsDirectory, TorrServeUrl)
+# Отредактируйте appsettings.json (DownloadsDirectory, TorrServeUrl)
 dotnet run --project MyHomeLib.Web
 ```
 
@@ -106,13 +107,10 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 | Ключ | Обязательно | По умолчанию | Описание |
 |------|-------------|--------------|----------|
-| `MagnetUri` | Да* | — | Магнет-ссылка на торрент библиотеки |
 | `DownloadsDirectory` | Да | — | Папка для скачанных книг и файлов базы данных |
 | `InpxPath` | Нет | — | Путь к уже скачанному `.inpx`-файлу. Если указан — торрент для индексации не используется |
 | `QueueDbPath` | Нет | `<DownloadsDirectory>/queue.db` | Путь к базе очереди скачивания (DuckDB) |
 | `LibraryDbPath` | Нет | `<путь_к_inpx>.db` | Путь к базе поискового индекса (DuckDB) |
-
-\* `MagnetUri` не нужен, если указан `InpxPath` с уже существующим файлом.
 
 ### Секция `Torrent`
 
@@ -125,7 +123,6 @@ Vite dev-сервер проксирует API-запросы на `http://local
 ```json
 {
   "Library": {
-    "MagnetUri": "magnet:?xt=urn:btih:8beb62f8e5db5ebe96d6864d138320425fea81c7&...",
     "DownloadsDirectory": "/data/books"
   },
   "Torrent": {
@@ -136,10 +133,28 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 ---
 
+## Standalone-версия (один HTML-файл)
+
+Если вы просто хотите пользоваться библиотекой, не поднимая собственный сервер — используйте standalone-сборку.
+
+1. Скачайте файл `index.html` из раздела [Releases](../../releases).
+2. Откройте его в браузере (двойной клик или `file://`).
+3. По умолчанию приложение подключается к публичному серверу **books.alfeg.net**.
+
+Индекс (~545 000 книг) скачивается с публичного сервера, парсится в браузере и сохраняется в IndexedDB. Повторные открытия — мгновенные.
+
+### Хотите использовать собственный сервер?
+
+В форме подключения библиотеки раскройте раздел **⚙ API сервер** и введите URL вашего инстанса, например `https://my-server.example.com`. Значение сохраняется в `localStorage` браузера.
+
+> Собственный сервер разворачивается через Docker Compose (см. ниже). Дополнительной настройки не требуется — магнет-ссылка вводится прямо в форме браузера.
+
+---
+
 ## Первый запуск
 
 1. Откройте браузер — вы увидите экран подключения библиотеки.
-2. Введите магнет-ссылку на торрент (или она настроена через `appsettings.json`).
+2. Введите магнет-ссылку на торрент библиотеки в появившейся форме.
 3. MyHomeLib скачивает INPX-файл (~100 МБ) через TorrServe. Прогресс-бар показывает скорость загрузки (↓/↑), количество пиров и кэш-прогресс.
 4. Браузер распарсит INPX и построит MiniSearch-индекс (~545 000 книг, ~30–60 сек).
 5. Строка поиска становится активной.
@@ -215,25 +230,31 @@ A self-hosted web application for searching and downloading books from the [Flib
 
 ## How it works
 
-The Flibusta library is distributed as a single large magnet torrent (~400 GB) containing thousands of ZIP archives, each holding hundreds of FB2 books, plus an INPX index file with metadata for all books.
-
-MyHomeLib never downloads the full torrent. Instead:
-
-1. **On first start** — it downloads only the INPX index file (~100 MB) via [TorrServe](https://github.com/YouROK/TorrServer), parses it, and builds a full-text search index stored in a local [DuckDB](https://duckdb.org/) database file. Subsequent starts reuse the database; parsing is skipped.
-2. **On search** — queries the DuckDB FTS index (Russian Snowball stemmer, BM25 ranking) and returns results instantly.
-3. **On download** — streams only the specific ZIP archive containing the requested book via TorrServe HTTP Range requests. Only the torrent pieces covering that book's byte range are downloaded (~5–30 MB instead of the full archive).
-
-## Requirements
-
-## How it works
-
 The Flibusta library is a single large torrent (~400 GB) containing thousands of ZIP archives with FB2 books and an INPX index file with metadata for all books.
 
 MyHomeLib **never downloads the full torrent**. Instead:
 
-1. **On first load** — it downloads only the INPX index file (~100 MB) via [TorrServe](https://github.com/YouROK/TorrServer), parses it in the browser (Web Worker), and builds a [MiniSearch](https://lucaong.github.io/minisearch/) full-text index stored in IndexedDB. Subsequent visits restore the index instantly from cache.
-2. **On search** — queries the MiniSearch index in the Web Worker (AND across all tokens, prefix matching, BM25 ranking). Results appear in real time without any server round-trips.
-3. **On download** — the server streams only the specific ZIP archive containing the requested book via TorrServe HTTP Range requests (~5–30 MB instead of the full archive).
+1. **On first load** — downloads only the INPX index (~100 MB) via [TorrServe](https://github.com/YouROK/TorrServer), parses it in the browser (Web Worker), and builds a [MiniSearch](https://lucaong.github.io/minisearch/) full-text index stored in IndexedDB. Subsequent visits restore the index instantly from cache.
+2. **On search** — queries MiniSearch in the Web Worker (AND across all tokens, prefix matching, BM25). Results appear in real time with no server round-trips.
+3. **On download** — the server streams only the specific ZIP archive via TorrServe HTTP Range requests (~5–30 MB instead of the full archive).
+
+---
+
+## Standalone build (single HTML file)
+
+The easiest way to start — no installation or server required.
+
+1. Download `index.html` from the [Releases](../../releases) page.
+2. Open it in any browser (double-click or `file://`).
+3. By default it connects to the public server **books.alfeg.net**.
+
+The index (~545 000 books) is downloaded from the public server, parsed in the browser, and cached in IndexedDB. Repeat visits are instant.
+
+### Using your own server
+
+On the library connection screen expand **⚙ API Server** and enter your instance URL, e.g. `https://my-server.example.com`. The value is saved in `localStorage`.
+
+> Your server is deployed via Docker Compose (see below). No extra config needed — the magnet URI is entered directly in the browser.
 
 ---
 
@@ -259,12 +280,13 @@ Edit `docker-compose.yml` or set environment variables:
 
 ```yaml
 environment:
-  Library__MagnetUri: "magnet:?xt=urn:btih:..."
   Library__DownloadsDirectory: /data/books
   Torrent__TorrServeUrl: http://torrserve:8090
 ```
 
 > Nested config keys use double-underscore as separator in environment variables.
+
+The magnet URI is entered directly in the browser on first use.
 
 ### Production Compose
 
@@ -293,7 +315,7 @@ npm run build
 ### Run the backend
 
 ```bash
-# Edit appsettings.json first (set MagnetUri, DownloadsDirectory, TorrServeUrl)
+# Edit appsettings.json first (set DownloadsDirectory, TorrServeUrl)
 dotnet run --project MyHomeLib.Web
 ```
 
@@ -318,13 +340,10 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `MagnetUri` | Yes* | — | Magnet link for the library torrent |
 | `DownloadsDirectory` | Yes | — | Directory for downloaded books and DB files |
 | `InpxPath` | No | — | Path to a pre-downloaded `.inpx` file. When set, the torrent is not needed for indexing |
 | `QueueDbPath` | No | `<DownloadsDirectory>/queue.db` | Download queue DuckDB path |
 | `LibraryDbPath` | No | `<inpx_path>.db` | Search index DuckDB path |
-
-\* `MagnetUri` is not required if `InpxPath` points to an existing file.
 
 ### `Torrent` section
 
@@ -337,7 +356,6 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 ```json
 {
   "Library": {
-    "MagnetUri": "magnet:?xt=urn:btih:8beb62f8e5db5ebe96d6864d138320425fea81c7&...",
     "DownloadsDirectory": "/data/books"
   },
   "Torrent": {
