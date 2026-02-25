@@ -1,29 +1,48 @@
-import { Document as FlexDocument } from "flexsearch"
+import MiniSearch from "minisearch"
 
 import { parseInpxBuffer } from "./inpxParser"
 
 const DEFAULT_INDEX_BATCH_SIZE = 1024
 const MIN_INDEX_BATCH_SIZE = 500
 const MAX_INDEX_BATCH_SIZE = 2000
-const BATCH_YIELD_DELAY_MS = 0
 const PERSISTENCE_DB_NAME = "myhomelib-search-index-cache"
 const PERSISTENCE_STORE_NAME = "indexes"
-const PERSISTENCE_DB_VERSION = 5
+// Version 6: switched from FlexSearch chunk export to MiniSearch toJSON snapshot.
+// Bumping the version drops the old object store so stale FlexSearch data is cleared.
+const PERSISTENCE_DB_VERSION = 6
 const LIBRARY_CACHE_DB_NAME = "myhomelib-library-cache"
 const LIBRARY_CACHE_STORE_NAME = "libraries"
 const LIBRARY_CACHE_DB_VERSION = 1
 
-let index = null
+let index = null // MiniSearch instance
 let booksById = new Map()
 let activeHash = ""
 let persistenceDbPromise = null
 let libraryCacheDbPromise = null
 
-const encodeText = (str) => str.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
+// Normalise a term: Cyrillic-aware lowercase + collapse e/yo.
+// Returning null causes MiniSearch to skip the token.
+const processTerm = (term) => {
+    const normalized = term.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
+    return normalized.length > 0 ? normalized : null
+}
 
-const MAX_SEARCH_IDS = 10_000
+const INDEX_OPTIONS = {
+    fields: ["title", "authors", "series", "lang", "file"],
+    idField: "id",
+    storeFields: [],
+    processTerm,
+}
+
+// AND: every query token must appear in the document.
+// BM25 then ranks documents that match more / higher-boost fields first.
+const SEARCH_OPTIONS = {
+    prefix: true,
+    combineWith: "AND",
+    boost: { title: 4, authors: 2, series: 1.5, lang: 1, file: 1 },
+}
+
 const NO_GENRE_CODE = "__no_genre__"
-const SEARCH_FIELDS = ["title", "authors", "series", "lang", "file"]
 
 function toIndexDoc(book) {
     return {
@@ -33,24 +52,11 @@ function toIndexDoc(book) {
         series: String(book.series ?? ""),
         lang: String(book.lang ?? ""),
         file: String(book.file ?? ""),
-        genreCodes: Array.isArray(book.genreCodes) ? book.genreCodes : [],
     }
 }
 
 function createIndex() {
-    return new FlexDocument({
-        document: {
-            id: "id",
-            tag: "genreCodes",
-            index: [
-                { field: "title", tokenize: "forward", encode: encodeText },
-                { field: "authors", tokenize: "forward", encode: encodeText },
-                { field: "series", tokenize: "forward", encode: encodeText },
-                { field: "lang", tokenize: "strict", encode: encodeText },
-                { field: "file", tokenize: "forward", encode: encodeText },
-            ],
-        },
-    })
+    return new MiniSearch(INDEX_OPTIONS)
 }
 
 function openPersistenceDb() {
@@ -63,9 +69,11 @@ function openPersistenceDb() {
 
         request.onupgradeneeded = () => {
             const db = request.result
-            if (!db.objectStoreNames.contains(PERSISTENCE_STORE_NAME)) {
-                db.createObjectStore(PERSISTENCE_STORE_NAME, { keyPath: "hash" })
+            // Drop old store (clears any stale FlexSearch data from prior versions)
+            if (db.objectStoreNames.contains(PERSISTENCE_STORE_NAME)) {
+                db.deleteObjectStore(PERSISTENCE_STORE_NAME)
             }
+            db.createObjectStore(PERSISTENCE_STORE_NAME, { keyPath: "hash" })
         }
 
         request.onsuccess = () => resolve(request.result)
@@ -87,7 +95,7 @@ async function readPersistedIndex(hash) {
     })
 }
 
-async function writePersistedIndex(hash, signature, chunks, total, metadata) {
+async function writePersistedIndex(hash, signature, indexJson, total, metadata) {
     const db = await openPersistenceDb()
 
     return new Promise((resolve, reject) => {
@@ -95,13 +103,13 @@ async function writePersistedIndex(hash, signature, chunks, total, metadata) {
         tx.objectStore(PERSISTENCE_STORE_NAME).put({
             hash,
             signature,
-            chunks,
+            indexJson, // MiniSearch JSON snapshot string
             total,
             metadata: metadata ?? null,
             updatedAt: new Date().toISOString(),
         })
 
-        tx.oncomplete = () => resolve()
+        tx.oncomplete = () => resolve(undefined)
         tx.onerror = () => reject(tx.error ?? new Error("Failed to persist search index."))
     })
 }
@@ -175,30 +183,9 @@ async function deletePersistedIndex(hash) {
         const tx = db.transaction(PERSISTENCE_STORE_NAME, "readwrite")
         tx.objectStore(PERSISTENCE_STORE_NAME).delete(hash)
 
-        tx.oncomplete = () => resolve()
+        tx.oncomplete = () => resolve(undefined)
         tx.onerror = () => reject(tx.error ?? new Error("Failed to clear persisted search index."))
     })
-}
-
-async function exportIndex(targetIndex) {
-    const chunks = []
-
-    await targetIndex.export((key, data) => {
-        if (key == null) return
-        chunks.push({ key, data })
-    })
-
-    return chunks
-}
-
-async function importIndex(targetIndex, chunks) {
-    const source = Array.isArray(chunks) ? chunks : []
-
-    for (let i = 0; i < source.length; i += 1) {
-        const chunk = source[i]
-        if (!chunk || chunk.key == null) continue
-        await targetIndex.import(chunk.key, chunk.data)
-    }
 }
 
 function resetInMemoryIndex() {
@@ -217,29 +204,6 @@ function resolveBatchSize(value) {
     return Math.min(MAX_INDEX_BATCH_SIZE, Math.max(MIN_INDEX_BATCH_SIZE, parsed))
 }
 
-async function addBatchToIndexAsync(targetIndex, documents) {
-    for (const doc of documents) {
-        targetIndex.add(doc)
-    }
-}
-
-function extractSearchIds(rawResults) {
-    const ids = []
-    const seen = new Set()
-    for (const entry of rawResults) {
-        const resultSet = Array.isArray(entry?.result) ? entry.result : []
-        for (const item of resultSet) {
-            const value = typeof item === "object" && item !== null ? item.id : item
-            const id = String(value)
-            if (!seen.has(id)) {
-                seen.add(id)
-                ids.push(id)
-            }
-        }
-    }
-    return ids
-}
-
 function computeFacets(books) {
     const counts = new Map()
     for (const book of books) {
@@ -256,35 +220,26 @@ function searchBooks(term, page, pageSize, genres) {
     const hasTerm = term.trim().length > 0
     const genreFilter = genres && genres.length ? genres : null
 
+    // Text search — BM25-ranked, AND across all tokens, prefix matching
     let termMatched
     if (!hasTerm) {
         termMatched = Array.from(booksById.values())
     } else {
-        const raw = index.search(SEARCH_FIELDS.map((field) => ({ field, query: term, limit: MAX_SEARCH_IDS })))
-        termMatched = extractSearchIds(raw)
-            .map((id) => booksById.get(id))
-            .filter(Boolean)
+        const results = index.search(term, SEARCH_OPTIONS)
+        termMatched = results.map((r) => booksById.get(String(r.id))).filter(Boolean)
     }
 
+    // Stable genre facets from the pre-filter result set
     const resultGenres = computeFacets(termMatched)
 
+    // Genre filter — JS post-filter (OR across selected genres)
     let matched
     if (!genreFilter) {
         matched = termMatched
-    } else if (!hasTerm) {
-        const raw = index.search({ tag: { genreCodes: genreFilter } })
-        matched = extractSearchIds(raw)
-            .map((id) => booksById.get(id))
-            .filter(Boolean)
     } else {
-        const raw = index.search(term, {
-            index: [...SEARCH_FIELDS],
-            tag: { genreCodes: genreFilter },
-            limit: MAX_SEARCH_IDS,
-        })
-        matched = extractSearchIds(raw)
-            .map((id) => booksById.get(id))
-            .filter(Boolean)
+        matched = termMatched.filter(
+            (book) => Array.isArray(book.genreCodes) && book.genreCodes.some((c) => genreFilter.includes(c)),
+        )
     }
 
     const total = matched.length
@@ -300,55 +255,40 @@ self.onmessage = async (event) => {
         const signature = typeof message.signature === "string" ? message.signature : ""
 
         if (!hash) {
-            self.postMessage({
-                type: "restore-complete",
-                payload: {
-                    restored: false,
-                    reason: "invalid",
-                },
-            })
+            self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "invalid" } })
             return
         }
 
         try {
-            const persisted = await readPersistedIndex(hash)
+            const persisted = (await readPersistedIndex(hash)) as {
+                signature: string
+                indexJson: string
+                total: number
+                metadata: unknown
+                updatedAt: string
+            } | null
             if (!persisted) {
-                self.postMessage({
-                    type: "restore-complete",
-                    payload: {
-                        restored: false,
-                        reason: "missing",
-                    },
-                })
+                self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "missing" } })
                 return
             }
 
             if (signature && persisted.signature !== signature) {
-                self.postMessage({
-                    type: "restore-complete",
-                    payload: {
-                        restored: false,
-                        reason: "stale",
-                    },
-                })
+                self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "stale" } })
                 return
             }
 
-            const persistedBooks = await readPersistedLibraryBooks(hash)
+            if (!persisted.indexJson) {
+                self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "missing-index" } })
+                return
+            }
+
+            const persistedBooks = (await readPersistedLibraryBooks(hash)) as { id: unknown }[]
             if (!persistedBooks.length) {
-                self.postMessage({
-                    type: "restore-complete",
-                    payload: {
-                        restored: false,
-                        reason: "missing-books",
-                    },
-                })
+                self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "missing-books" } })
                 return
             }
 
-            // Load index + books into worker memory so search requests can be served
-            const restoredIndex = createIndex()
-            await importIndex(restoredIndex, persisted.chunks)
+            const restoredIndex = MiniSearch.loadJSON(persisted.indexJson, INDEX_OPTIONS)
             index = restoredIndex
             booksById = new Map(persistedBooks.map((book) => [String(book.id), book]))
             activeHash = hash
@@ -380,13 +320,7 @@ self.onmessage = async (event) => {
         const hash = typeof message.hash === "string" ? message.hash : ""
 
         if (!hash) {
-            self.postMessage({
-                type: "clear-persisted-complete",
-                payload: {
-                    cleared: false,
-                    reason: "invalid",
-                },
-            })
+            self.postMessage({ type: "clear-persisted-complete", payload: { cleared: false, reason: "invalid" } })
             return
         }
 
@@ -397,12 +331,7 @@ self.onmessage = async (event) => {
                 resetInMemoryIndex()
             }
 
-            self.postMessage({
-                type: "clear-persisted-complete",
-                payload: {
-                    cleared: true,
-                },
-            })
+            self.postMessage({ type: "clear-persisted-complete", payload: { cleared: true } })
         } catch (err) {
             self.postMessage({
                 type: "clear-persisted-complete",
@@ -435,31 +364,30 @@ self.onmessage = async (event) => {
         }
 
         try {
-            // Phase 1: Parse INPX in this worker — no main-thread round-trip
+            // Phase 1: Parse INPX
             const { metadata, books, datasetSignature } = parseInpxBuffer(
                 buffer,
                 (phase, processed, total, percent) => {
-                    self.postMessage({
-                        type: "build-progress",
-                        payload: { phase, processed, total, percent },
-                    })
+                    self.postMessage({ type: "build-progress", payload: { phase, processed, total, percent } })
                 },
             )
 
-            // Phase 2: Build FlexSearch index
+            // Phase 2: Build MiniSearch index in batches (yields between each batch)
+            const newIndex = createIndex()
             const total = books.length
+            const seenIds = new Set()
 
             for (let start = 0; start < total; start += batchSize) {
                 const end = Math.min(start + batchSize, total)
-                const batchDocuments = []
 
                 for (let i = start; i < end; i++) {
                     const book = books[i]
-                    booksById.set(String(book.id), book)
-                    batchDocuments.push(toIndexDoc(book))
+                    const id = String(book.id)
+                    if (seenIds.has(id)) continue
+                    seenIds.add(id)
+                    booksById.set(id, book)
+                    newIndex.add(toIndexDoc(book))
                 }
-
-                await addBatchToIndexAsync(index, batchDocuments)
 
                 self.postMessage({
                     type: "build-progress",
@@ -471,18 +399,21 @@ self.onmessage = async (event) => {
                     },
                 })
 
-                await new Promise((resolve) => setTimeout(resolve, BATCH_YIELD_DELAY_MS))
+                // Yield control between batches
+                await new Promise((resolve) => setTimeout(resolve, 0))
             }
 
-            // Phase 3: Export index chunks + persist to IDB
-            const chunks = await exportIndex(index)
+            index = newIndex
+
+            // Phase 3: Serialise and persist to IDB
+            const indexJson = JSON.stringify(index.toJSON())
             let persisted = false
             let persistenceError = ""
 
             if (hash) {
                 try {
                     await Promise.all([
-                        writePersistedIndex(hash, datasetSignature, chunks, total, metadata),
+                        writePersistedIndex(hash, datasetSignature, indexJson, total, metadata),
                         writePersistedLibraryBooks(hash, books),
                     ])
                     persisted = true
@@ -495,7 +426,6 @@ self.onmessage = async (event) => {
                 type: "build-complete",
                 payload: { total, metadata, datasetSignature, persisted, persistenceError },
             })
-            // index and booksById remain alive — worker serves all search requests
         } catch (err) {
             resetInMemoryIndex()
             self.postMessage({
@@ -506,6 +436,7 @@ self.onmessage = async (event) => {
 
         return
     }
+
     if (message.type === "search") {
         const { requestId, term, page, pageSize, genres } = message
         const result = searchBooks(

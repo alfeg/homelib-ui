@@ -1,49 +1,39 @@
-import { Document as FlexDocument } from "flexsearch"
+﻿import MiniSearch from "minisearch"
 
 import type { BookRecord } from "../types/library"
 
-const MAX_IDS = 10_000
 const NO_GENRE_CODE = "__no_genre__"
 const SEARCH_FIELDS = ["title", "authors", "series", "lang", "file"] as const
 
-let index: InstanceType<typeof FlexDocument> | null = null
+let index: MiniSearch | null = null
 let booksById = new Map<string, BookRecord>()
 
-const encodeText = (str: string): string => str.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
-
-function createIndex(): InstanceType<typeof FlexDocument> {
-    return new FlexDocument({
-        document: {
-            id: "id",
-            tag: "genreCodes",
-            index: [
-                { field: "title",   tokenize: "forward", encode: encodeText },
-                { field: "authors", tokenize: "forward", encode: encodeText },
-                { field: "series",  tokenize: "forward", encode: encodeText },
-                { field: "lang",    tokenize: "strict",  encode: encodeText },
-                { field: "file",    tokenize: "forward", encode: encodeText },
-            ],
-        },
-    })
+// Normalise a single term: lowercase (Cyrillic-aware) + collapse e.
+// Returning null causes MiniSearch to skip the token.
+const processTerm = (term: string): string | null => {
+    const normalized = term.toLocaleLowerCase("ru-RU").replace(/\u0451/g, "\u0435")
+    return normalized.length > 0 ? normalized : null
 }
 
-function extractSearchIds(rawResults: any[]): string[] {
-    const ids: string[] = []
-    const seen = new Set<string>()
+const INDEX_OPTIONS = {
+    fields: [...SEARCH_FIELDS],
+    idField: "id",
+    storeFields: [] as string[],
+    processTerm,
+}
 
-    for (const entry of rawResults) {
-        const resultSet = Array.isArray(entry?.result) ? entry.result : []
-        for (const item of resultSet) {
-            const value = typeof item === "object" && item !== null ? item.id : item
-            const id = String(value)
-            if (!seen.has(id)) {
-                seen.add(id)
-                ids.push(id)
-            }
-        }
-    }
+// AND: every query token must match somewhere in the document.
+// This is the core fix -- single-word OR was the root cause of thousands of
+// low-relevance hits for multi-word queries like "zvezdy plamya i stal".
+// BM25 then ranks the documents that match MORE tokens higher still.
+const SEARCH_OPTIONS = {
+    prefix: true,
+    combineWith: "AND" as const,
+    boost: { title: 4, authors: 2, series: 1.5, lang: 1, file: 1 },
+}
 
-    return ids
+function createIndex(): MiniSearch {
+    return new MiniSearch(INDEX_OPTIONS)
 }
 
 function computeFacets(books: BookRecord[]): { genre: string; count: number }[] {
@@ -57,35 +47,29 @@ function computeFacets(books: BookRecord[]): { genre: string; count: number }[] 
     return Array.from(counts.entries()).map(([genre, count]) => ({ genre, count }))
 }
 
-export async function importIndexData(chunks: Array<{ key: string; data: unknown }>, books: BookRecord[]): Promise<void> {
-    const newIndex = createIndex()
-
-    for (const chunk of chunks) {
-        if (chunk.key != null) {
-            await newIndex.import(chunk.key, chunk.data)
-        }
-    }
-
+/** Restore index from a MiniSearch JSON snapshot (used in production restore path). */
+export function importIndexData(indexJson: string, books: BookRecord[]): void {
+    index = MiniSearch.loadJSON(indexJson, INDEX_OPTIONS)
     booksById = new Map(books.map((b) => [String(b.id), b]))
-    index = newIndex
 }
 
 /** Build the search index directly from BookRecord array (used in tests). */
 export async function buildIndex(books: BookRecord[]): Promise<void> {
     const newIndex = createIndex()
-
+    const seenIds = new Set<string>()
     for (const book of books) {
-        await newIndex.add({
-            id: String(book.id),
+        const id = String(book.id)
+        if (seenIds.has(id)) continue
+        seenIds.add(id)
+        newIndex.add({
+            id,
             title: String(book.title ?? ""),
             authors: String(book.authors ?? ""),
             series: String(book.series ?? ""),
             lang: String(book.lang ?? ""),
             file: String(book.file ?? ""),
-            genreCodes: Array.isArray(book.genreCodes) ? book.genreCodes : [],
         })
     }
-
     booksById = new Map(books.map((b) => [String(b.id), b]))
     index = newIndex
 }
@@ -106,36 +90,28 @@ export function search(term: string, page: number, pageSize: number, genres: str
     const hasTerm = term.trim().length > 0
     const genreFilter = genres.length ? genres : null
 
-    // Step 1: term-only search (no tag filter) — used for stable pre-filter facets
+    // Step 1: text search -- BM25-ranked, AND across all tokens, prefix matching
     let termMatched: BookRecord[]
 
     if (!hasTerm) {
         termMatched = Array.from(booksById.values())
     } else {
-        const raw = index.search(SEARCH_FIELDS.map((field) => ({ field, query: term, limit: MAX_IDS })))
-        termMatched = extractSearchIds(raw).map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
+        const results = index.search(term, SEARCH_OPTIONS)
+        termMatched = results.map((r) => booksById.get(String(r.id))).filter(Boolean) as BookRecord[]
     }
 
-    // Step 2: genre facets from pre-filter set — stable regardless of active genre selection
+    // Step 2: stable genre facets from the pre-filter result set
     const resultGenres = computeFacets(termMatched)
 
-    // Step 3: apply genre filter via FlexSearch native tag feature (OR across selected genres)
+    // Step 3: genre filter -- simple JS post-filter (OR across selected genres)
     let matched: BookRecord[]
 
     if (!genreFilter) {
         matched = termMatched
-    } else if (!hasTerm) {
-        // Tag-only search (no text query)
-        const raw = index.search({ tag: { genreCodes: genreFilter } } as any)
-        matched = extractSearchIds(raw).map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
     } else {
-        // Text + tag intersection — use index option form which supports top-level tag
-        const raw = index.search(term, {
-            index: [...SEARCH_FIELDS],
-            tag: { genreCodes: genreFilter },
-            limit: MAX_IDS,
-        } as any)
-        matched = extractSearchIds(raw).map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
+        matched = termMatched.filter(
+            (book) => Array.isArray(book.genreCodes) && book.genreCodes.some((c) => genreFilter.includes(c)),
+        )
     }
 
     const total = matched.length

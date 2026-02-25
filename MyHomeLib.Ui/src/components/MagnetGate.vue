@@ -6,13 +6,21 @@ import { setLocale, useI18nState } from "../services/i18n"
 const props = defineProps<{
     loading: boolean
     error: string
-    progress?: { phase: string; percent: number; processed?: number; total?: number; downloadedBytes?: number; totalBytes?: number | null }
+    progress?: {
+        phase: string
+        percent: number
+        processed?: number
+        total?: number
+        downloadedBytes?: number
+        totalBytes?: number | null
+    }
     progressLabel?: string
     statusText?: string
 }>()
 const emit = defineEmits<{
     (e: "submit", value: string): void
     (e: "submit-torrent", file: File | null): void
+    (e: "dismiss"): void
 }>()
 
 const magnetInput = ref("")
@@ -33,9 +41,7 @@ const onLucky = () => {
     emit("submit", LUCKY_MAGNET)
 }
 
-const isLoadingMode = computed(
-    () => props.loading || (!!props.progress && props.progress.phase !== "idle"),
-)
+const isLoadingMode = computed(() => props.loading || (!!props.progress && props.progress.phase !== "idle"))
 
 const openFilePicker = () => fileInput.value?.click()
 
@@ -89,15 +95,30 @@ const onLocaleToggle = (event: Event) => {
             <!-- Loading mode: show progress -->
             <template v-if="isLoadingMode">
                 <div class="flex flex-col items-center gap-4 py-4">
-                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                    <span
+                        v-if="!error"
+                        class="loading loading-spinner loading-lg text-primary"
+                    />
                     <progress
                         class="progress progress-primary w-full"
                         :value="progress?.percent || undefined"
                         max="100"
                     />
-                    <p class="text-base-content/70 text-sm text-center">
+                    <p class="text-base-content/70 text-center text-sm">
                         {{ progressLabel || statusText || t("gate.loading") }}
                     </p>
+                    <div
+                        v-if="error"
+                        class="flex w-full flex-col gap-3"
+                    >
+                        <p class="alert alert-error">{{ error }}</p>
+                        <button
+                            class="btn btn-outline btn-sm self-start"
+                            @click="emit('dismiss')"
+                        >
+                            {{ t("gate.dismiss") }}
+                        </button>
+                    </div>
                 </div>
             </template>
 

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import type { BookRecord } from "../../types/library"
 import { buildIndex, search } from "../mainThreadSearch"
@@ -24,12 +24,60 @@ function book(overrides: Partial<BookRecord> & { id: number | string }): BookRec
 // ---------------------------------------------------------------------------
 
 const BOOKS: BookRecord[] = [
-    book({ id: 1, title: "Первый закон", authors: "Джо Аберкромби", series: "Первый закон", lang: "ru", file: "1", genreCodes: ["sf_fantasy"] }),
-    book({ id: 2, title: "Война и мир", authors: "Лев Толстой", series: "", lang: "ru", file: "2", genreCodes: ["prose_rus_classic"] }),
-    book({ id: 3, title: "The Fellowship of the Ring", authors: "J.R.R. Tolkien", series: "Lord of the Rings", lang: "en", file: "3", genreCodes: ["sf_fantasy"] }),
-    book({ id: 4, title: "Ёжик в тумане", authors: "Сергей Козлов", series: "", lang: "ru", file: "4", genreCodes: ["child_tale"] }),
-    book({ id: 5, title: "Zwanzig Briefe", authors: "Karl Mayer", series: "Briefe", lang: "de", file: "5", genreCodes: ["prose_contemporary"] }),
-    book({ id: 6, title: "Первый снег", authors: "Анна Иванова", series: "Времена года", lang: "ru", file: "6", genreCodes: ["prose_contemporary"] }),
+    book({
+        id: 1,
+        title: "Первый закон",
+        authors: "Джо Аберкромби",
+        series: "Первый закон",
+        lang: "ru",
+        file: "1",
+        genreCodes: ["sf_fantasy"],
+    }),
+    book({
+        id: 2,
+        title: "Война и мир",
+        authors: "Лев Толстой",
+        series: "",
+        lang: "ru",
+        file: "2",
+        genreCodes: ["prose_rus_classic"],
+    }),
+    book({
+        id: 3,
+        title: "The Fellowship of the Ring",
+        authors: "J.R.R. Tolkien",
+        series: "Lord of the Rings",
+        lang: "en",
+        file: "3",
+        genreCodes: ["sf_fantasy"],
+    }),
+    book({
+        id: 4,
+        title: "Ёжик в тумане",
+        authors: "Сергей Козлов",
+        series: "",
+        lang: "ru",
+        file: "4",
+        genreCodes: ["child_tale"],
+    }),
+    book({
+        id: 5,
+        title: "Zwanzig Briefe",
+        authors: "Karl Mayer",
+        series: "Briefe",
+        lang: "de",
+        file: "5",
+        genreCodes: ["prose_contemporary"],
+    }),
+    book({
+        id: 6,
+        title: "Первый снег",
+        authors: "Анна Иванова",
+        series: "Времена года",
+        lang: "ru",
+        file: "6",
+        genreCodes: ["prose_contemporary"],
+    }),
 ]
 
 beforeAll(async () => {
@@ -138,11 +186,11 @@ describe("Multi-field search", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Language field (strict tokenize)
+// Language field search
 // ---------------------------------------------------------------------------
 
-describe("Language field (strict tokenize)", () => {
-    // Book 5 uses lang:"de" and has no "de" prefix anywhere in title/authors/series
+describe("Language field search", () => {
+    // Book 5 uses lang:"de" and has no "de" token anywhere in title/authors/series
     // so results are driven by the lang field only.
     it("finds a book via its language code", () => {
         const { books } = search("de", 1, 100, [])
@@ -165,8 +213,8 @@ describe("Genre filtering (OR)", () => {
     it("filters results to the given genre", () => {
         const { books } = search("первый", 1, 100, ["sf_fantasy"])
         const ids = books.map((b) => b.id)
-        expect(ids).toContain(1)            // sf_fantasy
-        expect(ids).not.toContain(6)        // prose_contemporary
+        expect(ids).toContain(1) // sf_fantasy
+        expect(ids).not.toContain(6) // prose_contemporary
     })
 
     it("empty genres array = no filter", () => {
@@ -234,22 +282,22 @@ describe("Genre facets", () => {
 
     it("facets are stable — same regardless of active genre filter", () => {
         const unfiltered = search("первый", 1, 100, []).genres
-        const filtered   = search("первый", 1, 100, ["sf_fantasy"]).genres
+        const filtered = search("первый", 1, 100, ["sf_fantasy"]).genres
         // Counts come from the pre-filter set, so they must be identical
         expect(filtered).toEqual(unfiltered)
     })
 
     it("facets are stable regardless of page", () => {
         const page1 = search("первый", 1, 1, []).genres
-        const full  = search("первый", 1, 100, []).genres
+        const full = search("первый", 1, 100, []).genres
         expect(page1).toEqual(full)
     })
 
     it("total filtered books changes with genre filter, but facet counts do not", () => {
         const { total: totalAll, genres: genresAll } = search("первый", 1, 100, [])
-        const { total: totalSf,  genres: genresSf  } = search("первый", 1, 100, ["sf_fantasy"])
-        expect(totalSf).toBeLessThan(totalAll)  // fewer books after genre filter
-        expect(genresSf).toEqual(genresAll)      // but genre counts unchanged
+        const { total: totalSf, genres: genresSf } = search("первый", 1, 100, ["sf_fantasy"])
+        expect(totalSf).toBeLessThan(totalAll) // fewer books after genre filter
+        expect(genresSf).toEqual(genresAll) // but genre counts unchanged
     })
 
     it("facets sum covers all term-matched books across all genres", () => {
@@ -273,6 +321,94 @@ describe("Empty term", () => {
     it("whitespace-only term treated as empty", () => {
         const { total } = search("   ", 1, 100, [])
         expect(total).toBe(BOOKS.length)
+    })
+})
+
+// ---------------------------------------------------------------------------
+// Multi-word query ranking (BM25 + AND)
+// ---------------------------------------------------------------------------
+
+describe("Multi-word query ranking", () => {
+    // Separate fixture so we can test ranking independently
+    const RANK_BOOKS: BookRecord[] = [
+        book({
+            id: 101,
+            title: "Звезды пламя и сталь",
+            authors: "Иван Иванов",
+            series: "",
+            lang: "ru",
+            file: "101",
+            genreCodes: ["sf_fantasy"],
+        }),
+        book({
+            id: 102,
+            title: "Звезды над городом",
+            authors: "Пётр Петров",
+            series: "",
+            lang: "ru",
+            file: "102",
+            genreCodes: ["sf_fantasy"],
+        }),
+        book({
+            id: 103,
+            title: "Сталь и пепел",
+            authors: "Сидоров",
+            series: "",
+            lang: "ru",
+            file: "103",
+            genreCodes: ["sf_fantasy"],
+        }),
+        book({
+            id: 104,
+            title: "Огонь и пламя",
+            authors: "Козлов",
+            series: "",
+            lang: "ru",
+            file: "104",
+            genreCodes: ["sf_fantasy"],
+        }),
+        book({
+            id: 105,
+            title: "Другая книга",
+            authors: "Иван Иванов",
+            series: "Пламя",
+            lang: "ru",
+            file: "105",
+            genreCodes: ["prose_contemporary"],
+        }),
+    ]
+
+    beforeAll(async () => {
+        await buildIndex(RANK_BOOKS)
+    })
+
+    afterAll(async () => {
+        await buildIndex(BOOKS)
+    })
+
+    it("exact full-title match is the first result for a 4-word query", () => {
+        const { books } = search("звезды пламя и сталь", 1, 10, [])
+        expect(books.length).toBeGreaterThan(0)
+        expect(books[0].id).toBe(101)
+    })
+
+    it("only the book matching ALL query tokens is returned (AND mode)", () => {
+        // "звезды пламя и сталь" — only book 101 has all 4 words
+        const { books } = search("звезды пламя и сталь", 1, 10, [])
+        const ids = books.map((b) => b.id)
+        expect(ids).toContain(101)
+        // Books matching only some words should NOT appear
+        expect(ids).not.toContain(102) // has "звезды" but not "пламя" or "сталь"
+        expect(ids).not.toContain(103) // has "сталь" but not "звезды" or "пламя"
+        expect(ids).not.toContain(104) // has "пламя" but not "звезды" or "сталь"
+    })
+
+    it("prefix matching still works within AND mode", () => {
+        // "звезд" is a prefix of "звезды" — should find books 101 and 102
+        const { books } = search("звезд", 1, 10, [])
+        const ids = books.map((b) => b.id)
+        expect(ids).toContain(101)
+        expect(ids).toContain(102)
     })
 })
 

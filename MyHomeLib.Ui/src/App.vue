@@ -81,6 +81,7 @@ onMounted(() => {
             :progress="isMagnetSet ? indexProgress : undefined"
             :progressLabel="progressLabel"
             :statusText="status"
+            @dismiss="resetAll"
             @submit="submitMagnet"
             @submitTorrent="submitTorrentFile"
         />

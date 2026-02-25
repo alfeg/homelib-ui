@@ -64,7 +64,8 @@ const messages = {
             loading: "Загрузка...",
             chooseTorrent: "Выбрать .torrent файл",
             lucky: "Мне повезёт",
-            dragHint:"Вы также можете перетащить .torrent файл на эту карточку.",
+            dragHint: "Вы также можете перетащить .torrent файл на эту карточку.",
+            dismiss: "Закрыть",
         },
         status: {
             indexing: "Индексация: {processed}/{total} ({percent}%)",
@@ -156,7 +157,8 @@ const messages = {
             loading: "Loading...",
             chooseTorrent: "Choose .torrent file",
             lucky: "I'm feeling lucky",
-            dragHint:"You can also drag and drop a .torrent file anywhere on this card.",
+            dragHint: "You can also drag and drop a .torrent file anywhere on this card.",
+            dismiss: "Dismiss",
         },
         status: {
             indexing: "Indexing: {processed}/{total} ({percent}%)",
