@@ -8,17 +8,10 @@ const NO_GENRE_CODE = "__no_genre__"
 let index: InstanceType<typeof FlexDocument> | null = null
 let booksById = new Map<string, BookRecord>()
 
-function normalizeSearchValue(value: unknown): string {
+function norm(value: unknown): string {
     return String(value ?? "")
         .toLocaleLowerCase("ru-RU")
         .replaceAll("ё", "е")
-}
-
-function toSearchText(book: BookRecord): string {
-    return [book.title, book.authors, (book as any).series, book.lang, book.file]
-        .filter(Boolean)
-        .map(normalizeSearchValue)
-        .join(" ")
 }
 
 function createIndex(): InstanceType<typeof FlexDocument> {
@@ -26,7 +19,13 @@ function createIndex(): InstanceType<typeof FlexDocument> {
         cache: true,
         document: {
             id: "id",
-            index: [{ field: "content", tokenize: "forward", encode: false }],
+            index: [
+                { field: "title",   tokenize: "forward", encode: false },
+                { field: "authors", tokenize: "forward", encode: false },
+                { field: "series",  tokenize: "forward", encode: false },
+                { field: "lang",    tokenize: "strict",  encode: false },
+                { field: "file",    tokenize: "forward", encode: false },
+            ],
         },
     })
 }
@@ -50,10 +49,7 @@ function extractSearchIds(rawResults: any[]): string[] {
     return ids
 }
 
-export async function importIndexData(
-    chunks: Array<{ key: string; data: unknown }>,
-    books: BookRecord[],
-): Promise<void> {
+export async function importIndexData(chunks: Array<{ key: string; data: unknown }>, books: BookRecord[]): Promise<void> {
     const newIndex = createIndex()
 
     for (const chunk of chunks) {
@@ -79,30 +75,37 @@ export interface SearchResult {
 export function search(term: string, page: number, pageSize: number, genres: string[]): SearchResult {
     if (!index) return { books: [], total: 0, genres: [] }
 
-    const normalizedTerm = normalizeSearchValue(term).trim()
+    const normalizedTerm = norm(term).trim()
     const genreFilter = genres.length ? genres : null
 
     let matched: BookRecord[]
 
     if (!normalizedTerm) {
-        console.log("No search term, applying genre filter only")
         matched = []
         for (const book of booksById.values()) {
             if (genreFilter && !book.genreCodes?.some((c) => genreFilter.includes(c))) continue
             matched.push(book)
         }
     } else {
-        const rawResults = index.search(normalizedTerm, { limit: MAX_IDS })
-        console.log("Raw search results:", rawResults)
+        // Search each field separately — title matches rank first, then authors, series, file
+        const rawResults = index.search([
+            { field: "title",   query: normalizedTerm, limit: MAX_IDS },
+            { field: "authors", query: normalizedTerm, limit: MAX_IDS },
+            { field: "series",  query: normalizedTerm, limit: MAX_IDS },
+            { field: "file",    query: normalizedTerm, limit: MAX_IDS },
+        ])
         const ids = extractSearchIds(rawResults)
-        console.log("Extracted IDs:", ids)
         matched = ids.map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
 
-        // Linear fallback when FlexSearch finds nothing
+        // Linear fallback when index finds nothing
         if (!matched.length) {
-            console.log("No matches from index, falling back to linear search")
             for (const book of booksById.values()) {
-                if (toSearchText(book).includes(normalizedTerm)) {
+                if (
+                    norm(book.title).includes(normalizedTerm) ||
+                    norm(book.authors).includes(normalizedTerm) ||
+                    norm((book as any).series).includes(normalizedTerm) ||
+                    norm(book.file).includes(normalizedTerm)
+                ) {
                     matched.push(book)
                     if (matched.length >= MAX_IDS) break
                 }

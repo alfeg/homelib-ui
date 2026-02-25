@@ -25,17 +25,29 @@ function normalizeSearchValue(value) {
         .replaceAll("ё", "е")
 }
 
+function toIndexDoc(book) {
+    const norm = normalizeSearchValue
+    return {
+        id: String(book.id),
+        title: norm(book.title),
+        authors: norm(book.authors),
+        series: norm(book.series),
+        lang: norm(book.lang),
+        file: norm(book.file),
+    }
+}
+
 function createIndex() {
     return new FlexDocument({
         cache: true,
         document: {
             id: "id",
             index: [
-                {
-                    field: "content",
-                    tokenize: "forward",
-                    encode: false,
-                },
+                { field: "title",   tokenize: "forward", encode: false },
+                { field: "authors", tokenize: "forward", encode: false },
+                { field: "series",  tokenize: "forward", encode: false },
+                { field: "lang",    tokenize: "strict",  encode: false },
+                { field: "file",    tokenize: "forward", encode: false },
             ],
         },
     })
@@ -379,9 +391,8 @@ self.onmessage = async (event) => {
 
                 for (let i = start; i < end; i++) {
                     const book = books[i]
-                    const id = String(book.id)
-                    booksById.set(id, book)
-                    batchDocuments.push({ id, content: toSearchText(book) })
+                    booksById.set(String(book.id), book)
+                    batchDocuments.push(toIndexDoc(book))
                 }
 
                 await addBatchToIndexAsync(index, batchDocuments)
