@@ -7,13 +7,13 @@ import { libraryCacheStore } from "../services/storageService";
 import { convertTorrentFileToMagnet } from "../services/torrentMagnetService";
 import { createSearchWorkerClient } from "../services/searchIndexWorkerClient";
 import { loadGenreLabels } from "../services/genreLabelsService";
+import { getCurrentLocale, localeRef, translate } from "../services/i18n";
+import InpxParserWorker from "../workers/inpxParser.worker.ts?worker";
 
 const RESULTS_PAGE_SIZE = 200;
 const SEARCH_RESULTS_LIMIT = 1000;
 const NO_GENRE_CODE = "__no_genre__";
-const NO_GENRE_LABEL = "Без жанра";
 const GENRE_DELIMITER = ":";
-const INPX_PARSER_WORKER_URL = new URL("../workers/inpxParser.worker.ts", import.meta.url);
 
 function formatMegabytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -21,11 +21,11 @@ function formatMegabytes(bytes) {
 
 function parseInpxWithWorker(buffer, onProgress) {
     if (typeof Worker === "undefined") {
-        return Promise.reject(new Error("Web Worker is not supported in this browser."));
+        return Promise.reject(new Error(translate("error.inpxParseFailed")));
     }
 
     return new Promise((resolve, reject) => {
-        const worker = new Worker(INPX_PARSER_WORKER_URL, { type: "module" });
+        const worker = new InpxParserWorker({ type: "module" });
 
         const cleanup = () => {
             worker.onmessage = null;
@@ -49,13 +49,13 @@ function parseInpxWithWorker(buffer, onProgress) {
 
             if (message.type === "error") {
                 cleanup();
-                reject(new Error(message.message || "Failed to parse INPX payload."));
+                reject(new Error(message.message || translate("error.inpxParseFailed")));
             }
         };
 
         worker.onerror = (event) => {
             cleanup();
-            reject(new Error(event?.message || "Failed to parse INPX payload."));
+            reject(new Error(event?.message || translate("error.inpxParseFailed")));
         };
 
         worker.postMessage({ type: "parse", buffer }, [buffer]);
@@ -226,6 +226,7 @@ function resolveDatasetSignature(payload) {
 }
 
 export const useLibraryState = createGlobalState(() => {
+    const t = translate;
     const magnetUri = ref("");
     const magnetHash = ref("");
     const metadata = ref(null);
@@ -277,10 +278,10 @@ export const useLibraryState = createGlobalState(() => {
     const searchWorkerClient = createSearchWorkerClient({
         onProgress: (progress) => {
             setProgress(progress);
-            status.value = `Building search index... ${progress.processed}/${progress.total} (${progress.percent}%)`;
+            status.value = t("status.indexing", { processed: progress.processed, total: progress.total, percent: progress.percent });
         },
         onError: (err) => {
-            error.value = err instanceof Error ? err.message : "Search index worker failed.";
+            error.value = err instanceof Error ? err.message : t("error.searchWorkerFailed");
         }
     });
 
@@ -290,7 +291,7 @@ export const useLibraryState = createGlobalState(() => {
 
     function resolveGenreLabel(genreCode) {
         if (genreCode === NO_GENRE_CODE) {
-            return NO_GENRE_LABEL;
+            return t("genres.noGenre");
         }
 
         return genreLabelByCode.value.get(genreCode) ?? genreCode;
@@ -302,7 +303,7 @@ export const useLibraryState = createGlobalState(() => {
             : parseRawGenreCodes(book?.genre);
 
         if (!codes.length) {
-            return NO_GENRE_LABEL;
+            return t("genres.noGenre");
         }
 
         return uniqueStrings(codes.map((code) => resolveGenreLabel(code))).join(", ");
@@ -351,7 +352,7 @@ export const useLibraryState = createGlobalState(() => {
                     return b.count - a.count;
                 }
 
-                return a.label.localeCompare(b.label, "ru");
+                return a.label.localeCompare(b.label, getCurrentLocale());
             });
     }
 
@@ -439,6 +440,12 @@ export const useLibraryState = createGlobalState(() => {
         }
     });
 
+    watch(localeRef, async () => {
+        await ensureGenreLabelsLoaded();
+        recomputeGenreFacets();
+        applyGenreFilters();
+    });
+
     async function refreshSearchResults() {
         const term = searchTerm.value.trim();
         const normalizedTerm = normalizeSearchText(term).trim();
@@ -502,7 +509,7 @@ export const useLibraryState = createGlobalState(() => {
         });
 
         if (tryRestore && magnetHash.value) {
-            status.value = "Cached library loaded. Restoring search index...";
+            status.value = t("status.cachedLibraryRestoring");
 
             const restoreResult = await searchWorkerClient.restoreIndex({
                 books: books.value,
@@ -520,14 +527,14 @@ export const useLibraryState = createGlobalState(() => {
                     downloadedBytes: 0,
                     totalBytes: null
                 });
-                status.value = "Loaded from local cache.";
+                status.value = t("status.loadedFromCache");
                 await refreshSearchResults();
                 return { datasetSignature, restored: true };
             }
 
             status.value = restoreResult?.reason === "stale"
-                ? "Cached search index is stale. Rebuilding..."
-                : "Cached search index unavailable. Rebuilding...";
+                ? t("status.cachedIndexStale")
+                : t("status.cachedIndexMissing");
         }
 
         setProgress({
@@ -538,7 +545,7 @@ export const useLibraryState = createGlobalState(() => {
             downloadedBytes: 0,
             totalBytes: null
         });
-        status.value = `Building search index... 0/${books.value.length} (0%)`;
+        status.value = t("status.buildingIndexInit", { total: books.value.length });
 
         await searchWorkerClient.buildIndex(books.value, {
             hash: magnetHash.value,
@@ -554,7 +561,7 @@ export const useLibraryState = createGlobalState(() => {
             downloadedBytes: 0,
             totalBytes: null
         });
-        status.value = fromCache ? "Loaded from local cache." : "Library indexed locally from INPX.";
+        status.value = fromCache ? t("status.loadedFromCache") : t("status.libraryIndexed");
 
         await refreshSearchResults();
         return { datasetSignature, restored: false };
@@ -591,8 +598,8 @@ export const useLibraryState = createGlobalState(() => {
             totalBytes: null
         });
         status.value = reindexing
-            ? "Reindexing locally: downloading INPX from backend..."
-            : "Loading library: downloading INPX from backend...";
+            ? t("status.reindexDownloading")
+            : t("status.loadingDownloading");
 
         const inpxBuffer = await apiClient.fetchInpx(magnetUri.value, ({ downloadedBytes, totalBytes, percent }) => {
             setProgress({
@@ -603,11 +610,15 @@ export const useLibraryState = createGlobalState(() => {
             });
 
             if (totalBytes) {
-                status.value = `Downloading INPX: ${formatMegabytes(downloadedBytes)} / ${formatMegabytes(totalBytes)} (${percent ?? 0}%)`;
+                status.value = t("status.downloadingInpxTotal", {
+                    downloaded: formatMegabytes(downloadedBytes),
+                    total: formatMegabytes(totalBytes),
+                    percent: percent ?? 0
+                });
                 return;
             }
 
-            status.value = `Downloading INPX: ${formatMegabytes(downloadedBytes)} downloaded`;
+            status.value = t("status.downloadingInpxSimple", { downloaded: formatMegabytes(downloadedBytes) });
         });
 
         setProgress({
@@ -618,7 +629,7 @@ export const useLibraryState = createGlobalState(() => {
             downloadedBytes: 0,
             totalBytes: null
         });
-        status.value = "INPX downloaded. Parsing on client...";
+        status.value = t("status.inpxDownloadedParsing");
 
         return parseInpxWithWorker(inpxBuffer, (progress) => {
             setProgress({
@@ -634,8 +645,8 @@ export const useLibraryState = createGlobalState(() => {
             const processed = progress.processed ?? 0;
             const percent = progress.percent ?? 0;
             status.value = total
-                ? `Parsing INPX... ${processed}/${total} (${percent}%)`
-                : `Parsing INPX... (${percent}%)`;
+                ? t("status.parsingWithTotal", { processed, total, percent })
+                : t("status.parsingSimple", { percent });
         });
     }
 
@@ -649,7 +660,7 @@ export const useLibraryState = createGlobalState(() => {
         try {
             const payload = await fetchBooksViaInpx({ reindexing });
 
-            status.value = "Library data loaded. Building search index...";
+            status.value = t("status.libraryDataLoadedBuilding");
             const { datasetSignature } = await applyBooks(payload, false);
             await cachePayload(magnetHash.value, payload, datasetSignature);
             lastUpdatedAt.value = new Date().toLocaleString();
@@ -663,11 +674,11 @@ export const useLibraryState = createGlobalState(() => {
                 totalBytes: null
             });
             status.value = reindexing
-                ? "Local reindex failed: unable to download or parse INPX."
-                : "Library load failed: unable to download or parse INPX.";
+                ? t("status.reindexFailed")
+                : t("status.loadFailed");
             error.value = err instanceof Error
                 ? err.message
-                : "Failed to load library from INPX.";
+                : t("error.inpxLoadFailed");
             throw err;
         } finally {
             isLoading.value = false;
@@ -686,7 +697,7 @@ export const useLibraryState = createGlobalState(() => {
             downloadedBytes: 0,
             totalBytes: null
         });
-        status.value = "Loading library from local cache...";
+        status.value = t("status.loadingCache");
         const cached = await libraryCacheStore.getByHash(magnetHash.value);
         if (cached?.books?.length) {
             await applyBooks(cached, true, { tryRestore: true });
@@ -701,18 +712,26 @@ export const useLibraryState = createGlobalState(() => {
         error.value = "";
         const clean = uri.trim();
         if (!clean) {
-            error.value = "Magnet URI is required.";
+            error.value = t("error.magnetRequired");
             return;
         }
 
+        let hash = "";
         try {
-            const hash = parseHashFromMagnet(clean);
-            magnetUri.value = clean;
-            magnetHash.value = hash;
-            magnetStore.set(clean);
+            hash = parseHashFromMagnet(clean);
+        } catch (err) {
+            error.value = err instanceof Error ? err.message : t("error.invalidMagnet");
+            return;
+        }
+
+        magnetUri.value = clean;
+        magnetHash.value = hash;
+        magnetStore.set(clean);
+
+        try {
             await loadLibraryForCurrentMagnet();
         } catch (err) {
-            error.value = err instanceof Error ? err.message : "Invalid magnet URI.";
+            error.value = err instanceof Error ? err.message : t("error.inpxLoadFailed");
         }
     }
 
@@ -720,7 +739,7 @@ export const useLibraryState = createGlobalState(() => {
         error.value = "";
 
         if (!file) {
-            error.value = "Please choose a .torrent file.";
+            error.value = t("error.selectTorrent");
             return;
         }
 
@@ -728,7 +747,7 @@ export const useLibraryState = createGlobalState(() => {
             const magnetFromFile = await convertTorrentFileToMagnet(file);
             await submitMagnet(magnetFromFile);
         } catch (err) {
-            error.value = err instanceof Error ? err.message : "Failed to parse .torrent file.";
+            error.value = err instanceof Error ? err.message : t("error.parseTorrent");
         }
     }
 
@@ -753,8 +772,8 @@ export const useLibraryState = createGlobalState(() => {
         try {
             await loadLibraryForCurrentMagnet();
         } catch (err) {
-            error.value = err instanceof Error ? err.message : "Failed to load saved library.";
-            status.value = "Failed to load saved library. Please try reindexing.";
+            error.value = err instanceof Error ? err.message : t("error.savedLibraryFailed");
+            status.value = t("status.savedLibraryLoadFailedTryReindex");
         }
     }
 
@@ -762,7 +781,7 @@ export const useLibraryState = createGlobalState(() => {
         if (!magnetHash.value || !magnetUri.value) return;
 
         error.value = "";
-        status.value = "Reindexing locally: clearing cached library and search index...";
+        status.value = t("status.reindexClearing");
         setProgress({
             phase: "clearing-local",
             processed: 0,
@@ -778,11 +797,11 @@ export const useLibraryState = createGlobalState(() => {
                 searchWorkerClient.clearPersistedIndex(magnetHash.value)
             ]);
 
-            status.value = "Local cache cleared. Downloading INPX for rebuild...";
+            status.value = t("status.localCacheCleared");
             await fetchAndApply({ reindexing: true });
         } catch (err) {
-            error.value = err instanceof Error ? err.message : "Failed to reindex.";
-            status.value = "Local reindex failed. Please try again.";
+            error.value = err instanceof Error ? err.message : t("error.reindexFailed");
+            status.value = t("status.reindexTryAgain");
         }
     }
 
@@ -845,7 +864,7 @@ export const useLibraryState = createGlobalState(() => {
             });
             saveBlob(blob, fileName || `${book.file}.${book.ext}`);
         } catch (err) {
-            error.value = err instanceof Error ? err.message : "Download failed.";
+            error.value = err instanceof Error ? err.message : t("error.downloadFailed");
         } finally {
             downloadingById[book.id] = false;
         }

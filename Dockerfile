@@ -1,3 +1,10 @@
+FROM node:22-bookworm-slim AS ui-build
+WORKDIR /src/MyHomeLib.Ui
+COPY MyHomeLib.Ui/package*.json ./
+RUN npm ci
+COPY MyHomeLib.Ui/ ./
+RUN npm run build
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -9,10 +16,9 @@ RUN dotnet restore MyHomeLib.Web/MyHomeLib.Web.csproj
 COPY MyHomeLib.Library/ MyHomeLib.Library/
 COPY MyHomeLib.Torrent/  MyHomeLib.Torrent/
 COPY MyHomeLib.Web/      MyHomeLib.Web/
-RUN dotnet publish MyHomeLib.Web/MyHomeLib.Web.csproj -c Release -r linux-x64 --self-contained false -o /app \
-	-p:PublishReadyToRun=true \
-	-p:PublishReadyToRunComposite=true \
-	-p:ReadyToRunUseCrossgen2=true
+COPY --from=ui-build /src/MyHomeLib.Ui/dist/ MyHomeLib.Web/wwwroot/
+RUN dotnet publish MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --self-contained false -o /app \
+	-p:BuildClientApp=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app

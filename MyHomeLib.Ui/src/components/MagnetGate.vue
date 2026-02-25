@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { setLocale, useI18nState } from "../services/i18n";
 
 const props = defineProps<{ loading: boolean; error: string }>();
 const emit = defineEmits<{
@@ -10,6 +11,7 @@ const emit = defineEmits<{
 const magnetInput = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 const isDragActive = ref(false);
+const { t, locale } = useI18nState();
 
 const onSubmit = () => {
   if (props.loading) return;
@@ -28,6 +30,11 @@ const onFileInput = (event: Event) => {
   submitTorrent(target.files?.[0] ?? null);
   target.value = "";
 };
+
+const onLocaleToggle = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked;
+  setLocale(checked ? "en" : "ru");
+};
 </script>
 
 <template>
@@ -40,8 +47,20 @@ const onFileInput = (event: Event) => {
       @dragleave.prevent="isDragActive = false"
       @drop.prevent="(e) => { isDragActive = false; submitTorrent((e.dataTransfer?.files?.[0] as File) ?? null); }"
     >
-      <h1 class="text-2xl font-semibold">Connect your library</h1>
-      <p class="text-slate-500">Paste a magnet URI or upload a .torrent file to open this library.</p>
+      <h1 class="text-2xl font-semibold">{{ t("gate.title") }}</h1>
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-slate-500">{{ t("gate.subtitle") }}</p>
+        <label class="swap btn btn-ghost btn-sm px-2 border border-base-300">
+          <input
+            type="checkbox"
+            name="locale-toggle"
+            :checked="locale === 'en'"
+            @change="onLocaleToggle"
+          />
+          <span class="swap-off font-semibold">RU</span>
+          <span class="swap-on font-semibold">EN</span>
+        </label>
+      </div>
 
       <input
         v-model="magnetInput"
@@ -54,10 +73,10 @@ const onFileInput = (event: Event) => {
 
       <div class="flex gap-2 flex-wrap">
         <button class="btn btn-primary" :disabled="loading" @click="onSubmit">
-          {{ loading ? "Loading..." : "Open Library" }}
+          {{ loading ? t("gate.loading") : t("gate.openLibrary") }}
         </button>
         <button class="btn btn-outline btn-primary" :disabled="loading" @click="openFilePicker">
-          Choose .torrent file
+          {{ t("gate.chooseTorrent") }}
         </button>
       </div>
 
@@ -70,7 +89,7 @@ const onFileInput = (event: Event) => {
         @change="onFileInput"
       />
 
-      <p class="text-base-content/70">You can also drag and drop a .torrent file anywhere on this card.</p>
+      <p class="text-base-content/70">{{ t("gate.dragHint") }}</p>
       <p v-if="error" class="alert alert-error">{{ error }}</p>
     </div>
   </section>

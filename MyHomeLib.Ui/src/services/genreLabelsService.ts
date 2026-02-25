@@ -1,6 +1,8 @@
-import genresData from "../assets/genres.json";
+import genresRu from "../assets/genres.ru.json";
+import genresEn from "../assets/genres.en.json";
+import { getCurrentLocale } from "./i18n";
 
-let genresMapPromise: Promise<Map<string, string>> | null = null;
+const genresMapByLocale = new Map<string, Promise<Map<string, string>>>();
 
 function toLabelMap(payload: Record<string, { name?: string }>) {
   const entries = Object.entries(payload ?? {});
@@ -18,9 +20,13 @@ function toLabelMap(payload: Record<string, { name?: string }>) {
 }
 
 export async function loadGenreLabels() {
-  if (!genresMapPromise) {
-    genresMapPromise = Promise.resolve(toLabelMap(genresData as Record<string, { name?: string }>));
+  const locale = getCurrentLocale();
+  if (!genresMapByLocale.has(locale)) {
+    const payload = locale === "en"
+      ? (genresEn as Record<string, { name?: string }>)
+      : (genresRu as Record<string, { name?: string }>);
+    genresMapByLocale.set(locale, Promise.resolve(toLabelMap(payload)));
   }
 
-  return genresMapPromise;
+  return genresMapByLocale.get(locale)!;
 }

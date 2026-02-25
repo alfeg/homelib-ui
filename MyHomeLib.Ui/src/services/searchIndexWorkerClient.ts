@@ -1,6 +1,5 @@
 import type { BookRecord } from "../types/library";
-
-const SEARCH_INDEX_WORKER_URL = new URL("../workers/searchIndex.worker.ts", import.meta.url);
+import SearchIndexWorker from "../workers/searchIndex.worker.ts?worker";
 
 function toStructuredCloneableBooks(books: BookRecord[]) {
   const input = Array.isArray(books) ? books : [];
@@ -30,7 +29,7 @@ function toStructuredCloneableBooks(books: BookRecord[]) {
 }
 
 export function createSearchWorkerClient({ onProgress, onError }: { onProgress?: (payload: any) => void; onError?: (error: Error) => void } = {}) {
-  const worker = new Worker(SEARCH_INDEX_WORKER_URL, { type: "module" });
+  const worker = new SearchIndexWorker({ type: "module" });
   const pendingSearches = new Map<number, (books: BookRecord[]) => void>();
   let pendingBuild: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null;
   let pendingRestore: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null;

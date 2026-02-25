@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18nState } from "../services/i18n";
+
 defineProps<{ books: any[]; downloadingById: Record<string, boolean>; currentPage: number; totalPages: number; visibleRange: { start: number; end: number }; totalResults: number; formatGenres?: (book: any) => string }>();
 defineEmits<{ (e: "download", book: any): void; (e: "next-page"): void; (e: "previous-page"): void }>();
+const { t } = useI18nState();
 </script>
 
 <template>
@@ -9,12 +12,12 @@ defineEmits<{ (e: "download", book: any): void; (e: "next-page"): void; (e: "pre
       <table class="table bg-base-100 rounded-xl overflow-hidden">
         <thead>
           <tr class="bg-base-300/70 text-base-content">
-            <th>Title</th>
-            <th>Authors</th>
-            <th>Series</th>
-            <th>Genres</th>
-            <th>Lang</th>
-            <th>Action</th>
+            <th>{{ t("table.title") }}</th>
+            <th>{{ t("table.authors") }}</th>
+            <th>{{ t("table.series") }}</th>
+            <th>{{ t("table.genres") }}</th>
+            <th>{{ t("table.lang") }}</th>
+            <th>{{ t("table.action") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -34,23 +37,23 @@ defineEmits<{ (e: "download", book: any): void; (e: "next-page"): void; (e: "pre
             <td>{{ book.lang || '—' }}</td>
             <td>
               <button class="btn btn-outline btn-primary btn-xs" :disabled="downloadingById[String(book.id)]" @click="$emit('download', book)">
-                {{ downloadingById[String(book.id)] ? 'Downloading...' : 'Download' }}
+                {{ downloadingById[String(book.id)] ? t("buttons.downloading") : t("buttons.download") }}
               </button>
             </td>
           </tr>
           <tr v-if="!books.length">
-            <td colspan="6" class="text-center text-base-content/70 p-3">No books found.</td>
+            <td colspan="6" class="text-center text-base-content/70 p-3">{{ t("table.noBooks") }}</td>
           </tr>
         </tbody>
       </table>
     </div>
 
     <footer v-if="totalResults" class="mt-3 flex justify-between items-center gap-2 flex-wrap">
-      <p class="text-base-content/70">Showing {{ visibleRange.start }}-{{ visibleRange.end }} of {{ totalResults }} books</p>
+      <p class="text-base-content/70">{{ t("table.range", { start: visibleRange.start, end: visibleRange.end, total: totalResults }) }}</p>
       <div class="inline-flex gap-2 items-center">
-        <button class="btn btn-outline btn-primary btn-sm" :disabled="currentPage <= 1" @click="$emit('previous-page')">Previous</button>
-        <span class="text-base-content/70">Page {{ currentPage }} / {{ totalPages }}</span>
-        <button class="btn btn-outline btn-primary btn-sm" :disabled="currentPage >= totalPages" @click="$emit('next-page')">Next</button>
+        <button class="btn btn-outline btn-primary btn-sm" :disabled="currentPage <= 1" @click="$emit('previous-page')">{{ t("buttons.previous") }}</button>
+        <span class="text-base-content/70">{{ t("table.page", { page: currentPage, totalPages }) }}</span>
+        <button class="btn btn-outline btn-primary btn-sm" :disabled="currentPage >= totalPages" @click="$emit('next-page')">{{ t("buttons.next") }}</button>
       </div>
     </footer>
   </section>

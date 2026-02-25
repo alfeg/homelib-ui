@@ -10,12 +10,6 @@
     <BuildClientApp Condition="'$(Configuration)' == 'Release'">true</BuildClientApp>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
-    <ReadyToRunUseCrossgen2>true</ReadyToRunUseCrossgen2>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Yarp.ReverseProxy" Version="2.2.0" />
   </ItemGroup>

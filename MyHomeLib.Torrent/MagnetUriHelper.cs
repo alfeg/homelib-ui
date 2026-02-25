@@ -10,7 +10,20 @@ public static class MagnetUriHelper
     /// <summary>Extracts the 40-char hex info-hash from a magnet URI.</summary>
     public static string ParseInfoHash(string magnetUri)
     {
-        var m = _hashRe.Match(magnetUri);
+        if (string.IsNullOrWhiteSpace(magnetUri))
+            throw new FormatException("Magnet URI is empty.");
+
+        string candidate;
+        try
+        {
+            candidate = Uri.UnescapeDataString(magnetUri);
+        }
+        catch
+        {
+            candidate = magnetUri;
+        }
+
+        var m = _hashRe.Match(candidate);
         if (m.Success) return m.Groups[1].Value.ToUpperInvariant();
         throw new FormatException($"Cannot extract info-hash from magnet URI: {magnetUri}");
     }

@@ -1,10 +1,17 @@
-const jsonHeaders = { "Content-Type": "application/json" };
+import { getCurrentLocale } from "./i18n";
+
+function getJsonHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "Accept-Language": getCurrentLocale()
+  };
+}
 
 async function requestArrayBuffer(url: string, body: unknown, onProgress?: (progress: { downloadedBytes: number; totalBytes: number | null; percent: number | null }) => void) {
   const response = await fetch(url, {
     method: "POST",
     credentials: "include",
-    headers: jsonHeaders,
+    headers: getJsonHeaders(),
     body: JSON.stringify(body)
   });
 
@@ -76,7 +83,7 @@ export const apiClient = {
     const response = await fetch("/api/library/download", {
       method: "POST",
       credentials: "include",
-      headers: jsonHeaders,
+      headers: getJsonHeaders(),
       body: JSON.stringify(payload)
     });
 

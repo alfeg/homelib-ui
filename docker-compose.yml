@@ -3,7 +3,7 @@ services:
     image: ghcr.io/yourok/torrserver:latest
     restart: unless-stopped
     ports:
-      - "8099:8090"
+      - "8090"
     volumes:
       - torrserve_data:/opt/torrserver
 

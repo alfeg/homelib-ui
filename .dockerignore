@@ -5,6 +5,7 @@
 !MyHomeLib.Library/**
 !MyHomeLib.Torrent/**
 !MyHomeLib.Web/**
+!MyHomeLib.Ui/**
 !MyHomeLibServer.slnx
 
 # Re-exclude build artifacts inside the allowed directories

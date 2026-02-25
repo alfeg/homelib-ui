@@ -1,0 +1,1090 @@
+{
+  "economics_ref": {
+    "category": "Деловая литература",
+    "name": "Economics ref"
+  },
+  "popular_business": {
+    "category": "Деловая литература",
+    "name": "Popular business"
+  },
+  "org_behavior": {
+    "category": "Деловая литература",
+    "name": "Org behavior"
+  },
+  "banking": {
+    "category": "Деловая литература",
+    "name": "Banking"
+  },
+  "economics": {
+    "category": "Деловая литература",
+    "name": "Economics"
+  },
+  "det_artifact": {
+    "category": "Детективы и триллеры",
+    "name": "Det artifact"
+  },
+  "det_action": {
+    "category": "Детективы и триллеры",
+    "name": "Det action"
+  },
+  "det_lady": {
+    "category": "Детективы и триллеры",
+    "name": "Det lady"
+  },
+  "detective": {
+    "category": "Детективы и триллеры",
+    "name": "Detective"
+  },
+  "det_other": {
+    "category": "Детективы и триллеры",
+    "name": "Det other"
+  },
+  "det_irony": {
+    "category": "Детективы и триллеры",
+    "name": "Det irony"
+  },
+  "det_history": {
+    "category": "Детективы и триллеры",
+    "name": "Det history"
+  },
+  "det_classic": {
+    "category": "Детективы и триллеры",
+    "name": "Det classic"
+  },
+  "det_crime": {
+    "category": "Детективы и триллеры",
+    "name": "Det crime"
+  },
+  "det_hard": {
+    "category": "Детективы и триллеры",
+    "name": "Det hard"
+  },
+  "det_political": {
+    "category": "Детективы и триллеры",
+    "name": "Det political"
+  },
+  "det_police": {
+    "category": "Детективы и триллеры",
+    "name": "Det police"
+  },
+  "det_maniac": {
+    "category": "Детективы и триллеры",
+    "name": "Det maniac"
+  },
+  "det_su": {
+    "category": "Детективы и триллеры",
+    "name": "Det su"
+  },
+  "thriller": {
+    "category": "Детективы и триллеры",
+    "name": "Thriller"
+  },
+  "det_espionage": {
+    "category": "Детективы и триллеры",
+    "name": "Det espionage"
+  },
+  "children": {
+    "category": "Детская литература: прочее",
+    "name": "Children"
+  },
+  "child_education": {
+    "category": "Детская литература: прочее",
+    "name": "Child education"
+  },
+  "prose_game": {
+    "category": "Детская литература: прочее",
+    "name": "Prose game"
+  },
+  "child_folklore": {
+    "category": "Детская литература: прочее",
+    "name": "Child folklore"
+  },
+  "foreign_children": {
+    "category": "Детская литература: прочее",
+    "name": "Foreign children"
+  },
+  "child_classical": {
+    "category": "Детская литература: прочее",
+    "name": "Child classical"
+  },
+  "child_tale": {
+    "category": "Детская литература: сказки",
+    "name": "Child tale"
+  },
+  "folk_tale": {
+    "category": "Детская литература: сказки",
+    "name": "Folk tale"
+  },
+  "child_tale_rus": {
+    "category": "Детская литература: сказки",
+    "name": "Child tale rus"
+  },
+  "child_tale_foreign_writers": {
+    "category": "Детская литература: сказки",
+    "name": "Child tale foreign writers"
+  },
+  "child_tale_russian_writers": {
+    "category": "Детская литература: сказки",
+    "name": "Child tale russian writers"
+  },
+  "child_prose_history": {
+    "category": "Детская художественная литература",
+    "name": "Child prose history"
+  },
+  "child_adv_animal": {
+    "category": "Детская художественная литература",
+    "name": "Child adv animal"
+  },
+  "child_adv": {
+    "category": "Детская художественная литература",
+    "name": "Child adv"
+  },
+  "child_prose": {
+    "category": "Детская художественная литература",
+    "name": "Child prose"
+  },
+  "child_prose_romantic": {
+    "category": "Детская художественная литература",
+    "name": "Child prose romantic"
+  },
+  "child_prose_humor": {
+    "category": "Детская художественная литература",
+    "name": "Child prose humor"
+  },
+  "child_sf_space": {
+    "category": "Детская художественная литература",
+    "name": "Child sf space"
+  },
+  "child_sf": {
+    "category": "Детская художественная литература",
+    "name": "Child sf"
+  },
+  "child_sf_hronoopera": {
+    "category": "Детская художественная литература",
+    "name": "Child sf hronoopera"
+  },
+  "child_sf_horror": {
+    "category": "Детская художественная литература",
+    "name": "Child sf horror"
+  },
+  "child_sf_fantasy": {
+    "category": "Детская художественная литература",
+    "name": "Child sf fantasy"
+  },
+  "child_det_children_detectives": {
+    "category": "Детская художественная литература",
+    "name": "Child det children detectives"
+  },
+  "child_det_animal_detectives": {
+    "category": "Детская художественная литература",
+    "name": "Child det animal detectives"
+  },
+  "child_det_other": {
+    "category": "Детская художественная литература",
+    "name": "Child det other"
+  },
+  "child_det": {
+    "category": "Детская художественная литература",
+    "name": "Child det"
+  },
+  "child_dramaturgy": {
+    "category": "Детская художественная литература",
+    "name": "Child dramaturgy"
+  },
+  "child_verse": {
+    "category": "Детская художественная литература",
+    "name": "Child verse"
+  },
+  "nonf_biography_celebrities": {
+    "category": "Документальная литература",
+    "name": "Nonf biography celebrities"
+  },
+  "nonf_biography_historical": {
+    "category": "Документальная литература",
+    "name": "Nonf biography historical"
+  },
+  "about_musicians": {
+    "category": "Документальная литература",
+    "name": "About musicians"
+  },
+  "nonf_biography_writers": {
+    "category": "Документальная литература",
+    "name": "Nonf biography writers"
+  },
+  "nonf_biography": {
+    "category": "Документальная литература",
+    "name": "Nonf biography"
+  },
+  "nonf_military": {
+    "category": "Документальная литература",
+    "name": "Nonf military"
+  },
+  "military_special": {
+    "category": "Документальная литература",
+    "name": "Military special"
+  },
+  "nonf_biography_military_figures": {
+    "category": "Документальная литература",
+    "name": "Nonf biography military figures"
+  },
+  "travel_notes": {
+    "category": "Документальная литература",
+    "name": "Travel notes"
+  },
+  "nonfiction": {
+    "category": "Документальная литература",
+    "name": "Nonfiction"
+  },
+  "nonf_publicism": {
+    "category": "Документальная литература",
+    "name": "Nonf publicism"
+  },
+  "auto_regulations": {
+    "category": "Дом и семья",
+    "name": "Auto regulations"
+  },
+  "home_sport": {
+    "category": "Дом и семья",
+    "name": "Home sport"
+  },
+  "home_pets": {
+    "category": "Дом и семья",
+    "name": "Home pets"
+  },
+  "home": {
+    "category": "Дом и семья",
+    "name": "Home"
+  },
+  "home_health": {
+    "category": "Дом и семья",
+    "name": "Home health"
+  },
+  "home_collecting": {
+    "category": "Дом и семья",
+    "name": "Home collecting"
+  },
+  "home_cooking": {
+    "category": "Дом и семья",
+    "name": "Home cooking"
+  },
+  "sci_pedagogy": {
+    "category": "Дом и семья",
+    "name": "Sci pedagogy"
+  },
+  "sci_psychology_popular": {
+    "category": "Дом и семья",
+    "name": "Sci psychology popular"
+  },
+  "home_entertain": {
+    "category": "Дом и семья",
+    "name": "Home entertain"
+  },
+  "home_garden": {
+    "category": "Дом и семья",
+    "name": "Home garden"
+  },
+  "home_diy": {
+    "category": "Дом и семья",
+    "name": "Home diy"
+  },
+  "family": {
+    "category": "Дом и семья",
+    "name": "Family"
+  },
+  "home_sex": {
+    "category": "Дом и семья",
+    "name": "Home sex"
+  },
+  "home_crafts": {
+    "category": "Дом и семья",
+    "name": "Home crafts"
+  },
+  "drama_antique": {
+    "category": "Драматургия",
+    "name": "Drama antique"
+  },
+  "drama": {
+    "category": "Драматургия",
+    "name": "Drama"
+  },
+  "dramaturgy": {
+    "category": "Драматургия",
+    "name": "Dramaturgy"
+  },
+  "comedy": {
+    "category": "Драматургия",
+    "name": "Comedy"
+  },
+  "vaudeville": {
+    "category": "Драматургия",
+    "name": "Vaudeville"
+  },
+  "screenplays": {
+    "category": "Драматургия",
+    "name": "Screenplays"
+  },
+  "tragedy": {
+    "category": "Драматургия",
+    "name": "Tragedy"
+  },
+  "painting": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Painting"
+  },
+  "design": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Design"
+  },
+  "art_criticism": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Art criticism"
+  },
+  "cine": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Cine"
+  },
+  "nonf_criticism": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Nonf criticism"
+  },
+  "sci_culture": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Sci culture"
+  },
+  "art_world_culture": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Art world culture"
+  },
+  "music": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Music"
+  },
+  "notes": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Notes"
+  },
+  "architecture_book": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Architecture book"
+  },
+  "theatre": {
+    "category": "Искусство, Искусствоведение, Дизайн",
+    "name": "Theatre"
+  },
+  "computers": {
+    "category": "Компьютеры и Интернет",
+    "name": "Computers"
+  },
+  "comp_hard": {
+    "category": "Компьютеры и Интернет",
+    "name": "Comp hard"
+  },
+  "comp_www": {
+    "category": "Компьютеры и Интернет",
+    "name": "Comp www"
+  },
+  "comp_db": {
+    "category": "Компьютеры и Интернет",
+    "name": "Comp db"
+  },
+  "tbg_computers": {
+    "category": "Компьютеры и Интернет",
+    "name": "Tbg computers"
+  },
+  "love_history": {
+    "category": "Любовные романы",
+    "name": "Love history"
+  },
+  "love_short": {
+    "category": "Любовные романы",
+    "name": "Love short"
+  },
+  "love_sf": {
+    "category": "Любовные романы",
+    "name": "Love sf"
+  },
+  "love": {
+    "category": "Любовные романы",
+    "name": "Love"
+  },
+  "love_detective": {
+    "category": "Любовные романы",
+    "name": "Love detective"
+  },
+  "love_hard": {
+    "category": "Любовные романы",
+    "name": "Love hard"
+  },
+  "love_contemporary": {
+    "category": "Любовные романы",
+    "name": "Love contemporary"
+  },
+  "love_erotica": {
+    "category": "Любовные романы",
+    "name": "Love erotica"
+  },
+  "sci_medicine_alternative": {
+    "category": "Наука, Образование",
+    "name": "Sci medicine alternative"
+  },
+  "sci_theories": {
+    "category": "Наука, Образование",
+    "name": "Sci theories"
+  },
+  "sci_cosmos": {
+    "category": "Наука, Образование",
+    "name": "Sci cosmos"
+  },
+  "sci_biology": {
+    "category": "Наука, Образование",
+    "name": "Sci biology"
+  },
+  "sci_botany": {
+    "category": "Наука, Образование",
+    "name": "Sci botany"
+  },
+  "sci_veterinary": {
+    "category": "Наука, Образование",
+    "name": "Sci veterinary"
+  },
+  "military_history": {
+    "category": "Наука, Образование",
+    "name": "Military history"
+  },
+  "sci_oriental": {
+    "category": "Наука, Образование",
+    "name": "Sci oriental"
+  },
+  "sci_geo": {
+    "category": "Наука, Образование",
+    "name": "Sci geo"
+  },
+  "sci_state": {
+    "category": "Наука, Образование",
+    "name": "Sci state"
+  },
+  "sci_zoo": {
+    "category": "Наука, Образование",
+    "name": "Sci zoo"
+  },
+  "sci_history": {
+    "category": "Наука, Образование",
+    "name": "Sci history"
+  },
+  "sci_philology": {
+    "category": "Наука, Образование",
+    "name": "Sci philology"
+  },
+  "sci_math": {
+    "category": "Наука, Образование",
+    "name": "Sci math"
+  },
+  "sci_medicine": {
+    "category": "Наука, Образование",
+    "name": "Sci medicine"
+  },
+  "science": {
+    "category": "Наука, Образование",
+    "name": "Science"
+  },
+  "sci_popular": {
+    "category": "Наука, Образование",
+    "name": "Sci popular"
+  },
+  "sci_social_studies": {
+    "category": "Наука, Образование",
+    "name": "Sci social studies"
+  },
+  "sci_politics": {
+    "category": "Наука, Образование",
+    "name": "Sci politics"
+  },
+  "sci_psychology": {
+    "category": "Наука, Образование",
+    "name": "Sci psychology"
+  },
+  "sci_phys": {
+    "category": "Наука, Образование",
+    "name": "Sci phys"
+  },
+  "sci_philosophy": {
+    "category": "Наука, Образование",
+    "name": "Sci philosophy"
+  },
+  "sci_chem": {
+    "category": "Наука, Образование",
+    "name": "Sci chem"
+  },
+  "sci_ecology": {
+    "category": "Наука, Образование",
+    "name": "Sci ecology"
+  },
+  "sci_economy": {
+    "category": "Наука, Образование",
+    "name": "Sci economy"
+  },
+  "sci_juris": {
+    "category": "Наука, Образование",
+    "name": "Sci juris"
+  },
+  "sci_linguistic": {
+    "category": "Наука, Образование",
+    "name": "Sci linguistic"
+  },
+  "palindromes": {
+    "category": "Поэзия",
+    "name": "Palindromes"
+  },
+  "poetry_for_classical": {
+    "category": "Поэзия",
+    "name": "Poetry for classical"
+  },
+  "poetry_classical": {
+    "category": "Поэзия",
+    "name": "Poetry classical"
+  },
+  "poetry_rus_classical": {
+    "category": "Поэзия",
+    "name": "Poetry rus classical"
+  },
+  "lyrics": {
+    "category": "Поэзия",
+    "name": "Lyrics"
+  },
+  "song_poetry": {
+    "category": "Поэзия",
+    "name": "Song poetry"
+  },
+  "poetry": {
+    "category": "Поэзия",
+    "name": "Poetry"
+  },
+  "poetry_east": {
+    "category": "Поэзия",
+    "name": "Poetry east"
+  },
+  "poem": {
+    "category": "Поэзия",
+    "name": "Poem"
+  },
+  "poetry_for_modern": {
+    "category": "Поэзия",
+    "name": "Poetry for modern"
+  },
+  "poetry_modern": {
+    "category": "Поэзия",
+    "name": "Poetry modern"
+  },
+  "poetry_rus_modern": {
+    "category": "Поэзия",
+    "name": "Poetry rus modern"
+  },
+  "humor_verse": {
+    "category": "Поэзия",
+    "name": "Humor verse"
+  },
+  "adv_story": {
+    "category": "Приключения",
+    "name": "Adv story"
+  },
+  "adv_indian": {
+    "category": "Приключения",
+    "name": "Adv indian"
+  },
+  "adv_history": {
+    "category": "Приключения",
+    "name": "Adv history"
+  },
+  "adv_maritime": {
+    "category": "Приключения",
+    "name": "Adv maritime"
+  },
+  "adventure": {
+    "category": "Приключения",
+    "name": "Adventure"
+  },
+  "adv_modern": {
+    "category": "Приключения",
+    "name": "Adv modern"
+  },
+  "adv_animal": {
+    "category": "Приключения",
+    "name": "Adv animal"
+  },
+  "adv_geo": {
+    "category": "Приключения",
+    "name": "Adv geo"
+  },
+  "tale_chivalry": {
+    "category": "Приключения",
+    "name": "Tale chivalry"
+  },
+  "aphorisms": {
+    "category": "Проза",
+    "name": "Aphorisms"
+  },
+  "gothic_novel": {
+    "category": "Проза",
+    "name": "Gothic novel"
+  },
+  "foreign_prose": {
+    "category": "Проза",
+    "name": "Foreign prose"
+  },
+  "prose_history": {
+    "category": "Проза",
+    "name": "Prose history"
+  },
+  "prose_classic": {
+    "category": "Проза",
+    "name": "Prose classic"
+  },
+  "literature_18": {
+    "category": "Проза",
+    "name": "Literature 18"
+  },
+  "literature_19": {
+    "category": "Проза",
+    "name": "Literature 19"
+  },
+  "literature_20": {
+    "category": "Проза",
+    "name": "Literature 20"
+  },
+  "prose_counter": {
+    "category": "Проза",
+    "name": "Prose counter"
+  },
+  "prose_magic": {
+    "category": "Проза",
+    "name": "Prose magic"
+  },
+  "story": {
+    "category": "Проза",
+    "name": "Story"
+  },
+  "prose": {
+    "category": "Проза",
+    "name": "Prose"
+  },
+  "prose_military": {
+    "category": "Проза",
+    "name": "Prose military"
+  },
+  "great_story": {
+    "category": "Проза",
+    "name": "Great story"
+  },
+  "prose_rus_classic": {
+    "category": "Проза",
+    "name": "Prose rus classic"
+  },
+  "prose_su_classics": {
+    "category": "Проза",
+    "name": "Prose su classics"
+  },
+  "prose_contemporary": {
+    "category": "Проза",
+    "name": "Prose contemporary"
+  },
+  "foreign_antique": {
+    "category": "Проза",
+    "name": "Foreign antique"
+  },
+  "prose_abs": {
+    "category": "Проза",
+    "name": "Prose abs"
+  },
+  "prose_neformatny": {
+    "category": "Проза",
+    "name": "Prose neformatny"
+  },
+  "epistolary_fiction": {
+    "category": "Проза",
+    "name": "Epistolary fiction"
+  },
+  "periodic": {
+    "category": "Прочее",
+    "name": "Periodic"
+  },
+  "comics": {
+    "category": "Прочее",
+    "name": "Comics"
+  },
+  "fan_translation": {
+    "category": "Прочее",
+    "name": "Fan translation"
+  },
+  "computer_translation": {
+    "category": "Прочее",
+    "name": "Computer translation"
+  },
+  "unfinished": {
+    "category": "Прочее",
+    "name": "Unfinished"
+  },
+  "other": {
+    "category": "Прочее",
+    "name": "Other"
+  },
+  "network_literature": {
+    "category": "Прочее",
+    "name": "Network literature"
+  },
+  "fanfiction": {
+    "category": "Прочее",
+    "name": "Fanfiction"
+  },
+  "astrology": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Astrology"
+  },
+  "religion_budda": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion budda"
+  },
+  "religion_hinduism": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion hinduism"
+  },
+  "religion_islam": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion islam"
+  },
+  "religion_judaism": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion judaism"
+  },
+  "religion_catholicism": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion catholicism"
+  },
+  "religion_orthodoxy": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion orthodoxy"
+  },
+  "religion_protestantism": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion protestantism"
+  },
+  "sci_religion": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Sci religion"
+  },
+  "religion": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion"
+  },
+  "religion_self": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion self"
+  },
+  "religion_christianity": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion christianity"
+  },
+  "religion_esoterics": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion esoterics"
+  },
+  "religion_paganism": {
+    "category": "Религия, духовность, эзотерика",
+    "name": "Religion paganism"
+  },
+  "geo_guides": {
+    "category": "Справочная литература",
+    "name": "Geo guides"
+  },
+  "ref_guide": {
+    "category": "Справочная литература",
+    "name": "Ref guide"
+  },
+  "ref_dict": {
+    "category": "Справочная литература",
+    "name": "Ref dict"
+  },
+  "reference": {
+    "category": "Справочная литература",
+    "name": "Reference"
+  },
+  "ref_ref": {
+    "category": "Справочная литература",
+    "name": "Ref ref"
+  },
+  "ref_encyc": {
+    "category": "Справочная литература",
+    "name": "Ref encyc"
+  },
+  "antique": {
+    "category": "Старинное",
+    "name": "Antique"
+  },
+  "antique_ant": {
+    "category": "Старинное",
+    "name": "Antique ant"
+  },
+  "antique_east": {
+    "category": "Старинное",
+    "name": "Antique east"
+  },
+  "antique_russian": {
+    "category": "Старинное",
+    "name": "Antique russian"
+  },
+  "antique_european": {
+    "category": "Старинное",
+    "name": "Antique european"
+  },
+  "auto_business": {
+    "category": "Техника",
+    "name": "Auto business"
+  },
+  "military_weapon": {
+    "category": "Техника",
+    "name": "Military weapon"
+  },
+  "equ_history": {
+    "category": "Техника",
+    "name": "Equ history"
+  },
+  "sci_metal": {
+    "category": "Техника",
+    "name": "Sci metal"
+  },
+  "sci_radio": {
+    "category": "Техника",
+    "name": "Sci radio"
+  },
+  "sci_build": {
+    "category": "Техника",
+    "name": "Sci build"
+  },
+  "sci_tech": {
+    "category": "Техника",
+    "name": "Sci tech"
+  },
+  "sci_transport": {
+    "category": "Техника",
+    "name": "Sci transport"
+  },
+  "sci_textbook": {
+    "category": "Учебники и пособия",
+    "name": "Sci textbook"
+  },
+  "tbg_higher": {
+    "category": "Учебники и пособия",
+    "name": "Tbg higher"
+  },
+  "tbg_secondary": {
+    "category": "Учебники и пособия",
+    "name": "Tbg secondary"
+  },
+  "tbg_school": {
+    "category": "Учебники и пособия",
+    "name": "Tbg school"
+  },
+  "asian_fantasy": {
+    "category": "Фантастика",
+    "name": "Asian fantasy"
+  },
+  "sf_history": {
+    "category": "Фантастика",
+    "name": "Sf history"
+  },
+  "dystopian": {
+    "category": "Фантастика",
+    "name": "Dystopian"
+  },
+  "sf_action": {
+    "category": "Фантастика",
+    "name": "Sf action"
+  },
+  "boyar_anime": {
+    "category": "Фантастика",
+    "name": "Boyar anime"
+  },
+  "everyday_fantasy": {
+    "category": "Фантастика",
+    "name": "Everyday fantasy"
+  },
+  "sf_heroic": {
+    "category": "Фантастика",
+    "name": "Sf heroic"
+  },
+  "sf_fantasy_city": {
+    "category": "Фантастика",
+    "name": "Sf fantasy city"
+  },
+  "sf_detective": {
+    "category": "Фантастика",
+    "name": "Sf detective"
+  },
+  "dorama": {
+    "category": "Фантастика",
+    "name": "Dorama"
+  },
+  "foreign_sf": {
+    "category": "Фантастика",
+    "name": "Foreign sf"
+  },
+  "historical_fantasy": {
+    "category": "Фантастика",
+    "name": "Historical fantasy"
+  },
+  "sf_cyberpunk": {
+    "category": "Фантастика",
+    "name": "Sf cyberpunk"
+  },
+  "sf_space": {
+    "category": "Фантастика",
+    "name": "Sf space"
+  },
+  "sf_litrpg": {
+    "category": "Фантастика",
+    "name": "Sf litrpg"
+  },
+  "magic_school": {
+    "category": "Фантастика",
+    "name": "Magic school"
+  },
+  "sf_mystic": {
+    "category": "Фантастика",
+    "name": "Sf mystic"
+  },
+  "fairy_fantasy": {
+    "category": "Фантастика",
+    "name": "Fairy fantasy"
+  },
+  "sf": {
+    "category": "Фантастика",
+    "name": "Sf"
+  },
+  "nsf": {
+    "category": "Фантастика",
+    "name": "Nsf"
+  },
+  "popadancy": {
+    "category": "Фантастика",
+    "name": "Popadancy"
+  },
+  "sf_postapocalyptic": {
+    "category": "Фантастика",
+    "name": "Sf postapocalyptic"
+  },
+  "adventure_fantasy": {
+    "category": "Фантастика",
+    "name": "Adventure fantasy"
+  },
+  "sf_industrial_magic": {
+    "category": "Фантастика",
+    "name": "Sf industrial magic"
+  },
+  "sf_realrpg": {
+    "category": "Фантастика",
+    "name": "Sf realrpg"
+  },
+  "russian_fantasy": {
+    "category": "Фантастика",
+    "name": "Russian fantasy"
+  },
+  "slavic_fantasy": {
+    "category": "Фантастика",
+    "name": "Slavic fantasy"
+  },
+  "sf_su": {
+    "category": "Фантастика",
+    "name": "Sf su"
+  },
+  "modern_tale": {
+    "category": "Фантастика",
+    "name": "Modern tale"
+  },
+  "sf_social": {
+    "category": "Фантастика",
+    "name": "Sf social"
+  },
+  "sf_stimpank": {
+    "category": "Фантастика",
+    "name": "Sf stimpank"
+  },
+  "dark_fantasy": {
+    "category": "Фантастика",
+    "name": "Dark fantasy"
+  },
+  "sf_technofantasy": {
+    "category": "Фантастика",
+    "name": "Sf technofantasy"
+  },
+  "sf_horror": {
+    "category": "Фантастика",
+    "name": "Sf horror"
+  },
+  "utopia": {
+    "category": "Фантастика",
+    "name": "Utopia"
+  },
+  "sf_etc": {
+    "category": "Фантастика",
+    "name": "Sf etc"
+  },
+  "fantasy_det": {
+    "category": "Фантастика",
+    "name": "Fantasy det"
+  },
+  "sf_fantasy": {
+    "category": "Фантастика",
+    "name": "Sf fantasy"
+  },
+  "hronoopera": {
+    "category": "Фантастика",
+    "name": "Hronoopera"
+  },
+  "sf_epic": {
+    "category": "Фантастика",
+    "name": "Sf epic"
+  },
+  "sf_humor": {
+    "category": "Фантастика",
+    "name": "Sf humor"
+  },
+  "epic": {
+    "category": "Фольклор",
+    "name": "Epic"
+  },
+  "antique_myths": {
+    "category": "Фольклор",
+    "name": "Antique myths"
+  },
+  "folk_songs": {
+    "category": "Фольклор",
+    "name": "Folk songs"
+  },
+  "proverbs": {
+    "category": "Фольклор",
+    "name": "Proverbs"
+  },
+  "folklore": {
+    "category": "Фольклор",
+    "name": "Folklore"
+  },
+  "limerick": {
+    "category": "Фольклор",
+    "name": "Limerick"
+  },
+  "humor_anecdote": {
+    "category": "Юмор",
+    "name": "Humor anecdote"
+  },
+  "humor_satire": {
+    "category": "Юмор",
+    "name": "Humor satire"
+  },
+  "humor": {
+    "category": "Юмор",
+    "name": "Humor"
+  },
+  "humor_prose": {
+    "category": "Юмор",
+    "name": "Humor prose"
+  }
+}
