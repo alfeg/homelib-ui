@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { computed, ref } from "vue"
 
 import { setLocale, useI18nState } from "../services/i18n"
 
-const props = defineProps<{ loading: boolean; error: string }>()
+const props = defineProps<{
+    loading: boolean
+    error: string
+    progress?: { phase: string; percent: number; processed?: number; total?: number; downloadedBytes?: number; totalBytes?: number | null }
+    progressLabel?: string
+    statusText?: string
+}>()
 const emit = defineEmits<{
     (e: "submit", value: string): void
     (e: "submit-torrent", file: File | null): void
@@ -26,6 +32,10 @@ const onLucky = () => {
     if (props.loading) return
     emit("submit", LUCKY_MAGNET)
 }
+
+const isLoadingMode = computed(
+    () => props.loading || (!!props.progress && props.progress.phase !== "idle"),
+)
 
 const openFilePicker = () => fileInput.value?.click()
 
@@ -50,20 +60,20 @@ const onLocaleToggle = (event: Event) => {
     <section class="flex min-h-screen items-center justify-center p-4">
         <div
             class="card bg-base-100 border-base-300 grid w-full max-w-3xl gap-3 border p-8 shadow-xl"
-            :class="isDragActive ? 'border-primary border-2 border-dashed' : ''"
-            @dragenter.prevent="isDragActive = true"
+            :class="!isLoadingMode && isDragActive ? 'border-primary border-2 border-dashed' : ''"
+            @dragenter.prevent="!isLoadingMode && (isDragActive = true)"
             @dragleave.prevent="isDragActive = false"
-            @dragover.prevent="isDragActive = true"
+            @dragover.prevent="!isLoadingMode && (isDragActive = true)"
             @drop.prevent="
                 (e) => {
                     isDragActive = false
-                    submitTorrent((e.dataTransfer?.files?.[0] as File) ?? null)
+                    if (!isLoadingMode) submitTorrent((e.dataTransfer?.files?.[0] as File) ?? null)
                 }
             "
         >
             <h1 class="text-2xl font-semibold">{{ t("gate.title") }}</h1>
             <div class="flex items-center justify-between gap-2">
-                <p class="text-slate-500">{{ t("gate.subtitle") }}</p>
+                <p class="text-slate-500">{{ isLoadingMode ? "" : t("gate.subtitle") }}</p>
                 <label class="swap btn btn-ghost btn-sm border-base-300 border px-2">
                     <input
                         :checked="locale === 'en'"
@@ -76,55 +86,73 @@ const onLocaleToggle = (event: Event) => {
                 </label>
             </div>
 
-            <input
-                v-model="magnetInput"
-                class="input input-bordered w-full text-base"
-                :disabled="loading"
-                placeholder="magnet:?xt=urn:btih:..."
-                type="text"
-                @keyup.enter="onSubmit"
-            />
+            <!-- Loading mode: show progress -->
+            <template v-if="isLoadingMode">
+                <div class="flex flex-col items-center gap-4 py-4">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                    <progress
+                        class="progress progress-primary w-full"
+                        :value="progress?.percent || undefined"
+                        max="100"
+                    />
+                    <p class="text-base-content/70 text-sm text-center">
+                        {{ progressLabel || statusText || t("gate.loading") }}
+                    </p>
+                </div>
+            </template>
 
-            <div class="flex flex-wrap gap-2">
-                <button
-                    class="btn btn-primary"
+            <!-- Input mode: show form -->
+            <template v-else>
+                <input
+                    v-model="magnetInput"
+                    class="input input-bordered w-full text-base"
                     :disabled="loading"
-                    @click="onSubmit"
-                >
-                    {{ loading ? t("gate.loading") : t("gate.openLibrary") }}
-                </button>
-                <button
-                    class="btn btn-outline btn-primary"
-                    :disabled="loading"
-                    @click="openFilePicker"
-                >
-                    {{ t("gate.chooseTorrent") }}
-                </button>
-                <button
-                    class="btn btn-outline"
-                    :disabled="loading"
-                    @click="onLucky"
-                >
-                    🍀 {{ t("gate.lucky") }}
-                </button>
-            </div>
+                    placeholder="magnet:?xt=urn:btih:..."
+                    type="text"
+                    @keyup.enter="onSubmit"
+                />
 
-            <input
-                ref="fileInput"
-                accept=".torrent,application/x-bittorrent"
-                class="hidden"
-                :disabled="loading"
-                type="file"
-                @change="onFileInput"
-            />
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        class="btn btn-primary"
+                        :disabled="loading"
+                        @click="onSubmit"
+                    >
+                        {{ loading ? t("gate.loading") : t("gate.openLibrary") }}
+                    </button>
+                    <button
+                        class="btn btn-outline btn-primary"
+                        :disabled="loading"
+                        @click="openFilePicker"
+                    >
+                        {{ t("gate.chooseTorrent") }}
+                    </button>
+                    <button
+                        class="btn btn-outline"
+                        :disabled="loading"
+                        @click="onLucky"
+                    >
+                        🍀 {{ t("gate.lucky") }}
+                    </button>
+                </div>
 
-            <p class="text-base-content/70">{{ t("gate.dragHint") }}</p>
-            <p
-                v-if="error"
-                class="alert alert-error"
-            >
-                {{ error }}
-            </p>
+                <input
+                    ref="fileInput"
+                    accept=".torrent,application/x-bittorrent"
+                    class="hidden"
+                    :disabled="loading"
+                    type="file"
+                    @change="onFileInput"
+                />
+
+                <p class="text-base-content/70">{{ t("gate.dragHint") }}</p>
+                <p
+                    v-if="error"
+                    class="alert alert-error"
+                >
+                    {{ error }}
+                </p>
+            </template>
         </div>
     </section>
 </template>

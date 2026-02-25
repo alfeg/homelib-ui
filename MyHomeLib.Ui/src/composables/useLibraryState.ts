@@ -86,7 +86,43 @@ export const useLibraryState = createGlobalState(() => {
     })
 
     const isMagnetSet = computed(() => !!magnetUri.value)
+    const isReady = computed(() => indexProgress.phase === "ready")
     const hasGenreFilters = computed(() => selectedGenres.value.length > 0)
+
+    const progressLabel = computed(() => {
+        if (indexProgress.phase === "indexing") {
+            return t("status.indexing", {
+                processed: indexProgress.processed,
+                total: indexProgress.total,
+                percent: indexProgress.percent,
+            })
+        }
+        if (indexProgress.phase === "parsing") {
+            if (indexProgress.total) {
+                return t("status.parsingWithTotal", {
+                    processed: indexProgress.processed,
+                    total: indexProgress.total,
+                    percent: indexProgress.percent,
+                })
+            }
+            return t("status.parsingSimple", { percent: indexProgress.percent })
+        }
+        if (indexProgress.phase === "loading-cache") return t("status.loadingCache")
+        if (indexProgress.phase === "clearing-local") return t("status.clearingLocal")
+        if (indexProgress.phase === "loading-backend") {
+            const downloaded = indexProgress.downloadedBytes ?? 0
+            const total = indexProgress.totalBytes
+            if (total) {
+                return t("status.downloadingInpxTotal", {
+                    downloaded: formatMegabytes(downloaded),
+                    total: formatMegabytes(total),
+                    percent: indexProgress.percent ?? 0,
+                })
+            }
+            return t("status.downloadingInpxSimple", { downloaded: formatMegabytes(downloaded) })
+        }
+        return ""
+    })
 
     const totalPages = computed(() => {
         return totalFilteredBooks.value ? Math.max(1, Math.ceil(totalFilteredBooks.value / RESULTS_PAGE_SIZE)) : 1
@@ -527,11 +563,13 @@ export const useLibraryState = createGlobalState(() => {
         isLoading,
         isReindexing,
         isMagnetSet,
+        isReady,
         status,
         error,
         hasCache,
         lastUpdatedAt,
         indexProgress,
+        progressLabel,
         downloadingById,
         currentPage,
         totalPages,

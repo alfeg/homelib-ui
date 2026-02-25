@@ -15,6 +15,7 @@ const THEME_STORAGE_KEY = "mhl-ui-theme"
 const selectedTheme = useLocalStorage<string>(THEME_STORAGE_KEY, "light")
 const {
     isMagnetSet,
+    isReady,
     isLoading,
     error,
     submitMagnet,
@@ -23,6 +24,7 @@ const {
     metadata,
     status,
     indexProgress,
+    progressLabel,
     hasCache,
     lastUpdatedAt,
     isReindexing,
@@ -73,9 +75,12 @@ onMounted(() => {
 <template>
     <main class="bg-base-200 text-base-content min-h-screen">
         <MagnetGate
-            v-if="!isMagnetSet"
+            v-if="!isMagnetSet || (!isReady && !isReindexing)"
             :error="error"
             :loading="isLoading"
+            :progress="isMagnetSet ? indexProgress : undefined"
+            :progressLabel="progressLabel"
+            :statusText="status"
             @submit="submitMagnet"
             @submitTorrent="submitTorrentFile"
         />
