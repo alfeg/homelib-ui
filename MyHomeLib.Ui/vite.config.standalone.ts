@@ -9,6 +9,9 @@ import { viteSingleFile } from "vite-plugin-singlefile"
  */
 export default defineConfig({
     plugins: [vue(), viteSingleFile()],
+    define: {
+        "import.meta.env.VITE_DEFAULT_ENDPOINT": JSON.stringify("https://books.alfeg.net"),
+    },
     build: {
         target: "esnext",
         outDir: "dist-standalone",
