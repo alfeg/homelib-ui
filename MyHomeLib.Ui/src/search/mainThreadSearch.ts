@@ -26,7 +26,7 @@ function createIndex(): InstanceType<typeof FlexDocument> {
         cache: true,
         document: {
             id: "id",
-            index: [{ field: "content", tokenize: "forward" }],
+            index: [{ field: "content", tokenize: "forward", encode: false }],
         },
     })
 }
@@ -50,7 +50,10 @@ function extractSearchIds(rawResults: any[]): string[] {
     return ids
 }
 
-export async function importIndexData(chunks: Array<{ key: string; data: unknown }>, books: BookRecord[]): Promise<void> {
+export async function importIndexData(
+    chunks: Array<{ key: string; data: unknown }>,
+    books: BookRecord[],
+): Promise<void> {
     const newIndex = createIndex()
 
     for (const chunk of chunks) {
@@ -82,6 +85,7 @@ export function search(term: string, page: number, pageSize: number, genres: str
     let matched: BookRecord[]
 
     if (!normalizedTerm) {
+        console.log("No search term, applying genre filter only")
         matched = []
         for (const book of booksById.values()) {
             if (genreFilter && !book.genreCodes?.some((c) => genreFilter.includes(c))) continue
@@ -89,11 +93,14 @@ export function search(term: string, page: number, pageSize: number, genres: str
         }
     } else {
         const rawResults = index.search(normalizedTerm, { limit: MAX_IDS })
+        console.log("Raw search results:", rawResults)
         const ids = extractSearchIds(rawResults)
+        console.log("Extracted IDs:", ids)
         matched = ids.map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
 
         // Linear fallback when FlexSearch finds nothing
         if (!matched.length) {
+            console.log("No matches from index, falling back to linear search")
             for (const book of booksById.values()) {
                 if (toSearchText(book).includes(normalizedTerm)) {
                     matched.push(book)

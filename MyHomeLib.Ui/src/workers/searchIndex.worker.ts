@@ -8,7 +8,7 @@ const MAX_INDEX_BATCH_SIZE = 2000
 const BATCH_YIELD_DELAY_MS = 0
 const PERSISTENCE_DB_NAME = "myhomelib-search-index-cache"
 const PERSISTENCE_STORE_NAME = "indexes"
-const PERSISTENCE_DB_VERSION = 1
+const PERSISTENCE_DB_VERSION = 2
 const LIBRARY_CACHE_DB_NAME = "myhomelib-library-cache"
 const LIBRARY_CACHE_STORE_NAME = "libraries"
 const LIBRARY_CACHE_DB_VERSION = 1
@@ -34,6 +34,7 @@ function createIndex() {
                 {
                     field: "content",
                     tokenize: "forward",
+                    encode: false,
                 },
             ],
         },
@@ -213,7 +214,7 @@ async function addBatchToIndexAsync(targetIndex, documents) {
     targetIndex.add(documents)
 }
 
-self.onmessage= async (event) => {
+self.onmessage = async (event) => {
     const message = event?.data ?? {}
 
     if (message.type === "restore") {
@@ -432,4 +433,11 @@ self.onmessage= async (event) => {
 
         return
     }
+}
+
+function toSearchText(book: BookRecord): string {
+    return [book.title, book.authors, (book as any).series, book.lang, book.file]
+        .filter(Boolean)
+        .map(normalizeSearchValue)
+        .join(" ")
 }
