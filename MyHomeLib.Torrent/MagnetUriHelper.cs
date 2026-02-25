@@ -1,11 +1,10 @@
 using System.Text.RegularExpressions;
 
-namespace MyHomeListServer.Torrent;
+namespace MyHomeLib.Torrent;
 
-public static class MagnetUriHelper
+public static partial class MagnetUriHelper
 {
-    private static readonly Regex _hashRe =
-        new(@"xt=urn:btih:([0-9a-fA-F]{40})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex HashRe = MyRegex();
 
     /// <summary>Extracts the 40-char hex info-hash from a magnet URI.</summary>
     public static string ParseInfoHash(string magnetUri)
@@ -23,8 +22,11 @@ public static class MagnetUriHelper
             candidate = magnetUri;
         }
 
-        var m = _hashRe.Match(candidate);
+        var m = HashRe.Match(candidate);
         if (m.Success) return m.Groups[1].Value.ToUpperInvariant();
         throw new FormatException($"Cannot extract info-hash from magnet URI: {magnetUri}");
     }
+
+    [GeneratedRegex(@"xt=urn:btih:([0-9a-fA-F]{40})", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-GB")]
+    private static partial Regex MyRegex();
 }

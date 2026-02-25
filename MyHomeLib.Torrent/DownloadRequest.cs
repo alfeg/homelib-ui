@@ -1,4 +1,4 @@
-namespace MyHomeListServer.Torrent;
+namespace MyHomeLib.Torrent;
 
 public record DownloadRequest(string Library, string Archive, string? Book = null)
     : TorrentRequest(Library)

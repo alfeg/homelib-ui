@@ -1,4 +1,4 @@
-namespace MyHomeListServer.Torrent;
+namespace MyHomeLib.Torrent;
 
 /// <summary>
 /// A seekable read-only <see cref="Stream"/> backed by HTTP Range requests.

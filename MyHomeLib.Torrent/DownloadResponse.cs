@@ -1,3 +1,3 @@
-namespace MyHomeListServer.Torrent;
+namespace MyHomeLib.Torrent;
 
-public record DownloadResponse(byte[] Data, string ContentType, string Name, string? FullPath) : TorrentResponse;
+public record DownloadResponse(byte[] Data, string ContentType, string Name);

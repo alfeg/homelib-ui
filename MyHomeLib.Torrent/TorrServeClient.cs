@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
-namespace MyHomeListServer.Torrent;
+namespace MyHomeLib.Torrent;
 
 /// <summary>
 /// Thin client for the TorrServe HTTP API (https://github.com/YouROK/TorrServer).
@@ -87,38 +87,6 @@ public class TorrServeClient(HttpClient http, string baseUrl, ILogger<TorrServeC
         var url = $"{_baseUrl}/stream?link={hash}&index={fileIndex}&play";
         logger.LogDebug("[TorrServe] StreamUrl hash={Hash} index={Index} → {Url}", hash, fileIndex, url);
         return url;
-    }
-
-    /// <summary>Returns true if TorrServe is reachable (GET /echo). Also captures version string.</summary>
-    public async Task<bool> CheckConnectionAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            using var resp = await http.GetAsync(_baseUrl + "/echo", ct);
-            if (!resp.IsSuccessStatusCode) return false;
-            LastVersion = (await resp.Content.ReadAsStringAsync(ct)).Trim();
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>Last server version string returned by /echo.</summary>
-    public string? LastVersion { get; private set; }
-
-    /// <summary>Returns cache stats for a torrent hash, or null on failure.</summary>
-    public async Task<TorrServeCacheState?> GetCacheAsync(string hash, CancellationToken ct = default)
-    {
-        try
-        {
-            return await PostAsync<TorrServeCacheState>("/cache", new { action = "get", hash }, ct);
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private async Task<T> PostAsync<T>(string path, object body, CancellationToken ct)
@@ -209,22 +177,6 @@ public class TorrServeFile
     [JsonPropertyName("id")]     public int    Id     { get; set; }
     [JsonPropertyName("path")]   public string Path   { get; set; } = "";
     [JsonPropertyName("length")] public long   Length { get; set; }
-}
-
-public class TorrServeCacheState
-{
-    [JsonPropertyName("capacity")]     public long   Capacity     { get; set; }
-    [JsonPropertyName("filled")]       public long   Filled       { get; set; }
-    [JsonPropertyName("piecesCount")]  public int    PiecesCount  { get; set; }
-    [JsonPropertyName("piecesLength")] public long   PiecesLength { get; set; }
-    [JsonPropertyName("readers")]      public TorrServeCacheReader[]? Readers { get; set; }
-}
-
-public class TorrServeCacheReader
-{
-    [JsonPropertyName("reader")] public int Reader { get; set; }
-    [JsonPropertyName("start")]  public int Start  { get; set; }
-    [JsonPropertyName("end")]    public int End    { get; set; }
 }
 
 // Internal — used only for parsing the v2 data JSON blob

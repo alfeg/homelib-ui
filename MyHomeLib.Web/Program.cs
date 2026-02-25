@@ -1,5 +1,5 @@
 using System.Text;
-using Microsoft.AspNetCore.Http;
+using MyHomeLib.Torrent;
 using MyHomeLib.Web;
 using MyHomeListServer.Torrent;
 
@@ -9,7 +9,6 @@ builder.Services.AddHttpContextAccessor();
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection("Library"));
-builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("Torrent"));
 
 // CORS — allow any origin for /api/* so the standalone HTML build works from
 // file:// or any external host. Credentials are not used cross-origin.
@@ -20,12 +19,14 @@ builder.Services.AddCors(options =>
         .AllowAnyHeader()
         .WithExposedHeaders("Content-Disposition")));
 
+#if DEBUG
 if (builder.Environment.IsDevelopment())
 {
     builder.Services
         .AddReverseProxy()
         .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 }
+#endif
 
 // TorrServe services
 var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"]
@@ -195,7 +196,9 @@ app.MapFallback("/api/{**catch-all}", () => Results.NotFound());
 
 if (app.Environment.IsDevelopment())
 {
+#if DEBUG
     app.MapReverseProxy();
+#endif
 }
 else
 {

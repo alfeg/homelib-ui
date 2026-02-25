@@ -10,8 +10,8 @@
     <BuildClientApp Condition="'$(Configuration)' == 'Release'">true</BuildClientApp>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Yarp.ReverseProxy" Version="2.2.0" />
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,9 +31,7 @@
       <SpaDistFiles Include="$(SpaRoot)dist\**\*" />
     </ItemGroup>
 
-    <Copy SourceFiles="@(SpaDistFiles)"
-          DestinationFiles="@(SpaDistFiles->'$(MSBuildProjectDirectory)\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(SpaDistFiles)" DestinationFiles="@(SpaDistFiles->'$(MSBuildProjectDirectory)\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>
