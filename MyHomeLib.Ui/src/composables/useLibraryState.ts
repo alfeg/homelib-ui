@@ -10,7 +10,7 @@ import { parseHashFromMagnet, magnetStore } from "../services/magnetService"
 import { createSearchWorkerClient } from "../services/searchIndexWorkerClient"
 import { convertTorrentFileToMagnet } from "../services/torrentMagnetService"
 
-const RESULTS_PAGE_SIZE = 200
+const RESULTS_PAGE_SIZE = 30
 const NO_GENRE_CODE = "__no_genre__"
 const GENRE_DELIMITER = ":"
 

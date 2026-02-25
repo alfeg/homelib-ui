@@ -466,7 +466,7 @@ self.onmessage = async (event) => {
         const term = typeof message.term === "string" ? normalizeSearchValue(message.term).trim() : ""
         const genres = Array.isArray(message.genres) && message.genres.length ? message.genres : null
         const page = Number.isFinite(message.page) && message.page >= 1 ? message.page : 1
-        const pageSize = Number.isFinite(message.pageSize) && message.pageSize >= 1 ? message.pageSize : 200
+        const pageSize = Number.isFinite(message.pageSize) && message.pageSize >= 1 ? message.pageSize : 30
         const MAX_IDS = 10_000
 
         if (!index) {
