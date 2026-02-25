@@ -55,10 +55,6 @@ function onThemeChange(theme: string) {
     selectedTheme.value = theme
 }
 
-function onSearchTermChange(value: string) {
-    searchTerm.value = value
-}
-
 watch(
     selectedTheme,
     (theme) => {
@@ -113,9 +109,8 @@ onMounted(() => {
                 <div class="card bg-base-100 border-base-300 min-w-0 border p-4 shadow-sm">
                     <SearchBar
                         :filtered="filteredBooks.length"
-                        :modelValue="searchTerm"
+                        v-model="searchTerm"
                         :total="totalBooks"
-                        @update:modelValue="onSearchTermChange"
                     />
 
                     <p
