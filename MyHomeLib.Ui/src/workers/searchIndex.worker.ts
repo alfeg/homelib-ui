@@ -8,7 +8,7 @@ const MAX_INDEX_BATCH_SIZE = 2000
 const BATCH_YIELD_DELAY_MS = 0
 const PERSISTENCE_DB_NAME = "myhomelib-search-index-cache"
 const PERSISTENCE_STORE_NAME = "indexes"
-const PERSISTENCE_DB_VERSION = 3
+const PERSISTENCE_DB_VERSION = 4
 const LIBRARY_CACHE_DB_NAME = "myhomelib-library-cache"
 const LIBRARY_CACHE_STORE_NAME = "libraries"
 const LIBRARY_CACHE_DB_VERSION = 1
@@ -29,6 +29,7 @@ function toIndexDoc(book) {
         series: String(book.series ?? ""),
         lang: String(book.lang ?? ""),
         file: String(book.file ?? ""),
+        genreCodes: Array.isArray(book.genreCodes) ? book.genreCodes : [],
     }
 }
 
@@ -37,6 +38,7 @@ function createIndex() {
         cache: true,
         document: {
             id: "id",
+            tag: "genreCodes",
             index: [
                 { field: "title",   tokenize: "forward", encode: encodeText },
                 { field: "authors", tokenize: "forward", encode: encodeText },

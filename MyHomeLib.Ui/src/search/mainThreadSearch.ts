@@ -4,6 +4,7 @@ import type { BookRecord } from "../types/library"
 
 const MAX_IDS = 10_000
 const NO_GENRE_CODE = "__no_genre__"
+const SEARCH_FIELDS = ["title", "authors", "series", "lang", "file"] as const
 
 let index: InstanceType<typeof FlexDocument> | null = null
 let booksById = new Map<string, BookRecord>()
@@ -15,6 +16,7 @@ function createIndex(): InstanceType<typeof FlexDocument> {
         cache: true,
         document: {
             id: "id",
+            tag: "genreCodes",
             index: [
                 { field: "title",   tokenize: "forward", encode: encodeText },
                 { field: "authors", tokenize: "forward", encode: encodeText },
@@ -45,6 +47,17 @@ function extractSearchIds(rawResults: any[]): string[] {
     return ids
 }
 
+function computeFacets(books: BookRecord[]): { genre: string; count: number }[] {
+    const counts = new Map<string, number>()
+    for (const book of books) {
+        const codes = Array.isArray(book.genreCodes) && book.genreCodes.length ? book.genreCodes : [NO_GENRE_CODE]
+        for (const code of codes) {
+            counts.set(code, (counts.get(code) ?? 0) + 1)
+        }
+    }
+    return Array.from(counts.entries()).map(([genre, count]) => ({ genre, count }))
+}
+
 export async function importIndexData(chunks: Array<{ key: string; data: unknown }>, books: BookRecord[]): Promise<void> {
     const newIndex = createIndex()
 
@@ -58,7 +71,7 @@ export async function importIndexData(chunks: Array<{ key: string; data: unknown
     index = newIndex
 }
 
-/** Build the search index directly from BookRecord array (used in tests and future direct-build path). */
+/** Build the search index directly from BookRecord array (used in tests). */
 export async function buildIndex(books: BookRecord[]): Promise<void> {
     const newIndex = createIndex()
 
@@ -70,6 +83,7 @@ export async function buildIndex(books: BookRecord[]): Promise<void> {
             series: String(book.series ?? ""),
             lang: String(book.lang ?? ""),
             file: String(book.file ?? ""),
+            genreCodes: Array.isArray(book.genreCodes) ? book.genreCodes : [],
         })
     }
 
@@ -90,39 +104,40 @@ export interface SearchResult {
 export function search(term: string, page: number, pageSize: number, genres: string[]): SearchResult {
     if (!index) return { books: [], total: 0, genres: [] }
 
+    const hasTerm = term.trim().length > 0
     const genreFilter = genres.length ? genres : null
 
-    // Step 1: match by search term only (no genre filter yet)
+    // Step 1: term-only search (no tag filter) — used for stable pre-filter facets
     let termMatched: BookRecord[]
 
-    if (!term.trim()) {
+    if (!hasTerm) {
         termMatched = Array.from(booksById.values())
     } else {
-        const rawResults = index.search([
-            { field: "title",   query: term, limit: MAX_IDS },
-            { field: "authors", query: term, limit: MAX_IDS },
-            { field: "series",  query: term, limit: MAX_IDS },
-            { field: "lang",    query: term, limit: MAX_IDS },
-            { field: "file",    query: term, limit: MAX_IDS },
-        ])
-        const ids = extractSearchIds(rawResults)
-        termMatched = ids.map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
+        const raw = index.search(SEARCH_FIELDS.map((field) => ({ field, query: term, limit: MAX_IDS })))
+        termMatched = extractSearchIds(raw).map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
     }
 
-    // Step 2: genre facets from the pre-filter set — stable regardless of selection
-    const genreCounts = new Map<string, number>()
-    for (const book of termMatched) {
-        const codes = Array.isArray(book.genreCodes) && book.genreCodes.length ? book.genreCodes : [NO_GENRE_CODE]
-        for (const code of codes) {
-            genreCounts.set(code, (genreCounts.get(code) ?? 0) + 1)
-        }
-    }
-    const resultGenres = Array.from(genreCounts.entries()).map(([genre, count]) => ({ genre, count }))
+    // Step 2: genre facets from pre-filter set — stable regardless of active genre selection
+    const resultGenres = computeFacets(termMatched)
 
-    // Step 3: apply genre filter (OR — book matches if it belongs to ANY selected genre)
-    const matched = genreFilter
-        ? termMatched.filter((book) => book.genreCodes?.some((c) => genreFilter.includes(c)))
-        : termMatched
+    // Step 3: apply genre filter via FlexSearch native tag feature (OR across selected genres)
+    let matched: BookRecord[]
+
+    if (!genreFilter) {
+        matched = termMatched
+    } else if (!hasTerm) {
+        // Tag-only search (no text query)
+        const raw = index.search({ tag: { genreCodes: genreFilter } } as any)
+        matched = extractSearchIds(raw).map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
+    } else {
+        // Text + tag intersection — use index option form which supports top-level tag
+        const raw = index.search(term, {
+            index: [...SEARCH_FIELDS],
+            tag: { genreCodes: genreFilter },
+            limit: MAX_IDS,
+        } as any)
+        matched = extractSearchIds(raw).map((id) => booksById.get(id)).filter(Boolean) as BookRecord[]
+    }
 
     const total = matched.length
     const start = (page - 1) * pageSize
