@@ -100,8 +100,12 @@ public class DownloadManager(
         var archive = request.Archive;
         var book    = request.Book;
 
+        var magnetUri = request.MagnetUri
+            ?? throw new InvalidOperationException("MagnetUri required for TorrServe download");
+
         logger.LogInformation("[TorrServe] [{Library}] {Name} Starting download", request.Library, request.Name);
 
+        await torrServe.AddTorrentAsync(magnetUri, hash, saveToDb: true, ct);
         var files = await torrServe.WaitForFilesAsync(hash, ct);
         var file = files.FirstOrDefault(f => f.Path.EndsWith(archive))
                    ?? throw new FileNotFoundException($"Archive {archive} not found in torrent {hash}");
