@@ -19,7 +19,7 @@ let activeHash = ""
 let persistenceDbPromise = null
 let libraryCacheDbPromise = null
 
-const encodeText = (str) => str.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
+const encodeText = (str) => str //.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
 
 function toIndexDoc(book) {
     return {
@@ -35,7 +35,6 @@ function toIndexDoc(book) {
 
 function createIndex() {
     return new FlexDocument({
-        cache: true,
         document: {
             id: "id",
             tag: "genreCodes",
@@ -262,8 +261,6 @@ self.onmessage = async (event) => {
                 return
             }
 
-            const restoredIndex = createIndex()
-            await importIndex(restoredIndex, persisted.chunks)
             const persistedBooks = await readPersistedLibraryBooks(hash)
             if (!persistedBooks.length) {
                 self.postMessage({
@@ -276,8 +273,6 @@ self.onmessage = async (event) => {
                 return
             }
 
-            index = restoredIndex
-            booksById = new Map(persistedBooks.map((book) => [String(book.id), book]))
             activeHash = hash
 
             self.postMessage({
@@ -290,7 +285,7 @@ self.onmessage = async (event) => {
                 },
             })
 
-            // Transfer index + books to main thread for local search
+            // Transfer raw chunks + books to main thread for local search
             self.postMessage({ type: "index-data", payload: { chunks: persisted.chunks, books: persistedBooks } })
         } catch (err) {
             self.postMessage({
@@ -428,6 +423,10 @@ self.onmessage = async (event) => {
 
             // Transfer index + books to main thread for local search
             self.postMessage({ type: "index-data", payload: { chunks, books } })
+
+            // Worker no longer needs the in-memory index — main thread owns it now
+            index = null
+            booksById = new Map()
         } catch (err) {
             resetInMemoryIndex()
             self.postMessage({

@@ -13,7 +13,6 @@ const encodeText = (str: string): string => str.toLocaleLowerCase("ru-RU").repla
 
 function createIndex(): InstanceType<typeof FlexDocument> {
     return new FlexDocument({
-        cache: true,
         document: {
             id: "id",
             tag: "genreCodes",
