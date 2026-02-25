@@ -11,6 +11,7 @@ export default defineConfig({
     plugins: [vue(), viteSingleFile()],
     define: {
         "import.meta.env.VITE_DEFAULT_ENDPOINT": JSON.stringify("https://books.alfeg.net"),
+        "import.meta.env.VITE_STANDALONE": JSON.stringify("true"),
     },
     build: {
         target: "esnext",
