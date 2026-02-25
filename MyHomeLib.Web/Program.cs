@@ -51,13 +51,14 @@ if (!app.Environment.IsDevelopment())
 
 app.MapPost("/api/library/inpx", async (
     LibraryBooksRequest request,
+    HttpContext httpContext,
     LibraryBooksCacheService booksCache,
     IdleTorrentCleanupService idleTorrentCleanupService,
     ILogger<Program> logger,
     CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(request.MagnetUri))
-        return Results.BadRequest("magnetUri is required.");
+        return Results.BadRequest(L(httpContext, "magnetUri is required.", "Требуется magnetUri."));
 
     idleTorrentCleanupService.MarkActivity(request.MagnetUri);
 
@@ -71,33 +72,34 @@ app.MapPost("/api/library/inpx", async (
     }
     catch (FormatException)
     {
-        return Results.BadRequest("Invalid magnetUri.");
+        return Results.BadRequest(L(httpContext, "Invalid magnetUri.", "Некорректный magnetUri."));
     }
     catch (InvalidOperationException)
     {
-        return Results.BadRequest("Unable to prepare INPX file.");
+        return Results.BadRequest(L(httpContext, "Unable to prepare INPX file.", "Не удалось подготовить INPX файл."));
     }
     catch (HttpRequestException)
     {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        return Results.Text(L(httpContext, "TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."), statusCode: StatusCodes.Status503ServiceUnavailable);
     }
     catch (TaskCanceledException) when (!ct.IsCancellationRequested)
     {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        return Results.Text(L(httpContext, "TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."), statusCode: StatusCodes.Status503ServiceUnavailable);
     }
     catch (TimeoutException)
     {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        return Results.Text(L(httpContext, "TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."), statusCode: StatusCodes.Status503ServiceUnavailable);
     }
     catch (Exception ex)
     {
         logger.LogError(ex, "Unhandled error in /api/library/inpx.");
-        return Results.Text("Internal server error.", statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Text(L(httpContext, "Internal server error.", "Внутренняя ошибка сервера."), statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
 app.MapPost("/api/library/download", async (
     LibraryDirectDownloadRequest request,
+    HttpContext httpContext,
     DownloadManager downloadManager,
     IdleTorrentCleanupService idleTorrentCleanupService,
     ILogger<Program> logger,
@@ -108,7 +110,7 @@ app.MapPost("/api/library/download", async (
         || string.IsNullOrWhiteSpace(request.File)
         || string.IsNullOrWhiteSpace(request.Ext))
     {
-        return Results.BadRequest("magnetUri, archiveFile, file and ext are required.");
+        return Results.BadRequest(L(httpContext, "magnetUri, archiveFile, file and ext are required.", "Требуются поля magnetUri, archiveFile, file и ext."));
     }
 
     idleTorrentCleanupService.MarkActivity(request.MagnetUri);
@@ -143,32 +145,38 @@ app.MapPost("/api/library/download", async (
     }
     catch (FormatException ex)
     {
-        return Results.BadRequest(ex.Message);
+        return Results.BadRequest(string.IsNullOrWhiteSpace(ex.Message)
+            ? L(httpContext, "Invalid request.", "Некорректный запрос.")
+            : ex.Message);
     }
     catch (FileNotFoundException ex)
     {
-        return Results.NotFound(ex.Message);
+        return Results.NotFound(string.IsNullOrWhiteSpace(ex.Message)
+            ? L(httpContext, "File not found.", "Файл не найден.")
+            : ex.Message);
     }
     catch (InvalidOperationException ex)
     {
-        return Results.BadRequest(ex.Message);
+        return Results.BadRequest(string.IsNullOrWhiteSpace(ex.Message)
+            ? L(httpContext, "Unable to process download request.", "Не удалось обработать запрос на скачивание.")
+            : ex.Message);
     }
     catch (HttpRequestException)
     {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        return Results.Text(L(httpContext, "TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."), statusCode: StatusCodes.Status503ServiceUnavailable);
     }
     catch (TaskCanceledException) when (!ct.IsCancellationRequested)
     {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        return Results.Text(L(httpContext, "TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."), statusCode: StatusCodes.Status503ServiceUnavailable);
     }
     catch (TimeoutException)
     {
-        return Results.Text("TorrServe is unavailable. Please try again later.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        return Results.Text(L(httpContext, "TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."), statusCode: StatusCodes.Status503ServiceUnavailable);
     }
     catch (Exception ex)
     {
         logger.LogError(ex, "Unhandled error in /api/library/download.");
-        return Results.Text("Internal server error.", statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Text(L(httpContext, "Internal server error.", "Внутренняя ошибка сервера."), statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
@@ -198,4 +206,10 @@ static string MakeSafeFileName(string name)
 {
     var invalid = Path.GetInvalidFileNameChars();
     return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
+}
+
+static string L(HttpContext context, string en, string ru)
+{
+    var acceptLanguage = context.Request.Headers.AcceptLanguage.ToString();
+    return acceptLanguage.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? ru : en;
 }
