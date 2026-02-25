@@ -26,8 +26,9 @@ COPY --from=build /app .
 
 ENV ASPNETCORE_URLS=http://+:8080
 ENV DOTNET_gcServer=0
-ENV DOTNET_GCHeapHardLimitPercent=60
+ENV DOTNET_GCHeapHardLimitPercent=35
 ENV DOTNET_GCConserveMemory=9
+ENV DOTNET_GCRetainVM=0
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "MyHomeLib.Web.dll"]

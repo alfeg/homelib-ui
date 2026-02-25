@@ -20,8 +20,9 @@ services:
       Performance__DisconnectedCircuitMaxRetained: 10
       Performance__DisconnectedCircuitRetentionSeconds: 60
       DOTNET_gcServer: 0
-      DOTNET_GCHeapHardLimitPercent: 60
+      DOTNET_GCHeapHardLimitPercent: 35
       DOTNET_GCConserveMemory: 9
+      DOTNET_GCRetainVM: 0
     volumes:
       - books_data:/data/books
     depends_on:
