@@ -35,7 +35,7 @@ const {
     searchTerm,
     totalBooks,
     filteredBooks,
-    pagedBooks,
+    totalFilteredBooks,
     downloadingById,
     currentPage,
     totalPages,
@@ -108,8 +108,8 @@ onMounted(() => {
 
                 <div class="card bg-base-100 border-base-300 min-w-0 border p-4 shadow-sm">
                     <SearchBar
-                        :filtered="filteredBooks.length"
                         v-model="searchTerm"
+                        :filtered="totalFilteredBooks"
                         :total="totalBooks"
                     />
 
@@ -121,12 +121,12 @@ onMounted(() => {
                     </p>
 
                     <BooksTable
-                        :books="pagedBooks"
+                        :books="filteredBooks"
                         :currentPage="currentPage"
                         :downloadingById="downloadingById"
                         :formatGenres="formatBookGenres"
                         :totalPages="totalPages"
-                        :totalResults="filteredBooks.length"
+                        :totalResults="totalFilteredBooks"
                         :visibleRange="visibleRange"
                         @download="downloadBook"
                         @nextPage="nextPage"

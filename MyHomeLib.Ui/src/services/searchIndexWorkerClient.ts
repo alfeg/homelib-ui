@@ -1,22 +1,34 @@
 import type { BookRecord } from "../types/library"
 import SearchIndexWorker from "../workers/searchIndex.worker.ts?worker"
 
+const _t0 = performance.now()
+const ts = () => `+${(performance.now() - _t0).toFixed(0)}ms`
+
+export interface SearchResult {
+    books: BookRecord[]
+    total: number
+    genres: { genre: string; count: number }[]
+}
+
 export function createSearchWorkerClient({
     onProgress,
     onError,
 }: { onProgress?: (payload: any) => void; onError?: (error: Error) => void } = {}) {
     const worker = new SearchIndexWorker({ type: "module" })
-    const pendingSearches = new Map<number, (books: BookRecord[]) => void>()
+    const pendingSearches = new Map<number, (result: SearchResult) => void>()
     let pendingBuild: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
     let pendingRestore: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
     let pendingClear: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
-    let pendingGetGenres: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
 
     worker.onmessage = (event) => {
         const message = event?.data ?? {}
+        if (message.type !== "build-progress") {
+            console.debug(`[worker ${ts()}] recv type="${message.type}"`, message.payload ?? "")
+        }
 
         if (message.type === "build-error") {
             const err = new Error(message.message || "Index build failed.")
+            console.error(`[worker ${ts()}] build-error:`, err.message)
             pendingBuild?.reject(err)
             pendingBuild = null
             onError?.(err)
@@ -53,24 +65,29 @@ export function createSearchWorkerClient({
             return
         }
 
-        if (message.type === "genres-result") {
-            pendingGetGenres?.resolve(message.payload?.genres ?? [])
-            pendingGetGenres = null
-            return
-        }
-
         if (message.type === "search-result") {
             const requestId = Number(message.payload?.requestId)
-            if (!pendingSearches.has(requestId)) return
+            console.debug(
+                `[worker ${ts()}] search-result #${requestId} books=${message.payload?.books?.length ?? 0} total=${message.payload?.total ?? 0} pending=${pendingSearches.size}`,
+            )
+            if (!pendingSearches.has(requestId)) {
+                console.warn(`[worker ${ts()}] search-result #${requestId} has no pending resolve (already cancelled?)`)
+                return
+            }
 
             const resolve = pendingSearches.get(requestId)!
             pendingSearches.delete(requestId)
-            resolve(message.payload?.books ?? [])
+            resolve({
+                books: message.payload?.books ?? [],
+                total: message.payload?.total ?? 0,
+                genres: message.payload?.genres ?? [],
+            })
         }
     }
 
     worker.onerror = (event) => {
         const err = new Error(event?.message || "Search worker failed.")
+        console.error(`[worker ${ts()}] runtime error:`, err)
 
         pendingBuild?.reject(err)
         pendingBuild = null
@@ -78,10 +95,8 @@ export function createSearchWorkerClient({
         pendingRestore = null
         pendingClear?.reject(err)
         pendingClear = null
-        pendingGetGenres?.reject(err)
-        pendingGetGenres = null
 
-        pendingSearches.forEach((resolve) => resolve([]))
+        pendingSearches.forEach((resolve) => resolve({ books: [], total: 0, genres: [] }))
         pendingSearches.clear()
 
         onError?.(err)
@@ -118,20 +133,24 @@ export function createSearchWorkerClient({
                 worker.postMessage({ type: "clear-persisted", hash })
             })
         },
-        getGenres() {
-            return new Promise<{ genre: string; count: number }[]>((resolve, reject) => {
-                pendingGetGenres = { resolve, reject }
-                worker.postMessage({ type: "get-genres" })
-            })
-        },
-        search(term: string, requestId: number, limit = 1000, genres: string[] = []) {
-            return new Promise<BookRecord[]>((resolve) => {
+        search(
+            term: string,
+            requestId: number,
+            page = 1,
+            pageSize = 200,
+            genres: string[] = [],
+        ): Promise<SearchResult> {
+            console.debug(
+                `[worker ${ts()}] search send #${requestId} term="${term}" page=${page} pageSize=${pageSize} genres=[${genres}] pending=${pendingSearches.size}`,
+            )
+            return new Promise<SearchResult>((resolve) => {
                 pendingSearches.set(requestId, resolve)
                 worker.postMessage({
                     type: "search",
                     term,
                     requestId,
-                    limit,
+                    page,
+                    pageSize,
                     genres: genres.length ? [...genres] : undefined,
                 })
             })

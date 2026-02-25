@@ -11,13 +11,15 @@ import { createSearchWorkerClient } from "../services/searchIndexWorkerClient"
 import { convertTorrentFileToMagnet } from "../services/torrentMagnetService"
 
 const RESULTS_PAGE_SIZE = 200
-const SEARCH_RESULTS_LIMIT = 1000
 const NO_GENRE_CODE = "__no_genre__"
 const GENRE_DELIMITER = ":"
 
 function formatMegabytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+const _t0 = performance.now()
+const ts = () => `+${(performance.now() - _t0).toFixed(0)}ms`
 
 function saveBlob(blob, fileName) {
     const url = URL.createObjectURL(blob)
@@ -57,9 +59,8 @@ export const useLibraryState = createGlobalState(() => {
     const magnetUri = ref("")
     const magnetHash = ref("")
     const metadata = ref(null)
-    const searchMatchedBooks = ref([])
-    const filteredBooks = ref([])
-    const pagedBooks = ref([])
+    const filteredBooks = ref([]) // current page books (from worker)
+    const totalFilteredBooks = ref(0) // total matched books count (from worker)
     const selectedGenres = ref([])
     const genreFacets = ref([])
     const genreLabelByCode = ref(new Map())
@@ -86,21 +87,14 @@ export const useLibraryState = createGlobalState(() => {
     const isMagnetSet = computed(() => !!magnetUri.value)
     const hasGenreFilters = computed(() => selectedGenres.value.length > 0)
 
-    // genreFacets is populated once from ALL library books (not current search results)
-    // and refreshed when locale changes or library reloads.
-
     const totalPages = computed(() => {
-        const totalItems = filteredBooks.value.length
-        return totalItems ? Math.max(1, Math.ceil(totalItems / RESULTS_PAGE_SIZE)) : 1
+        return totalFilteredBooks.value ? Math.max(1, Math.ceil(totalFilteredBooks.value / RESULTS_PAGE_SIZE)) : 1
     })
 
     const visibleRange = computed(() => {
-        if (!filteredBooks.value.length) {
-            return { start: 0, end: 0 }
-        }
-
+        if (!totalFilteredBooks.value) return { start: 0, end: 0 }
         const start = (currentPage.value - 1) * RESULTS_PAGE_SIZE + 1
-        const end = Math.min(currentPage.value * RESULTS_PAGE_SIZE, filteredBooks.value.length)
+        const end = Math.min(currentPage.value * RESULTS_PAGE_SIZE, totalFilteredBooks.value)
         return { start, end }
     })
 
@@ -143,7 +137,7 @@ export const useLibraryState = createGlobalState(() => {
         return uniqueStrings(codes.map((code) => resolveGenreLabel(code))).join(", ")
     }
 
-    function recomputeGenreFacetsFromWorkerData(workerGenres: { genre: string; count: number }[]) {
+    function applyGenreLabels(workerGenres: { genre: string; count: number }[]) {
         genreFacets.value = workerGenres
             .map(({ genre, count }) => ({
                 genre,
@@ -154,15 +148,6 @@ export const useLibraryState = createGlobalState(() => {
                 if (b.count !== a.count) return b.count - a.count
                 return a.label.localeCompare(b.label, getCurrentLocale())
             })
-    }
-
-    async function loadAllGenres() {
-        try {
-            const workerGenres = await searchWorkerClient.getGenres()
-            recomputeGenreFacetsFromWorkerData(workerGenres)
-        } catch {
-            // non-fatal — genre sidebar stays empty
-        }
     }
 
     async function ensureGenreLabelsLoaded() {
@@ -203,23 +188,6 @@ export const useLibraryState = createGlobalState(() => {
         })
     }
 
-    function updatePagedBooks() {
-        const startIndex = (currentPage.value - 1) * RESULTS_PAGE_SIZE
-        pagedBooks.value = filteredBooks.value.slice(startIndex, startIndex + RESULTS_PAGE_SIZE)
-    }
-
-    watch(
-        [filteredBooks, currentPage],
-        () => {
-            if (currentPage.value > totalPages.value) {
-                currentPage.value = totalPages.value
-                return
-            }
-            updatePagedBooks()
-        },
-        { immediate: true },
-    )
-
     watch(searchTerm, async () => {
         currentPage.value = 1
         await refreshSearchResults()
@@ -243,27 +211,43 @@ export const useLibraryState = createGlobalState(() => {
         },
     )
 
+    watch(currentPage, async () => {
+        await refreshSearchResults()
+    })
+
     watch(localeRef, async () => {
         await ensureGenreLabelsLoaded()
-        if (indexProgress.phase === "ready") {
-            await loadAllGenres()
-        }
     })
 
     async function refreshSearchResults() {
-        if (indexProgress.phase !== "ready") return
+        if (indexProgress.phase !== "ready") {
+            console.debug(`[search ${ts()}] skip — phase="${indexProgress.phase}"`)
+            return
+        }
 
         const term = searchTerm.value.trim()
         const genres = selectedGenres.value
+        const page = currentPage.value
         const requestId = ++searchRequestId
+        const t0 = performance.now()
 
-        const matches = await searchWorkerClient.search(term, requestId, SEARCH_RESULTS_LIMIT, genres)
+        console.debug(`[search ${ts()}] #${requestId} start term="${term}" page=${page} genres=[${genres}]`)
 
-        // Discard if a newer search has started
-        if (requestId !== searchRequestId) return
+        const result = await searchWorkerClient.search(term, requestId, page, RESULTS_PAGE_SIZE, genres)
 
-        searchMatchedBooks.value = matches
-        filteredBooks.value = matches
+        if (requestId !== searchRequestId) {
+            console.debug(
+                `[search ${ts()}] #${requestId} discarded (current=#${searchRequestId}) after ${(performance.now() - t0).toFixed(0)}ms`,
+            )
+            return
+        }
+
+        console.debug(
+            `[search ${ts()}] #${requestId} done page=${page} books=${result.books.length} total=${result.total} in ${(performance.now() - t0).toFixed(0)}ms`,
+        )
+        filteredBooks.value = result.books
+        totalFilteredBooks.value = result.total
+        applyGenreLabels(result.genres)
     }
 
     function clearGenreFilters() {
@@ -334,9 +318,7 @@ export const useLibraryState = createGlobalState(() => {
             })
             status.value = t("status.libraryIndexed")
 
-            await loadAllGenres()
             await refreshSearchResults()
-        } catch (err) {
             setProgress({ phase: "error", processed: 0, total: 0, percent: 0, downloadedBytes: 0, totalBytes: null })
             status.value = reindexing ? t("status.reindexFailed") : t("status.loadFailed")
             error.value = err instanceof Error ? err.message : t("error.inpxLoadFailed")
@@ -377,7 +359,6 @@ export const useLibraryState = createGlobalState(() => {
                 totalBytes: null,
             })
             status.value = t("status.loadedFromCache")
-            await loadAllGenres()
             await refreshSearchResults()
             return
         }
@@ -492,9 +473,8 @@ export const useLibraryState = createGlobalState(() => {
         magnetHash.value = ""
         metadata.value = null
         totalBooks.value = 0
-        searchMatchedBooks.value = []
         filteredBooks.value = []
-        pagedBooks.value = []
+        totalFilteredBooks.value = 0
         selectedGenres.value = []
         genreFacets.value = []
         searchTerm.value = ""
@@ -549,9 +529,8 @@ export const useLibraryState = createGlobalState(() => {
         magnetHash,
         metadata,
         totalBooks,
-        searchMatchedBooks,
         filteredBooks,
-        pagedBooks,
+        totalFilteredBooks,
         selectedGenres,
         genreFacets,
         hasGenreFilters,

@@ -464,56 +464,62 @@ self.onmessage = async (event) => {
     if (message.type === "search") {
         const requestId = message.requestId
         const term = typeof message.term === "string" ? normalizeSearchValue(message.term).trim() : ""
-        const limit = Number.isFinite(message.limit) ? message.limit : 1000
         const genres = Array.isArray(message.genres) && message.genres.length ? message.genres : null
+        const page = Number.isFinite(message.page) && message.page >= 1 ? message.page : 1
+        const pageSize = Number.isFinite(message.pageSize) && message.pageSize >= 1 ? message.pageSize : 200
+        const MAX_IDS = 10_000
 
         if (!index) {
-            self.postMessage({ type: "search-result", payload: { requestId, books: [] } })
+            self.postMessage({ type: "search-result", payload: { requestId, books: [], total: 0, genres: [] } })
             return
         }
 
-        let books
+        // --- collect matched books ---
+        let matched
 
         if (!term) {
-            // No query — return first N books, optionally filtered by genre
-            books = []
+            // No query — iterate all books, apply optional genre filter
+            matched = []
             for (const book of booksById.values()) {
                 if (genres && !book.genreCodes?.some((c) => genres.includes(c))) continue
-                books.push(book)
-                if (books.length >= limit) break
+                matched.push(book)
             }
         } else {
-            const rawResults = index.search(term, { limit })
+            const rawResults = index.search(term, { limit: MAX_IDS })
             const ids = extractSearchIds(rawResults)
-            books = ids.map((id) => booksById.get(String(id))).filter(Boolean)
+            matched = ids.map((id) => booksById.get(String(id))).filter(Boolean)
 
-            if (!books.length) {
+            // Linear fallback when FlexSearch finds nothing
+            if (!matched.length) {
                 for (const book of booksById.values()) {
                     if (toSearchText(book).includes(term)) {
-                        books.push(book)
-                        if (books.length >= limit) break
+                        matched.push(book)
+                        if (matched.length >= MAX_IDS) break
                     }
                 }
             }
 
             if (genres) {
-                books = books.filter((book) => book.genreCodes?.some((c) => genres.includes(c)))
+                matched = matched.filter((book) => book.genreCodes?.some((c) => genres.includes(c)))
             }
         }
 
-        self.postMessage({ type: "search-result", payload: { requestId, books } })
-        return
-    }
-
-    if (message.type === "get-genres") {
+        // --- genre facets from matched set ---
         const genreCounts = new Map()
-        for (const book of booksById.values()) {
+        for (const book of matched) {
             const codes = Array.isArray(book.genreCodes) && book.genreCodes.length ? book.genreCodes : ["__no_genre__"]
             for (const code of codes) {
                 genreCounts.set(code, (genreCounts.get(code) ?? 0) + 1)
             }
         }
-        const genres = Array.from(genreCounts.entries()).map(([genre, count]) => ({ genre, count }))
-        self.postMessage({ type: "genres-result", payload: { genres } })
+        const resultGenres = Array.from(genreCounts.entries()).map(([genre, count]) => ({ genre, count }))
+
+        // --- paginate ---
+        const total = matched.length
+        const start = (page - 1) * pageSize
+        const books = matched.slice(start, start + pageSize)
+
+        self.postMessage({ type: "search-result", payload: { requestId, books, total, genres: resultGenres } })
+        return
     }
 }
