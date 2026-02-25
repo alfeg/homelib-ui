@@ -9,7 +9,6 @@ import { getCurrentLocale, localeRef, translate } from "../services/i18n"
 import { parseHashFromMagnet, magnetStore } from "../services/magnetService"
 import { createSearchWorkerClient } from "../services/searchIndexWorkerClient"
 import { convertTorrentFileToMagnet } from "../services/torrentMagnetService"
-import * as mainThreadSearch from "../search/mainThreadSearch"
 
 const RESULTS_PAGE_SIZE = 30
 const NO_GENRE_CODE = "__no_genre__"
@@ -68,6 +67,7 @@ export const useLibraryState = createGlobalState(() => {
     const searchTerm = ref("")
     const isLoading = ref(false)
     const isReindexing = ref(false)
+    const workerReady = ref(false)
     const status = ref("")
     const error = ref("")
     const hasCache = ref(false)
@@ -107,10 +107,6 @@ export const useLibraryState = createGlobalState(() => {
                 total: progress.total,
                 percent: progress.percent,
             })
-        },
-        onIndexData: async ({ chunks, books }) => {
-            await mainThreadSearch.importIndexData(chunks, books)
-            refreshSearchResults()
         },
         onError: (err) => {
             error.value = err instanceof Error ? err.message : t("error.searchWorkerFailed")
@@ -203,15 +199,6 @@ export const useLibraryState = createGlobalState(() => {
         { deep: true },
     )
 
-    watch(
-        () => indexProgress.phase,
-        (phase) => {
-            if (phase === "ready") {
-                refreshSearchResults()
-            }
-        },
-    )
-
     watch(currentPage, () => {
         refreshSearchResults()
     })
@@ -220,24 +207,33 @@ export const useLibraryState = createGlobalState(() => {
         await ensureGenreLabelsLoaded()
     })
 
-    function refreshSearchResults() {
-        if (!mainThreadSearch.isReady()) {
-            return
-        }
+    let searchRequestId = 0
 
+    async function refreshSearchResults() {
+        if (!workerReady.value) return
         const term = searchTerm.value.trim()
-        const genres = selectedGenres.value
+        const genres = [...selectedGenres.value]
         const page = currentPage.value
+        const reqId = ++searchRequestId
         const t0 = performance.now()
-
-        const result = mainThreadSearch.search(term, page, RESULTS_PAGE_SIZE, genres)
-
-        console.debug(
-            `[search ${ts()}] done page=${page} books=${result.books.length} total=${result.total} in ${(performance.now() - t0).toFixed(0)}ms`,
-        )
-        filteredBooks.value = result.books
-        totalFilteredBooks.value = result.total
-        applyGenreLabels(result.genres)
+        try {
+            const result = await searchWorkerClient.search({
+                term,
+                page,
+                pageSize: RESULTS_PAGE_SIZE,
+                genres,
+            })
+            if (reqId !== searchRequestId) return // superseded
+            console.debug(
+                `[search ${ts()}] done page=${page} books=${result.books.length} total=${result.total} in ${(performance.now() - t0).toFixed(0)}ms`,
+            )
+            filteredBooks.value = result.books
+            totalFilteredBooks.value = result.total
+            applyGenreLabels(result.genres)
+        } catch (err: any) {
+            if (err?.superseded) return
+            console.error("[search] error:", err)
+        }
     }
 
     function clearGenreFilters() {
@@ -298,6 +294,7 @@ export const useLibraryState = createGlobalState(() => {
             lastUpdatedAt.value = new Date().toLocaleString()
             hasCache.value = false
 
+            workerReady.value = true
             setProgress({
                 phase: "ready",
                 processed: totalBooks.value,
@@ -307,6 +304,7 @@ export const useLibraryState = createGlobalState(() => {
                 totalBytes: null,
             })
             status.value = t("status.libraryIndexed")
+            refreshSearchResults()
         } catch (err) {
             setProgress({ phase: "error", processed: 0, total: 0, percent: 0, downloadedBytes: 0, totalBytes: null })
             status.value = reindexing ? t("status.reindexFailed") : t("status.loadFailed")
@@ -339,6 +337,7 @@ export const useLibraryState = createGlobalState(() => {
             totalBooks.value = restoreResult.total ?? 0
             lastUpdatedAt.value = restoreResult.persistedAt ? new Date(restoreResult.persistedAt).toLocaleString() : ""
             hasCache.value = true
+            workerReady.value = true
             setProgress({
                 phase: "ready",
                 processed: totalBooks.value,
@@ -348,6 +347,7 @@ export const useLibraryState = createGlobalState(() => {
                 totalBytes: null,
             })
             status.value = t("status.loadedFromCache")
+            refreshSearchResults()
             return
         }
 
@@ -471,6 +471,7 @@ export const useLibraryState = createGlobalState(() => {
         error.value = ""
         hasCache.value = false
         lastUpdatedAt.value = ""
+        workerReady.value = false
         resetProgress()
     }
 

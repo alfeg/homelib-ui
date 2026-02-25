@@ -19,7 +19,11 @@ let activeHash = ""
 let persistenceDbPromise = null
 let libraryCacheDbPromise = null
 
-const encodeText = (str) => str //.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
+const encodeText = (str) => str.toLocaleLowerCase("ru-RU").replace(/ё/g, "е")
+
+const MAX_SEARCH_IDS = 10_000
+const NO_GENRE_CODE = "__no_genre__"
+const SEARCH_FIELDS = ["title", "authors", "series", "lang", "file"]
 
 function toIndexDoc(book) {
     return {
@@ -219,6 +223,65 @@ async function addBatchToIndexAsync(targetIndex, documents) {
     }
 }
 
+function extractSearchIds(rawResults) {
+    const ids = []
+    const seen = new Set()
+    for (const entry of rawResults) {
+        const resultSet = Array.isArray(entry?.result) ? entry.result : []
+        for (const item of resultSet) {
+            const value = typeof item === "object" && item !== null ? item.id : item
+            const id = String(value)
+            if (!seen.has(id)) {
+                seen.add(id)
+                ids.push(id)
+            }
+        }
+    }
+    return ids
+}
+
+function computeFacets(books) {
+    const counts = new Map()
+    for (const book of books) {
+        const codes = Array.isArray(book.genreCodes) && book.genreCodes.length ? book.genreCodes : [NO_GENRE_CODE]
+        for (const code of codes) {
+            counts.set(code, (counts.get(code) ?? 0) + 1)
+        }
+    }
+    return Array.from(counts.entries()).map(([genre, count]) => ({ genre, count }))
+}
+
+function searchBooks(term, page, pageSize, genres) {
+    if (!index) return { books: [], total: 0, genres: [] }
+    const hasTerm = term.trim().length > 0
+    const genreFilter = genres && genres.length ? genres : null
+
+    let termMatched
+    if (!hasTerm) {
+        termMatched = Array.from(booksById.values())
+    } else {
+        const raw = index.search(SEARCH_FIELDS.map(field => ({ field, query: term, limit: MAX_SEARCH_IDS })))
+        termMatched = extractSearchIds(raw).map(id => booksById.get(id)).filter(Boolean)
+    }
+
+    const resultGenres = computeFacets(termMatched)
+
+    let matched
+    if (!genreFilter) {
+        matched = termMatched
+    } else if (!hasTerm) {
+        const raw = index.search({ tag: { genreCodes: genreFilter } })
+        matched = extractSearchIds(raw).map(id => booksById.get(id)).filter(Boolean)
+    } else {
+        const raw = index.search(term, { index: [...SEARCH_FIELDS], tag: { genreCodes: genreFilter }, limit: MAX_SEARCH_IDS })
+        matched = extractSearchIds(raw).map(id => booksById.get(id)).filter(Boolean)
+    }
+
+    const total = matched.length
+    const start = (page - 1) * pageSize
+    return { books: matched.slice(start, start + pageSize), total, genres: resultGenres }
+}
+
 self.onmessage = async (event) => {
     const message = event?.data ?? {}
 
@@ -273,6 +336,11 @@ self.onmessage = async (event) => {
                 return
             }
 
+            // Load index + books into worker memory so search requests can be served
+            const restoredIndex = createIndex()
+            await importIndex(restoredIndex, persisted.chunks)
+            index = restoredIndex
+            booksById = new Map(persistedBooks.map((book) => [String(book.id), book]))
             activeHash = hash
 
             self.postMessage({
@@ -284,9 +352,6 @@ self.onmessage = async (event) => {
                     metadata: persisted.metadata ?? null,
                 },
             })
-
-            // Transfer raw chunks + books to main thread for local search
-            self.postMessage({ type: "index-data", payload: { chunks: persisted.chunks, books: persistedBooks } })
         } catch (err) {
             self.postMessage({
                 type: "restore-complete",
@@ -420,13 +485,7 @@ self.onmessage = async (event) => {
                 type: "build-complete",
                 payload: { total, metadata, datasetSignature, persisted, persistenceError },
             })
-
-            // Transfer index + books to main thread for local search
-            self.postMessage({ type: "index-data", payload: { chunks, books } })
-
-            // Worker no longer needs the in-memory index — main thread owns it now
-            index = null
-            booksById = new Map()
+            // index and booksById remain alive — worker serves all search requests
         } catch (err) {
             resetInMemoryIndex()
             self.postMessage({
@@ -437,11 +496,16 @@ self.onmessage = async (event) => {
 
         return
     }
+    if (message.type === "search") {
+        const { requestId, term, page, pageSize, genres } = message
+        const result = searchBooks(
+            typeof term === "string" ? term : "",
+            typeof page === "number" ? page : 1,
+            typeof pageSize === "number" ? pageSize : 30,
+            Array.isArray(genres) ? genres : [],
+        )
+        self.postMessage({ type: "search-result", requestId, payload: result })
+        return
+    }
 }
 
-function toSearchText(book: BookRecord): string {
-    return [book.title, book.authors, (book as any).series, book.lang, book.file]
-        .filter(Boolean)
-        .map(normalizeSearchValue)
-        .join(" ")
-}
