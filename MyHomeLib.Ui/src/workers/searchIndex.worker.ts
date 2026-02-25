@@ -10,13 +10,21 @@ const PERSISTENCE_DB_VERSION = 1;
 
 let index = null;
 let booksById = new Map();
+let searchableTextById = new Map();
 let activeHash = "";
 let activeSignature = "";
 let persistenceDbPromise = null;
 
+function normalizeSearchValue(value) {
+    return String(value ?? "")
+        .toLocaleLowerCase("ru-RU")
+        .replaceAll("ё", "е");
+}
+
 function toSearchText(book) {
     return [book.title, book.authors, book.series, book.lang, book.file]
         .filter(Boolean)
+        .map(normalizeSearchValue)
         .join(" ");
 }
 
@@ -123,6 +131,7 @@ async function importIndex(targetIndex, chunks) {
 function resetInMemoryIndex() {
     index = null;
     booksById = new Map();
+    searchableTextById = new Map();
     activeHash = "";
     activeSignature = "";
 }
@@ -185,6 +194,7 @@ self.onmessage = async (event) => {
 
         index = createIndex();
         booksById = new Map();
+        searchableTextById = new Map();
         activeHash = hash;
         activeSignature = signature;
 
@@ -220,10 +230,12 @@ self.onmessage = async (event) => {
             for (let i = start; i < end; i += 1) {
                 const book = books[i];
                 const id = String(book.id);
+                const content = toSearchText(book);
                 booksById.set(id, book);
+                searchableTextById.set(id, content);
                 batchDocuments.push({
                     id,
-                    content: toSearchText(book)
+                    content
                 });
             }
 
@@ -312,6 +324,7 @@ self.onmessage = async (event) => {
 
             index = restoredIndex;
             booksById = new Map(books.map((book) => [String(book.id), book]));
+            searchableTextById = new Map(books.map((book) => [String(book.id), toSearchText(book)]));
             activeHash = hash;
             activeSignature = signature;
 
@@ -380,7 +393,7 @@ self.onmessage = async (event) => {
 
     if (message.type === "search") {
         const requestId = message.requestId;
-        const term = typeof message.term === "string" ? message.term.trim() : "";
+        const term = typeof message.term === "string" ? normalizeSearchValue(message.term).trim() : "";
         const limit = Number.isFinite(message.limit) ? message.limit : 1000;
 
         if (!term || !index) {
@@ -395,7 +408,20 @@ self.onmessage = async (event) => {
         }
 
         const rawResults = index.search(term, { limit });
-        const books = extractSearchIds(rawResults)
+        let ids = extractSearchIds(rawResults);
+
+        if (!ids.length) {
+            for (const [id, content] of searchableTextById) {
+                if (content.includes(term)) {
+                    ids.push(id);
+                    if (ids.length >= limit) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        const books = ids
             .map((id) => booksById.get(String(id)))
             .filter(Boolean);
 

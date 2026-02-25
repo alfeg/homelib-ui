@@ -33,8 +33,8 @@ const onFileInput = (event: Event) => {
 <template>
   <section class="min-h-screen flex items-center justify-center p-4">
     <div
-      class="w-full max-w-3xl bg-white rounded-2xl shadow-lg p-8 grid gap-3 border"
-      :class="isDragActive ? 'border-blue-500 bg-blue-50 border-2 border-dashed' : 'border-slate-200'"
+      class="card w-full max-w-3xl bg-base-100 shadow-xl p-8 grid gap-3 border border-base-300"
+      :class="isDragActive ? 'border-primary border-2 border-dashed' : ''"
       @dragenter.prevent="isDragActive = true"
       @dragover.prevent="isDragActive = true"
       @dragleave.prevent="isDragActive = false"
@@ -47,16 +47,16 @@ const onFileInput = (event: Event) => {
         v-model="magnetInput"
         type="text"
         placeholder="magnet:?xt=urn:btih:..."
-        class="w-full text-base px-4 py-3 border border-slate-300 rounded-lg"
+        class="input input-bordered w-full text-base"
         :disabled="loading"
         @keyup.enter="onSubmit"
       />
 
       <div class="flex gap-2 flex-wrap">
-        <button class="px-3 py-2 rounded-lg bg-blue-900 text-white disabled:opacity-60" :disabled="loading" @click="onSubmit">
+        <button class="btn btn-primary" :disabled="loading" @click="onSubmit">
           {{ loading ? "Loading..." : "Open Library" }}
         </button>
-        <button class="px-3 py-2 rounded-lg border border-blue-900 text-blue-900 disabled:opacity-60" :disabled="loading" @click="openFilePicker">
+        <button class="btn btn-outline btn-primary" :disabled="loading" @click="openFilePicker">
           Choose .torrent file
         </button>
       </div>
@@ -70,8 +70,8 @@ const onFileInput = (event: Event) => {
         @change="onFileInput"
       />
 
-      <p class="text-slate-500">You can also drag and drop a .torrent file anywhere on this card.</p>
-      <p v-if="error" class="text-red-700">{{ error }}</p>
+      <p class="text-base-content/70">You can also drag and drop a .torrent file anywhere on this card.</p>
+      <p v-if="error" class="alert alert-error">{{ error }}</p>
     </div>
   </section>
 </template>

@@ -1,5 +1,6 @@
 /* eslint-disable */
-import { computed, proxyRefs, reactive, ref, watch } from "vue";
+import { createGlobalState } from "@vueuse/core";
+import { computed, reactive, ref, watch } from "vue";
 import { apiClient } from "../services/apiClient";
 import { parseHashFromMagnet, magnetStore } from "../services/magnetService";
 import { libraryCacheStore } from "../services/storageService";
@@ -88,6 +89,16 @@ function normalizeGenreCode(code) {
     return String(code ?? "").trim();
 }
 
+function normalizeSearchText(value) {
+    return String(value ?? "")
+        .toLocaleLowerCase("ru-RU")
+        .replaceAll("ё", "е");
+}
+
+function uniqueStrings(values) {
+    return Array.from(new Set(values.filter(Boolean)));
+}
+
 function parseRawGenreCodes(rawGenre) {
     return String(rawGenre ?? "")
         .split(GENRE_DELIMITER)
@@ -145,6 +156,40 @@ function createCacheBooksSnapshot(input, { alreadyNormalized = false } = {}) {
     });
 }
 
+function bookMatchesSearchTerm(book, normalizedTerm) {
+    const content = normalizeSearchText([
+        book?.title,
+        book?.authors,
+        book?.series,
+        book?.lang,
+        book?.file
+    ].filter(Boolean).join(" "));
+
+    return content.includes(normalizedTerm);
+}
+
+async function findLocalSearchMatches(sourceBooks, normalizedTerm, limit) {
+    const source = Array.isArray(sourceBooks) ? sourceBooks : [];
+    const results = [];
+
+    for (let i = 0; i < source.length; i += 1) {
+        const book = source[i];
+
+        if (bookMatchesSearchTerm(book, normalizedTerm)) {
+            results.push(book);
+            if (results.length >= limit) {
+                break;
+            }
+        }
+
+        if (i > 0 && i % 5000 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+    }
+
+    return results;
+}
+
 function computeDatasetSignature(metadata, books) {
     const sourceBooks = Array.isArray(books) ? books : [];
     const metadataSeed = metadata && typeof metadata === "object"
@@ -180,7 +225,7 @@ function resolveDatasetSignature(payload) {
         || computeDatasetSignature(payload?.metadata ?? null, payload?.books ?? []);
 }
 
-export function useLibraryState() {
+export const useLibraryState = createGlobalState(() => {
     const magnetUri = ref("");
     const magnetHash = ref("");
     const metadata = ref(null);
@@ -190,6 +235,7 @@ export function useLibraryState() {
     const pagedBooks = ref([]);
     const selectedGenres = ref([]);
     const genreFacets = ref([]);
+    const genreBooksByCode = ref(new Map<string, any[]>());
     const genreLabelByCode = ref(new Map());
     const searchTerm = ref("");
     const isLoading = ref(false);
@@ -250,8 +296,21 @@ export function useLibraryState() {
         return genreLabelByCode.value.get(genreCode) ?? genreCode;
     }
 
+    function formatBookGenres(book) {
+        const codes = Array.isArray(book?.genreCodes) && book.genreCodes.length
+            ? book.genreCodes
+            : parseRawGenreCodes(book?.genre);
+
+        if (!codes.length) {
+            return NO_GENRE_LABEL;
+        }
+
+        return uniqueStrings(codes.map((code) => resolveGenreLabel(code))).join(", ");
+    }
+
     function recomputeGenreFacets() {
         const facetCounts = new Map();
+        const facetBooks = new Map<string, any[]>();
 
         for (let i = 0; i < searchMatchedBooks.value.length; i += 1) {
             const book = searchMatchedBooks.value[i];
@@ -262,6 +321,12 @@ export function useLibraryState() {
             for (let j = 0; j < codes.length; j += 1) {
                 const code = codes[j];
                 facetCounts.set(code, (facetCounts.get(code) ?? 0) + 1);
+                const booksForCode = facetBooks.get(code);
+                if (booksForCode) {
+                    booksForCode.push(book);
+                } else {
+                    facetBooks.set(code, [book]);
+                }
             }
         }
 
@@ -269,8 +334,11 @@ export function useLibraryState() {
             const code = selectedGenres.value[i];
             if (!facetCounts.has(code)) {
                 facetCounts.set(code, 0);
+                facetBooks.set(code, []);
             }
         }
+
+        genreBooksByCode.value = facetBooks;
 
         genreFacets.value = Array.from(facetCounts.entries())
             .map(([genre, count]) => ({
@@ -330,13 +398,20 @@ export function useLibraryState() {
             return;
         }
 
-        const selected = new Set(selectedGenres.value);
-        filteredBooks.value = searchMatchedBooks.value.filter((book) => {
-            const codes = Array.isArray(book?.genreCodes) && book.genreCodes.length
-                ? book.genreCodes
-                : [NO_GENRE_CODE];
-            return codes.some((code) => selected.has(code));
-        });
+        const uniqueBooks = new Map<string, any>();
+        for (let i = 0; i < selectedGenres.value.length; i += 1) {
+            const code = selectedGenres.value[i];
+            const booksForCode = genreBooksByCode.value.get(code) ?? [];
+            for (let j = 0; j < booksForCode.length; j += 1) {
+                const book = booksForCode[j];
+                const key = `${book?.id ?? ""}|${book?.file ?? ""}|${book?.archiveFile ?? ""}`;
+                if (!uniqueBooks.has(key)) {
+                    uniqueBooks.set(key, book);
+                }
+            }
+        }
+
+        filteredBooks.value = Array.from(uniqueBooks.values());
     }
 
     watch([filteredBooks, currentPage], () => {
@@ -356,11 +431,17 @@ export function useLibraryState() {
     watch(selectedGenres, () => {
         currentPage.value = 1;
         applyGenreFilters();
-        recomputeGenreFacets();
     }, { deep: true });
+
+    watch(() => indexProgress.phase, async (phase) => {
+        if (phase === "ready" && searchTerm.value.trim()) {
+            await refreshSearchResults();
+        }
+    });
 
     async function refreshSearchResults() {
         const term = searchTerm.value.trim();
+        const normalizedTerm = normalizeSearchText(term).trim();
 
         if (!term) {
             activeSearchRequestId += 1;
@@ -371,15 +452,16 @@ export function useLibraryState() {
         }
 
         if (indexProgress.phase !== "ready") {
-            searchMatchedBooks.value = [];
-            recomputeGenreFacets();
-            applyGenreFilters();
             return;
         }
 
         const requestId = ++searchRequestId;
         activeSearchRequestId = requestId;
-        const matches = await searchWorkerClient.search(term, requestId, SEARCH_RESULTS_LIMIT);
+        let matches = await searchWorkerClient.search(term, requestId, SEARCH_RESULTS_LIMIT);
+
+        if (!matches.length && normalizedTerm) {
+            matches = await findLocalSearchMatches(books.value, normalizedTerm, SEARCH_RESULTS_LIMIT);
+        }
 
         if (requestId !== activeSearchRequestId) return;
         searchMatchedBooks.value = matches;
@@ -771,7 +853,7 @@ export function useLibraryState() {
 
     ensureGenreLabelsLoaded();
 
-    return proxyRefs({
+    return {
         magnetUri,
         magnetHash,
         metadata,
@@ -806,6 +888,7 @@ export function useLibraryState() {
         nextPage,
         previousPage,
         toggleGenreFilter,
-        clearGenreFilters
-    });
-}
+        clearGenreFilters,
+        formatBookGenres
+    };
+});

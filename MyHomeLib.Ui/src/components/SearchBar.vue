@@ -7,11 +7,12 @@ defineEmits<{ (e: "update:modelValue", value: string): void }>();
   <section class="mb-3">
     <input
       type="search"
-      class="w-full rounded-lg border border-slate-300 px-3 py-2"
+      class="input input-bordered w-full"
       :value="modelValue"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       placeholder="Search title, author, series, language..."
+      name="book-search"
     />
-    <p class="text-slate-500 mt-1">Showing {{ filtered }} of {{ total }} books</p>
+    <p class="text-base-content/70 mt-1">Showing {{ filtered }} of {{ total }} books</p>
   </section>
 </template>
