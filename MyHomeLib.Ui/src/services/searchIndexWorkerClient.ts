@@ -1,5 +1,5 @@
 import type { BookRecord, LibraryMetadata } from "../types/library"
-import SearchIndexWorker from "../workers/searchIndex.worker.ts?worker"
+import SearchIndexWorker from "../workers/searchIndex.worker.ts?worker&inline"
 
 export interface RestoreResult {
     restored: boolean

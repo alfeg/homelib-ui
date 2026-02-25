@@ -1,4 +1,5 @@
 import { getCurrentLocale } from "./i18n"
+import { getApiBase } from "./endpointStore"
 
 function getJsonHeaders() {
     return {
@@ -14,7 +15,7 @@ async function requestArrayBuffer(
 ) {
     const response = await fetch(url, {
         method: "POST",
-        credentials: "include",
+        credentials: "same-origin",
         headers: getJsonHeaders(),
         body: JSON.stringify(body),
     })
@@ -83,13 +84,13 @@ export const apiClient = {
         magnetUri: string,
         onProgress?: (progress: { downloadedBytes: number; totalBytes: number | null; percent: number | null }) => void,
     ) {
-        return requestArrayBuffer("/api/library/inpx", { magnetUri }, onProgress)
+        return requestArrayBuffer(`${getApiBase()}/api/library/inpx`, { magnetUri }, onProgress)
     },
 
     async downloadBook(payload: Record<string, unknown>) {
-        const response = await fetch("/api/library/download", {
+        const response = await fetch(`${getApiBase()}/api/library/download`, {
             method: "POST",
-            credentials: "include",
+            credentials: "same-origin",
             headers: getJsonHeaders(),
             body: JSON.stringify(payload),
         })

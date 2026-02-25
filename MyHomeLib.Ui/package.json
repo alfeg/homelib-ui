@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build-only": "vite build",
+    "build-standalone": "vite build --config vite.config.standalone.ts",
     "preview": "vite preview",
     "ts": "vue-tsc --noEmit",
     "lint": "eslint src --quiet --fix && prettier -w ./",
@@ -40,6 +41,7 @@
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
+    "vite-plugin-singlefile": "^2.3.0",
     "vitest": "^4.0.18",
     "vue-tsc": "^3.2.5"
   }

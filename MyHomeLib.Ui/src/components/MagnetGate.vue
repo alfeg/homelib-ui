@@ -2,6 +2,7 @@
 import { computed, ref } from "vue"
 
 import { setLocale, useI18nState } from "../services/i18n"
+import EndpointSettings from "./EndpointSettings.vue"
 
 const props = defineProps<{
     loading: boolean
@@ -173,6 +174,7 @@ const onLocaleToggle = (event: Event) => {
                 >
                     {{ error }}
                 </p>
+                <EndpointSettings />
             </template>
         </div>
     </section>

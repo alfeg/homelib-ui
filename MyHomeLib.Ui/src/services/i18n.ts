@@ -52,6 +52,12 @@ const messages = {
             to: "До",
             reset: "Сбросить",
         },
+        endpoint: {
+            title: "API сервер",
+            placeholder: "https://books.example.com",
+            hint: "Оставьте пустым, чтобы использовать текущий сервер.",
+            clear: "Сбросить",
+        },
         table: {
             title: "Название",
             authors: "Авторы",
@@ -152,6 +158,12 @@ const messages = {
             from: "From",
             to: "To",
             reset: "Reset",
+        },
+        endpoint: {
+            title: "API Server",
+            placeholder: "https://books.example.com",
+            hint: "Leave empty to use the current server.",
+            clear: "Reset",
         },
         table: {
             title: "Title",
