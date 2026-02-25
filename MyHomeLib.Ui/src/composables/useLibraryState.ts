@@ -3,12 +3,10 @@ import { createGlobalState } from "@vueuse/core";
 import { computed, reactive, ref, watch } from "vue";
 import { apiClient } from "../services/apiClient";
 import { parseHashFromMagnet, magnetStore } from "../services/magnetService";
-import { libraryCacheStore } from "../services/storageService";
 import { convertTorrentFileToMagnet } from "../services/torrentMagnetService";
 import { createSearchWorkerClient } from "../services/searchIndexWorkerClient";
 import { loadGenreLabels } from "../services/genreLabelsService";
 import { getCurrentLocale, localeRef, translate } from "../services/i18n";
-import InpxParserWorker from "../workers/inpxParser.worker.ts?worker";
 
 const RESULTS_PAGE_SIZE = 200;
 const SEARCH_RESULTS_LIMIT = 1000;
@@ -17,49 +15,6 @@ const GENRE_DELIMITER = ":";
 
 function formatMegabytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function parseInpxWithWorker(buffer, onProgress) {
-    if (typeof Worker === "undefined") {
-        return Promise.reject(new Error(translate("error.inpxParseFailed")));
-    }
-
-    return new Promise((resolve, reject) => {
-        const worker = new InpxParserWorker({ type: "module" });
-
-        const cleanup = () => {
-            worker.onmessage = null;
-            worker.onerror = null;
-            worker.terminate();
-        };
-
-        worker.onmessage = (event) => {
-            const message = event?.data ?? {};
-
-            if (message.type === "progress") {
-                onProgress?.(message.payload ?? {});
-                return;
-            }
-
-            if (message.type === "result") {
-                cleanup();
-                resolve(message.payload ?? { metadata: null, books: [] });
-                return;
-            }
-
-            if (message.type === "error") {
-                cleanup();
-                reject(new Error(message.message || translate("error.inpxParseFailed")));
-            }
-        };
-
-        worker.onerror = (event) => {
-            cleanup();
-            reject(new Error(event?.message || translate("error.inpxParseFailed")));
-        };
-
-        worker.postMessage({ type: "parse", buffer }, [buffer]);
-    });
 }
 
 function saveBlob(blob, fileName) {
@@ -72,17 +27,6 @@ function saveBlob(blob, fileName) {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-}
-
-function updateSignatureHash(hash, value) {
-    let next = hash >>> 0;
-
-    for (let i = 0; i < value.length; i += 1) {
-        next ^= value.charCodeAt(i);
-        next = Math.imul(next, 16777619);
-    }
-
-    return next >>> 0;
 }
 
 function normalizeGenreCode(code) {
@@ -106,137 +50,16 @@ function parseRawGenreCodes(rawGenre) {
         .filter(Boolean);
 }
 
-function normalizeBookGenres(book) {
-    if (!book || typeof book !== "object") {
-        return book;
-    }
-
-    const rawGenre = typeof book.genre === "string" ? book.genre : "";
-    const sourceCodes = Array.isArray(book.genreCodes)
-        ? book.genreCodes
-        : parseRawGenreCodes(rawGenre);
-
-    const genreCodes = sourceCodes
-        .map((code) => normalizeGenreCode(code))
-        .filter(Boolean);
-
-    return {
-        ...book,
-        genre: rawGenre,
-        genreCodes
-    };
-}
-
-function normalizeBooksGenres(input, { alreadyNormalized = false } = {}) {
-    const source = Array.isArray(input) ? input : [];
-    if (alreadyNormalized) {
-        return source;
-    }
-
-    return source.map((book) => normalizeBookGenres(book));
-}
-
-function createCacheBooksSnapshot(input, { alreadyNormalized = false } = {}) {
-    const sourceBooks = alreadyNormalized
-        ? (Array.isArray(input) ? input : [])
-        : normalizeBooksGenres(input);
-
-    return sourceBooks.map((book) => {
-        const genreCodes = Array.isArray(book.genreCodes)
-            ? book.genreCodes
-            : parseRawGenreCodes(book.genre);
-
-        return {
-            ...book,
-            genre: typeof book.genre === "string" ? book.genre : "",
-            genreCodes: genreCodes
-                .map((code) => normalizeGenreCode(code))
-                .filter(Boolean)
-        };
-    });
-}
-
-function bookMatchesSearchTerm(book, normalizedTerm) {
-    const content = normalizeSearchText([
-        book?.title,
-        book?.authors,
-        book?.series,
-        book?.lang,
-        book?.file
-    ].filter(Boolean).join(" "));
-
-    return content.includes(normalizedTerm);
-}
-
-async function findLocalSearchMatches(sourceBooks, normalizedTerm, limit) {
-    const source = Array.isArray(sourceBooks) ? sourceBooks : [];
-    const results = [];
-
-    for (let i = 0; i < source.length; i += 1) {
-        const book = source[i];
-
-        if (bookMatchesSearchTerm(book, normalizedTerm)) {
-            results.push(book);
-            if (results.length >= limit) {
-                break;
-            }
-        }
-
-        if (i > 0 && i % 5000 === 0) {
-            await new Promise((resolve) => setTimeout(resolve, 0));
-        }
-    }
-
-    return results;
-}
-
-function computeDatasetSignature(metadata, books) {
-    const sourceBooks = Array.isArray(books) ? books : [];
-    const metadataSeed = metadata && typeof metadata === "object"
-        ? `${metadata.title || ""}|${metadata.collection || ""}|${metadata.version || ""}`
-        : "";
-
-    let hash = 2166136261;
-    hash = updateSignatureHash(hash, metadataSeed);
-
-    for (let i = 0; i < sourceBooks.length; i += 1) {
-        const book = sourceBooks[i] ?? {};
-        const seed = [
-            book.id,
-            book.title,
-            book.authors,
-            book.series,
-            book.lang,
-            book.genre,
-            Array.isArray(book.genreCodes) ? book.genreCodes.join(":") : "",
-            book.file,
-            book.archiveFile,
-            book.ext
-        ].map((value) => String(value ?? "")).join("|");
-
-        hash = updateSignatureHash(hash, seed);
-    }
-
-    return `${sourceBooks.length}:${hash.toString(16)}`;
-}
-
-function resolveDatasetSignature(payload) {
-    return payload?.indexMeta?.datasetSignature
-        || computeDatasetSignature(payload?.metadata ?? null, payload?.books ?? []);
-}
-
 export const useLibraryState = createGlobalState(() => {
     const t = translate;
     const magnetUri = ref("");
     const magnetHash = ref("");
     const metadata = ref(null);
-    const books = ref([]);
     const searchMatchedBooks = ref([]);
     const filteredBooks = ref([]);
     const pagedBooks = ref([]);
     const selectedGenres = ref([]);
     const genreFacets = ref([]);
-    const genreBooksByCode = ref(new Map<string, any[]>());
     const genreLabelByCode = ref(new Map());
     const searchTerm = ref("");
     const isLoading = ref(false);
@@ -246,6 +69,7 @@ export const useLibraryState = createGlobalState(() => {
     const hasCache = ref(false);
     const lastUpdatedAt = ref("");
     const currentPage = ref(1);
+    const totalBooks = ref(0);
 
     const downloadingById = reactive({});
     const indexProgress = reactive({
@@ -259,6 +83,9 @@ export const useLibraryState = createGlobalState(() => {
 
     const isMagnetSet = computed(() => !!magnetUri.value);
     const hasGenreFilters = computed(() => selectedGenres.value.length > 0);
+
+    // genreFacets is populated once from ALL library books (not current search results)
+    // and refreshed when locale changes or library reloads.
 
     const totalPages = computed(() => {
         const totalItems = filteredBooks.value.length;
@@ -285,9 +112,9 @@ export const useLibraryState = createGlobalState(() => {
         }
     });
 
+    // Single monotonic counter — every search (including empty-term) increments it.
+    // After await, stale responses are discarded by comparing against the counter.
     let searchRequestId = 0;
-    let activeSearchRequestId = 0;
-    let booksNormalizedForCache = false;
 
     function resolveGenreLabel(genreCode) {
         if (genreCode === NO_GENRE_CODE) {
@@ -309,57 +136,38 @@ export const useLibraryState = createGlobalState(() => {
         return uniqueStrings(codes.map((code) => resolveGenreLabel(code))).join(", ");
     }
 
-    function recomputeGenreFacets() {
-        const facetCounts = new Map();
-        const facetBooks = new Map<string, any[]>();
-
-        for (let i = 0; i < searchMatchedBooks.value.length; i += 1) {
-            const book = searchMatchedBooks.value[i];
-            const codes = Array.isArray(book?.genreCodes) && book.genreCodes.length
-                ? book.genreCodes
-                : [NO_GENRE_CODE];
-
-            for (let j = 0; j < codes.length; j += 1) {
-                const code = codes[j];
-                facetCounts.set(code, (facetCounts.get(code) ?? 0) + 1);
-                const booksForCode = facetBooks.get(code);
-                if (booksForCode) {
-                    booksForCode.push(book);
-                } else {
-                    facetBooks.set(code, [book]);
-                }
-            }
-        }
-
-        for (let i = 0; i < selectedGenres.value.length; i += 1) {
-            const code = selectedGenres.value[i];
-            if (!facetCounts.has(code)) {
-                facetCounts.set(code, 0);
-                facetBooks.set(code, []);
-            }
-        }
-
-        genreBooksByCode.value = facetBooks;
-
-        genreFacets.value = Array.from(facetCounts.entries())
-            .map(([genre, count]) => ({
+    function recomputeGenreFacetsFromWorkerData(workerGenres: { genre: string; count: number }[]) {
+        genreFacets.value = workerGenres
+            .map(({ genre, count }) => ({
                 genre,
                 label: resolveGenreLabel(genre),
                 count
             }))
             .sort((a, b) => {
-                if (b.count !== a.count) {
-                    return b.count - a.count;
-                }
-
+                if (b.count !== a.count) return b.count - a.count;
                 return a.label.localeCompare(b.label, getCurrentLocale());
             });
+    }
+
+    async function loadAllGenres() {
+        try {
+            const workerGenres = await searchWorkerClient.getGenres();
+            recomputeGenreFacetsFromWorkerData(workerGenres);
+        } catch {
+            // non-fatal — genre sidebar stays empty
+        }
     }
 
     async function ensureGenreLabelsLoaded() {
         const labels = await loadGenreLabels();
         genreLabelByCode.value = labels;
-        recomputeGenreFacets();
+        // Re-apply labels to already-loaded genre facets (if any)
+        if (genreFacets.value.length) {
+            genreFacets.value = genreFacets.value.map((f) => ({
+                ...f,
+                label: resolveGenreLabel(f.genre)
+            }));
+        }
     }
 
     function setProgress(next) {
@@ -393,34 +201,11 @@ export const useLibraryState = createGlobalState(() => {
         pagedBooks.value = filteredBooks.value.slice(startIndex, startIndex + RESULTS_PAGE_SIZE);
     }
 
-    function applyGenreFilters() {
-        if (!selectedGenres.value.length) {
-            filteredBooks.value = searchMatchedBooks.value;
-            return;
-        }
-
-        const uniqueBooks = new Map<string, any>();
-        for (let i = 0; i < selectedGenres.value.length; i += 1) {
-            const code = selectedGenres.value[i];
-            const booksForCode = genreBooksByCode.value.get(code) ?? [];
-            for (let j = 0; j < booksForCode.length; j += 1) {
-                const book = booksForCode[j];
-                const key = `${book?.id ?? ""}|${book?.file ?? ""}|${book?.archiveFile ?? ""}`;
-                if (!uniqueBooks.has(key)) {
-                    uniqueBooks.set(key, book);
-                }
-            }
-        }
-
-        filteredBooks.value = Array.from(uniqueBooks.values());
-    }
-
     watch([filteredBooks, currentPage], () => {
         if (currentPage.value > totalPages.value) {
             currentPage.value = totalPages.value;
             return;
         }
-
         updatePagedBooks();
     }, { immediate: true });
 
@@ -429,51 +214,38 @@ export const useLibraryState = createGlobalState(() => {
         await refreshSearchResults();
     });
 
-    watch(selectedGenres, () => {
+    watch(selectedGenres, async () => {
         currentPage.value = 1;
-        applyGenreFilters();
+        await refreshSearchResults();
     }, { deep: true });
 
     watch(() => indexProgress.phase, async (phase) => {
-        if (phase === "ready" && searchTerm.value.trim()) {
+        if (phase === "ready") {
             await refreshSearchResults();
         }
     });
 
     watch(localeRef, async () => {
         await ensureGenreLabelsLoaded();
-        recomputeGenreFacets();
-        applyGenreFilters();
+        if (indexProgress.phase === "ready") {
+            await loadAllGenres();
+        }
     });
 
     async function refreshSearchResults() {
+        if (indexProgress.phase !== "ready") return;
+
         const term = searchTerm.value.trim();
-        const normalizedTerm = normalizeSearchText(term).trim();
-
-        if (!term) {
-            activeSearchRequestId += 1;
-            searchMatchedBooks.value = books.value;
-            recomputeGenreFacets();
-            applyGenreFilters();
-            return;
-        }
-
-        if (indexProgress.phase !== "ready") {
-            return;
-        }
-
+        const genres = selectedGenres.value;
         const requestId = ++searchRequestId;
-        activeSearchRequestId = requestId;
-        let matches = await searchWorkerClient.search(term, requestId, SEARCH_RESULTS_LIMIT);
 
-        if (!matches.length && normalizedTerm) {
-            matches = await findLocalSearchMatches(books.value, normalizedTerm, SEARCH_RESULTS_LIMIT);
-        }
+        const matches = await searchWorkerClient.search(term, requestId, SEARCH_RESULTS_LIMIT, genres);
 
-        if (requestId !== activeSearchRequestId) return;
+        // Discard if a newer search has started
+        if (requestId !== searchRequestId) return;
+
         searchMatchedBooks.value = matches;
-        recomputeGenreFacets();
-        applyGenreFilters();
+        filteredBooks.value = matches;
     }
 
     function clearGenreFilters() {
@@ -492,165 +264,7 @@ export const useLibraryState = createGlobalState(() => {
         selectedGenres.value = [...selectedGenres.value, normalizedGenre];
     }
 
-    async function applyBooks(payload, fromCache, { tryRestore = false } = {}) {
-        metadata.value = payload.metadata ?? null;
-        const parserNormalizedBooks = payload?.booksNormalized === true;
-        books.value = normalizeBooksGenres(payload.books ?? [], { alreadyNormalized: parserNormalizedBooks });
-        booksNormalizedForCache = true;
-        searchMatchedBooks.value = searchTerm.value.trim() ? [] : books.value;
-        clearGenreFilters();
-        recomputeGenreFacets();
-        applyGenreFilters();
-        currentPage.value = 1;
-
-        const datasetSignature = resolveDatasetSignature({
-            ...payload,
-            books: books.value
-        });
-
-        if (tryRestore && magnetHash.value) {
-            status.value = t("status.cachedLibraryRestoring");
-
-            const restoreResult = await searchWorkerClient.restoreIndex({
-                books: books.value,
-                hash: magnetHash.value,
-                signature: datasetSignature
-            });
-
-            if (restoreResult?.restored) {
-                hasCache.value = fromCache;
-                setProgress({
-                    phase: "ready",
-                    processed: books.value.length,
-                    total: books.value.length,
-                    percent: 100,
-                    downloadedBytes: 0,
-                    totalBytes: null
-                });
-                status.value = t("status.loadedFromCache");
-                await refreshSearchResults();
-                return { datasetSignature, restored: true };
-            }
-
-            status.value = restoreResult?.reason === "stale"
-                ? t("status.cachedIndexStale")
-                : t("status.cachedIndexMissing");
-        }
-
-        setProgress({
-            phase: "indexing",
-            processed: 0,
-            total: books.value.length,
-            percent: 0,
-            downloadedBytes: 0,
-            totalBytes: null
-        });
-        status.value = t("status.buildingIndexInit", { total: books.value.length });
-
-        await searchWorkerClient.buildIndex(books.value, {
-            hash: magnetHash.value,
-            signature: datasetSignature
-        });
-
-        hasCache.value = fromCache;
-        setProgress({
-            phase: "ready",
-            processed: books.value.length,
-            total: books.value.length,
-            percent: 100,
-            downloadedBytes: 0,
-            totalBytes: null
-        });
-        status.value = fromCache ? t("status.loadedFromCache") : t("status.libraryIndexed");
-
-        await refreshSearchResults();
-        return { datasetSignature, restored: false };
-    }
-
-    async function cachePayload(hash, payload, datasetSignature) {
-        const cacheBooks = createCacheBooksSnapshot(books.value, { alreadyNormalized: booksNormalizedForCache });
-        const cacheMetadata = payload?.metadata && typeof payload.metadata === "object"
-            ? { ...payload.metadata }
-            : (payload?.metadata ?? null);
-
-        await libraryCacheStore.save({
-            hash,
-            magnetUri: magnetUri.value,
-            metadata: cacheMetadata,
-            books: cacheBooks,
-            booksNormalized: true,
-            indexMeta: {
-                ...(payload.indexMeta ?? {}),
-                count: cacheBooks.length,
-                cachedAt: new Date().toISOString(),
-                datasetSignature
-            }
-        });
-    }
-
-    async function fetchBooksViaInpx({ reindexing = false } = {}) {
-        setProgress({
-            phase: "loading-backend",
-            processed: 0,
-            total: 0,
-            percent: 0,
-            downloadedBytes: 0,
-            totalBytes: null
-        });
-        status.value = reindexing
-            ? t("status.reindexDownloading")
-            : t("status.loadingDownloading");
-
-        const inpxBuffer = await apiClient.fetchInpx(magnetUri.value, ({ downloadedBytes, totalBytes, percent }) => {
-            setProgress({
-                phase: "loading-backend",
-                downloadedBytes,
-                totalBytes,
-                percent: percent ?? 0
-            });
-
-            if (totalBytes) {
-                status.value = t("status.downloadingInpxTotal", {
-                    downloaded: formatMegabytes(downloadedBytes),
-                    total: formatMegabytes(totalBytes),
-                    percent: percent ?? 0
-                });
-                return;
-            }
-
-            status.value = t("status.downloadingInpxSimple", { downloaded: formatMegabytes(downloadedBytes) });
-        });
-
-        setProgress({
-            phase: "parsing",
-            processed: 0,
-            total: 0,
-            percent: 0,
-            downloadedBytes: 0,
-            totalBytes: null
-        });
-        status.value = t("status.inpxDownloadedParsing");
-
-        return parseInpxWithWorker(inpxBuffer, (progress) => {
-            setProgress({
-                phase: "parsing",
-                processed: progress.processed ?? 0,
-                total: progress.total ?? 0,
-                percent: progress.percent ?? 0,
-                downloadedBytes: 0,
-                totalBytes: null
-            });
-
-            const total = progress.total ?? 0;
-            const processed = progress.processed ?? 0;
-            const percent = progress.percent ?? 0;
-            status.value = total
-                ? t("status.parsingWithTotal", { processed, total, percent })
-                : t("status.parsingSimple", { percent });
-        });
-    }
-
-    async function fetchAndApply({ reindexing = false } = {}) {
+    async function fetchAndBuild({ reindexing = false } = {}) {
         if (!magnetUri.value || !magnetHash.value) return;
 
         error.value = "";
@@ -658,27 +272,35 @@ export const useLibraryState = createGlobalState(() => {
         isReindexing.value = reindexing;
 
         try {
-            const payload = await fetchBooksViaInpx({ reindexing });
+            // Step 1: Download INPX
+            setProgress({ phase: "loading-backend", processed: 0, total: 0, percent: 0, downloadedBytes: 0, totalBytes: null });
+            status.value = reindexing ? t("status.reindexDownloading") : t("status.loadingDownloading");
 
-            status.value = t("status.libraryDataLoadedBuilding");
-            const { datasetSignature } = await applyBooks(payload, false);
-            await cachePayload(magnetHash.value, payload, datasetSignature);
-            lastUpdatedAt.value = new Date().toLocaleString();
-        } catch (err) {
-            setProgress({
-                phase: "error",
-                processed: 0,
-                total: 0,
-                percent: 0,
-                downloadedBytes: 0,
-                totalBytes: null
+            const inpxBuffer = await apiClient.fetchInpx(magnetUri.value, ({ downloadedBytes, totalBytes, percent }) => {
+                setProgress({ phase: "loading-backend", downloadedBytes, totalBytes, percent: percent ?? 0 });
+                status.value = totalBytes
+                    ? t("status.downloadingInpxTotal", { downloaded: formatMegabytes(downloadedBytes), total: formatMegabytes(totalBytes), percent: percent ?? 0 })
+                    : t("status.downloadingInpxSimple", { downloaded: formatMegabytes(downloadedBytes) });
             });
-            status.value = reindexing
-                ? t("status.reindexFailed")
-                : t("status.loadFailed");
-            error.value = err instanceof Error
-                ? err.message
-                : t("error.inpxLoadFailed");
+
+            // Step 2: Transfer buffer to worker — parse + index + persist, no books on main thread
+            status.value = t("status.inpxDownloadedParsing");
+            const buildResult: any = await searchWorkerClient.parseAndBuild(inpxBuffer, { hash: magnetHash.value });
+
+            metadata.value = buildResult?.metadata ?? null;
+            totalBooks.value = buildResult?.total ?? 0;
+            lastUpdatedAt.value = new Date().toLocaleString();
+            hasCache.value = false;
+
+            setProgress({ phase: "ready", processed: totalBooks.value, total: totalBooks.value, percent: 100, downloadedBytes: 0, totalBytes: null });
+            status.value = t("status.libraryIndexed");
+
+            await loadAllGenres();
+            await refreshSearchResults();
+        } catch (err) {
+            setProgress({ phase: "error", processed: 0, total: 0, percent: 0, downloadedBytes: 0, totalBytes: null });
+            status.value = reindexing ? t("status.reindexFailed") : t("status.loadFailed");
+            error.value = err instanceof Error ? err.message : t("error.inpxLoadFailed");
             throw err;
         } finally {
             isLoading.value = false;
@@ -689,23 +311,26 @@ export const useLibraryState = createGlobalState(() => {
     async function loadLibraryForCurrentMagnet() {
         if (!magnetHash.value) return;
 
-        setProgress({
-            phase: "loading-cache",
-            processed: 0,
-            total: 0,
-            percent: 0,
-            downloadedBytes: 0,
-            totalBytes: null
-        });
-        status.value = t("status.loadingCache");
-        const cached = await libraryCacheStore.getByHash(magnetHash.value);
-        if (cached?.books?.length) {
-            await applyBooks(cached, true, { tryRestore: true });
-            lastUpdatedAt.value = cached.updatedAt ? new Date(cached.updatedAt).toLocaleString() : "";
+        setProgress({ phase: "loading-cache", processed: 0, total: 0, percent: 0, downloadedBytes: 0, totalBytes: null });
+        status.value = t("status.cachedLibraryRestoring");
+
+        // Fast path: restore index + books from worker's own IDB — no book array ever on main thread
+        const restoreResult = await searchWorkerClient.restoreIndex({ hash: magnetHash.value });
+
+        if (restoreResult?.restored) {
+            metadata.value = restoreResult.metadata ?? null;
+            totalBooks.value = restoreResult.total ?? 0;
+            lastUpdatedAt.value = restoreResult.persistedAt ? new Date(restoreResult.persistedAt).toLocaleString() : "";
+            hasCache.value = true;
+            setProgress({ phase: "ready", processed: totalBooks.value, total: totalBooks.value, percent: 100, downloadedBytes: 0, totalBytes: null });
+            status.value = t("status.loadedFromCache");
+            await loadAllGenres();
+            await refreshSearchResults();
             return;
         }
 
-        await fetchAndApply();
+        // Slow path: download + parse + build
+        await fetchAndBuild();
     }
 
     async function submitMagnet(uri) {
@@ -792,13 +417,9 @@ export const useLibraryState = createGlobalState(() => {
         });
 
         try {
-            await Promise.all([
-                libraryCacheStore.removeByHash(magnetHash.value),
-                searchWorkerClient.clearPersistedIndex(magnetHash.value)
-            ]);
-
+            await searchWorkerClient.clearPersistedIndex(magnetHash.value);
             status.value = t("status.localCacheCleared");
-            await fetchAndApply({ reindexing: true });
+            await fetchAndBuild({ reindexing: true });
         } catch (err) {
             error.value = err instanceof Error ? err.message : t("error.reindexFailed");
             status.value = t("status.reindexTryAgain");
@@ -809,7 +430,6 @@ export const useLibraryState = createGlobalState(() => {
         const hashToClear = magnetHash.value;
 
         magnetStore.clear();
-        await libraryCacheStore.clearAll();
 
         if (hashToClear) {
             await searchWorkerClient.clearPersistedIndex(hashToClear);
@@ -818,8 +438,7 @@ export const useLibraryState = createGlobalState(() => {
         magnetUri.value = "";
         magnetHash.value = "";
         metadata.value = null;
-        books.value = [];
-        booksNormalizedForCache = false;
+        totalBooks.value = 0;
         searchMatchedBooks.value = [];
         filteredBooks.value = [];
         pagedBooks.value = [];
@@ -876,7 +495,7 @@ export const useLibraryState = createGlobalState(() => {
         magnetUri,
         magnetHash,
         metadata,
-        books,
+        totalBooks,
         searchMatchedBooks,
         filteredBooks,
         pagedBooks,

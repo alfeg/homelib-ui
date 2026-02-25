@@ -1,42 +1,24 @@
 import type { BookRecord } from "../types/library";
 import SearchIndexWorker from "../workers/searchIndex.worker.ts?worker";
 
-function toStructuredCloneableBooks(books: BookRecord[]) {
-  const input = Array.isArray(books) ? books : [];
-
-  try {
-    return JSON.parse(JSON.stringify(input));
-  } catch {
-    return input.map((book) => {
-      if (!book || typeof book !== "object") {
-        return book;
-      }
-
-      try {
-        return JSON.parse(JSON.stringify(book));
-      } catch {
-        return {
-          id: book.id,
-          title: book.title,
-          authors: book.authors,
-          series: book.series,
-          lang: book.lang,
-          file: book.file
-        };
-      }
-    });
-  }
-}
-
 export function createSearchWorkerClient({ onProgress, onError }: { onProgress?: (payload: any) => void; onError?: (error: Error) => void } = {}) {
   const worker = new SearchIndexWorker({ type: "module" });
   const pendingSearches = new Map<number, (books: BookRecord[]) => void>();
   let pendingBuild: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null;
   let pendingRestore: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null;
   let pendingClear: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null;
+  let pendingGetGenres: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null;
 
   worker.onmessage = (event) => {
     const message = event?.data ?? {};
+
+    if (message.type === "build-error") {
+      const err = new Error(message.message || "Index build failed.");
+      pendingBuild?.reject(err);
+      pendingBuild = null;
+      onError?.(err);
+      return;
+    }
 
     if (message.type === "build-progress") {
       onProgress?.(message.payload ?? {});
@@ -68,6 +50,12 @@ export function createSearchWorkerClient({ onProgress, onError }: { onProgress?:
       return;
     }
 
+    if (message.type === "genres-result") {
+      pendingGetGenres?.resolve(message.payload?.genres ?? []);
+      pendingGetGenres = null;
+      return;
+    }
+
     if (message.type === "search-result") {
       const requestId = Number(message.payload?.requestId);
       if (!pendingSearches.has(requestId)) return;
@@ -83,12 +71,12 @@ export function createSearchWorkerClient({ onProgress, onError }: { onProgress?:
 
     pendingBuild?.reject(err);
     pendingBuild = null;
-
     pendingRestore?.reject(err);
     pendingRestore = null;
-
     pendingClear?.reject(err);
     pendingClear = null;
+    pendingGetGenres?.reject(err);
+    pendingGetGenres = null;
 
     pendingSearches.forEach((resolve) => resolve([]));
     pendingSearches.clear();
@@ -97,26 +85,24 @@ export function createSearchWorkerClient({ onProgress, onError }: { onProgress?:
   };
 
   return {
-    buildIndex(books: BookRecord[], { hash = "", signature = "", batchSize }: { hash?: string; signature?: string; batchSize?: number } = {}) {
+    parseAndBuild(buffer: ArrayBuffer, { hash = "", batchSize }: { hash?: string; batchSize?: number } = {}) {
       if (pendingBuild) {
         pendingBuild.reject(new Error("Index build interrupted by a new build request."));
       }
 
       return new Promise((resolve, reject) => {
-        const cloneableBooks = toStructuredCloneableBooks(books);
         pendingBuild = { resolve, reject };
-        worker.postMessage({ type: "build", books: cloneableBooks, hash, signature, batchSize });
+        worker.postMessage({ type: "parse-and-build", buffer, hash, batchSize }, [buffer]);
       });
     },
-    restoreIndex({ books, hash = "", signature = "" }: { books: BookRecord[]; hash?: string; signature?: string }) {
+    restoreIndex({ hash = "", signature = "" }: { hash?: string; signature?: string } = {}) {
       if (pendingRestore) {
         pendingRestore.reject(new Error("Index restore interrupted by a new restore request."));
       }
 
       return new Promise((resolve, reject) => {
-        const cloneableBooks = toStructuredCloneableBooks(books);
         pendingRestore = { resolve, reject };
-        worker.postMessage({ type: "restore", books: cloneableBooks, hash, signature });
+        worker.postMessage({ type: "restore", hash, signature });
       });
     },
     clearPersistedIndex(hash: string) {
@@ -129,10 +115,16 @@ export function createSearchWorkerClient({ onProgress, onError }: { onProgress?:
         worker.postMessage({ type: "clear-persisted", hash });
       });
     },
-    search(term: string, requestId: number, limit = 1000) {
+    getGenres() {
+      return new Promise<{ genre: string; count: number }[]>((resolve, reject) => {
+        pendingGetGenres = { resolve, reject };
+        worker.postMessage({ type: "get-genres" });
+      });
+    },
+    search(term: string, requestId: number, limit = 1000, genres: string[] = []) {
       return new Promise<BookRecord[]>((resolve) => {
         pendingSearches.set(requestId, resolve);
-        worker.postMessage({ type: "search", term, requestId, limit });
+        worker.postMessage({ type: "search", term, requestId, limit, genres: genres.length ? [...genres] : undefined });
       });
     }
   };

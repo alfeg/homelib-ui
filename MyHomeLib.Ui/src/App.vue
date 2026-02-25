@@ -31,7 +31,7 @@ const {
   toggleGenreFilter,
   clearGenreFilters,
   searchTerm,
-  books,
+  totalBooks,
   filteredBooks,
   pagedBooks,
   downloadingById,
@@ -105,7 +105,7 @@ onMounted(() => {
           <SearchBar
             :model-value="searchTerm"
             @update:model-value="onSearchTermChange"
-            :total="books.length"
+            :total="totalBooks"
             :filtered="filteredBooks.length"
           />
 

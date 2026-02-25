@@ -1,4 +1,5 @@
 import { Document as FlexDocument } from "flexsearch";
+import { parseInpxBuffer } from "./inpxParser";
 
 const DEFAULT_INDEX_BATCH_SIZE = 1024;
 const MIN_INDEX_BATCH_SIZE = 500;
@@ -7,13 +8,16 @@ const BATCH_YIELD_DELAY_MS = 0;
 const PERSISTENCE_DB_NAME = "myhomelib-search-index-cache";
 const PERSISTENCE_STORE_NAME = "indexes";
 const PERSISTENCE_DB_VERSION = 1;
+const LIBRARY_CACHE_DB_NAME = "myhomelib-library-cache";
+const LIBRARY_CACHE_STORE_NAME = "libraries";
+const LIBRARY_CACHE_DB_VERSION = 1;
 
 let index = null;
 let booksById = new Map();
-let searchableTextById = new Map();
 let activeHash = "";
 let activeSignature = "";
 let persistenceDbPromise = null;
+let libraryCacheDbPromise = null;
 
 function normalizeSearchValue(value) {
     return String(value ?? "")
@@ -77,7 +81,7 @@ async function readPersistedIndex(hash) {
     });
 }
 
-async function writePersistedIndex(hash, signature, chunks, total) {
+async function writePersistedIndex(hash, signature, chunks, total, metadata) {
     const db = await openPersistenceDb();
 
     return new Promise((resolve, reject) => {
@@ -87,11 +91,74 @@ async function writePersistedIndex(hash, signature, chunks, total) {
             signature,
             chunks,
             total,
+            metadata: metadata ?? null,
             updatedAt: new Date().toISOString()
         });
 
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error ?? new Error("Failed to persist search index."));
+    });
+}
+
+function openLibraryCacheDb() {
+    if (libraryCacheDbPromise) {
+        return libraryCacheDbPromise;
+    }
+
+    libraryCacheDbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(LIBRARY_CACHE_DB_NAME, LIBRARY_CACHE_DB_VERSION);
+
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(LIBRARY_CACHE_STORE_NAME)) {
+                db.createObjectStore(LIBRARY_CACHE_STORE_NAME, { keyPath: "hash" });
+            }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("Failed to open library cache DB."));
+    });
+
+    return libraryCacheDbPromise;
+}
+
+async function readPersistedLibraryBooks(hash) {
+    const db = await openLibraryCacheDb();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(LIBRARY_CACHE_STORE_NAME, "readonly");
+        const request = tx.objectStore(LIBRARY_CACHE_STORE_NAME).get(hash);
+
+        request.onsuccess = () => {
+            const record = request.result ?? null;
+            const books = Array.isArray(record?.books) ? record.books : [];
+            resolve(books);
+        };
+        request.onerror = () => reject(request.error ?? new Error("Failed to read library books from cache DB."));
+    });
+}
+
+async function writePersistedLibraryBooks(hash, books) {
+    const db = await openLibraryCacheDb();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(LIBRARY_CACHE_STORE_NAME, "readwrite");
+        tx.objectStore(LIBRARY_CACHE_STORE_NAME).put({ hash, books });
+
+        tx.oncomplete = () => resolve(undefined);
+        tx.onerror = () => reject(tx.error ?? new Error("Failed to write library books to cache."));
+    });
+}
+
+async function deletePersistedLibraryBooks(hash) {
+    const db = await openLibraryCacheDb();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(LIBRARY_CACHE_STORE_NAME, "readwrite");
+        tx.objectStore(LIBRARY_CACHE_STORE_NAME).delete(hash);
+
+        tx.oncomplete = () => resolve(undefined);
+        tx.onerror = () => reject(tx.error ?? new Error("Failed to delete library books from cache."));
     });
 }
 
@@ -131,7 +198,6 @@ async function importIndex(targetIndex, chunks) {
 function resetInMemoryIndex() {
     index = null;
     booksById = new Map();
-    searchableTextById = new Map();
     activeHash = "";
     activeSignature = "";
 }
@@ -190,11 +256,11 @@ self.onmessage = async (event) => {
         const hash = typeof message.hash === "string" ? message.hash : "";
         const signature = typeof message.signature === "string" ? message.signature : "";
         const batchSize = resolveBatchSize(message.batchSize);
+        const indexMetadata = message.metadata ?? null;
         const total = books.length;
 
         index = createIndex();
         booksById = new Map();
-        searchableTextById = new Map();
         activeHash = hash;
         activeSignature = signature;
 
@@ -232,7 +298,6 @@ self.onmessage = async (event) => {
                 const id = String(book.id);
                 const content = toSearchText(book);
                 booksById.set(id, book);
-                searchableTextById.set(id, content);
                 batchDocuments.push({
                     id,
                     content
@@ -260,7 +325,7 @@ self.onmessage = async (event) => {
         if (hash && signature) {
             try {
                 const chunks = await exportIndex(index);
-                await writePersistedIndex(hash, signature, chunks, total);
+                await writePersistedIndex(hash, signature, chunks, total, indexMetadata);
                 persisted = true;
             } catch (err) {
                 persistenceError = err instanceof Error ? err.message : "Failed to persist index.";
@@ -280,11 +345,10 @@ self.onmessage = async (event) => {
     }
 
     if (message.type === "restore") {
-        const books = Array.isArray(message.books) ? message.books : [];
         const hash = typeof message.hash === "string" ? message.hash : "";
         const signature = typeof message.signature === "string" ? message.signature : "";
 
-        if (!hash || !signature) {
+        if (!hash) {
             self.postMessage({
                 type: "restore-complete",
                 payload: {
@@ -308,7 +372,7 @@ self.onmessage = async (event) => {
                 return;
             }
 
-            if (persisted.signature !== signature) {
+            if (signature && persisted.signature !== signature) {
                 self.postMessage({
                     type: "restore-complete",
                     payload: {
@@ -321,10 +385,20 @@ self.onmessage = async (event) => {
 
             const restoredIndex = createIndex();
             await importIndex(restoredIndex, persisted.chunks);
+            const persistedBooks = await readPersistedLibraryBooks(hash);
+            if (!persistedBooks.length) {
+                self.postMessage({
+                    type: "restore-complete",
+                    payload: {
+                        restored: false,
+                        reason: "missing-books"
+                    }
+                });
+                return;
+            }
 
             index = restoredIndex;
-            booksById = new Map(books.map((book) => [String(book.id), book]));
-            searchableTextById = new Map(books.map((book) => [String(book.id), toSearchText(book)]));
+            booksById = new Map(persistedBooks.map((book) => [String(book.id), book]));
             activeHash = hash;
             activeSignature = signature;
 
@@ -332,8 +406,9 @@ self.onmessage = async (event) => {
                 type: "restore-complete",
                 payload: {
                     restored: true,
-                    total: persisted.total ?? books.length,
-                    persistedAt: persisted.updatedAt ?? ""
+                    total: persisted.total ?? persistedBooks.length,
+                    persistedAt: persisted.updatedAt ?? "",
+                    metadata: persisted.metadata ?? null
                 }
             });
         } catch (err) {
@@ -365,7 +440,10 @@ self.onmessage = async (event) => {
         }
 
         try {
-            await deletePersistedIndex(hash);
+            await Promise.all([
+                deletePersistedIndex(hash),
+                deletePersistedLibraryBooks(hash)
+            ]);
 
             if (activeHash === hash) {
                 resetInMemoryIndex();
@@ -391,46 +469,150 @@ self.onmessage = async (event) => {
         return;
     }
 
-    if (message.type === "search") {
-        const requestId = message.requestId;
-        const term = typeof message.term === "string" ? normalizeSearchValue(message.term).trim() : "";
-        const limit = Number.isFinite(message.limit) ? message.limit : 1000;
+    if (message.type === "parse-and-build") {
+        const buffer = message.buffer;
+        const hash = typeof message.hash === "string" ? message.hash : "";
+        const batchSize = resolveBatchSize(message.batchSize);
 
-        if (!term || !index) {
+        index = createIndex();
+        booksById = new Map();
+        activeHash = hash;
+        activeSignature = "";
+
+        if (!buffer) {
             self.postMessage({
-                type: "search-result",
-                payload: {
-                    requestId,
-                    books: []
-                }
+                type: "build-complete",
+                payload: { total: 0, persisted: false, persistenceError: "No buffer provided." }
             });
             return;
         }
 
-        const rawResults = index.search(term, { limit });
-        let ids = extractSearchIds(rawResults);
+        try {
+            // Phase 1: Parse INPX in this worker — no main-thread round-trip
+            const { metadata, books, datasetSignature } = parseInpxBuffer(buffer, (phase, processed, total, percent) => {
+                self.postMessage({
+                    type: "build-progress",
+                    payload: { phase, processed, total, percent }
+                });
+            });
 
-        if (!ids.length) {
-            for (const [id, content] of searchableTextById) {
-                if (content.includes(term)) {
-                    ids.push(id);
-                    if (ids.length >= limit) {
-                        break;
+            // Phase 2: Build FlexSearch index
+            const total = books.length;
+
+            for (let start = 0; start < total; start += batchSize) {
+                const end = Math.min(start + batchSize, total);
+                const batchDocuments = [];
+
+                for (let i = start; i < end; i++) {
+                    const book = books[i];
+                    const id = String(book.id);
+                    booksById.set(id, book);
+                    batchDocuments.push({ id, content: toSearchText(book) });
+                }
+
+                await addBatchToIndexAsync(index, batchDocuments);
+
+                self.postMessage({
+                    type: "build-progress",
+                    payload: {
+                        phase: "indexing",
+                        processed: end,
+                        total,
+                        percent: Math.round((end / total) * 100)
+                    }
+                });
+
+                await new Promise((resolve) => setTimeout(resolve, BATCH_YIELD_DELAY_MS));
+            }
+
+            // Phase 3: Persist index chunks + books to IDB
+            let persisted = false;
+            let persistenceError = "";
+
+            if (hash) {
+                try {
+                    const chunks = await exportIndex(index);
+                    await Promise.all([
+                        writePersistedIndex(hash, datasetSignature, chunks, total, metadata),
+                        writePersistedLibraryBooks(hash, books)
+                    ]);
+                    persisted = true;
+                    activeSignature = datasetSignature;
+                } catch (err) {
+                    persistenceError = err instanceof Error ? err.message : "Failed to persist index.";
+                }
+            }
+
+            self.postMessage({
+                type: "build-complete",
+                payload: { total, metadata, datasetSignature, persisted, persistenceError }
+            });
+        } catch (err) {
+            resetInMemoryIndex();
+            self.postMessage({
+                type: "build-error",
+                message: err instanceof Error ? err.message : "Failed to parse and build index."
+            });
+        }
+
+        return;
+    }
+
+    if (message.type === "search") {
+        const requestId = message.requestId;
+        const term = typeof message.term === "string" ? normalizeSearchValue(message.term).trim() : "";
+        const limit = Number.isFinite(message.limit) ? message.limit : 1000;
+        const genres = Array.isArray(message.genres) && message.genres.length ? message.genres : null;
+
+        if (!index) {
+            self.postMessage({ type: "search-result", payload: { requestId, books: [] } });
+            return;
+        }
+
+        let books;
+
+        if (!term) {
+            // No query — return first N books, optionally filtered by genre
+            books = [];
+            for (const book of booksById.values()) {
+                if (genres && !book.genreCodes?.some((c) => genres.includes(c))) continue;
+                books.push(book);
+                if (books.length >= limit) break;
+            }
+        } else {
+            const rawResults = index.search(term, { limit });
+            const ids = extractSearchIds(rawResults);
+            books = ids.map((id) => booksById.get(String(id))).filter(Boolean);
+
+            if (!books.length) {
+                for (const book of booksById.values()) {
+                    if (toSearchText(book).includes(term)) {
+                        books.push(book);
+                        if (books.length >= limit) break;
                     }
                 }
             }
+
+            if (genres) {
+                books = books.filter((book) => book.genreCodes?.some((c) => genres.includes(c)));
+            }
         }
 
-        const books = ids
-            .map((id) => booksById.get(String(id)))
-            .filter(Boolean);
+        self.postMessage({ type: "search-result", payload: { requestId, books } });
+        return;
+    }
 
-        self.postMessage({
-            type: "search-result",
-            payload: {
-                requestId,
-                books
+    if (message.type === "get-genres") {
+        const genreCounts = new Map();
+        for (const book of booksById.values()) {
+            const codes = Array.isArray(book.genreCodes) && book.genreCodes.length
+                ? book.genreCodes
+                : ["__no_genre__"];
+            for (const code of codes) {
+                genreCounts.set(code, (genreCounts.get(code) ?? 0) + 1);
             }
-        });
+        }
+        const genres = Array.from(genreCounts.entries()).map(([genre, count]) => ({ genre, count }));
+        self.postMessage({ type: "genres-result", payload: { genres } });
     }
 };
