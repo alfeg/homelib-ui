@@ -17,7 +17,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Api", policy => policy
         .AllowAnyOrigin()
         .AllowAnyMethod()
-        .AllowAnyHeader()));
+        .AllowAnyHeader()
+        .WithExposedHeaders("Content-Disposition")));
 
 if (builder.Environment.IsDevelopment())
 {
