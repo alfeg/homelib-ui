@@ -35,6 +35,10 @@ const {
     selectedGenres,
     toggleGenreFilter,
     clearGenreFilters,
+    selectedYearFrom,
+    selectedYearTo,
+    availableYearRange,
+    clearYearFilter,
     searchTerm,
     totalBooks,
     filteredBooks,
@@ -108,10 +112,16 @@ onMounted(() => {
 
             <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[420px_1fr]">
                 <GenreSidebar
+                    :availableYearRange="availableYearRange"
                     :genres="genreFacets"
                     :selectedGenres="selectedGenres"
+                    :yearFrom="selectedYearFrom"
+                    :yearTo="selectedYearTo"
                     @clear="clearGenreFilters"
+                    @clearYear="clearYearFilter"
                     @toggle="toggleGenreFilter"
+                    @yearFrom="(v) => (selectedYearFrom = v)"
+                    @yearTo="(v) => (selectedYearTo = v)"
                 />
 
                 <div class="card bg-base-100 border-base-300 min-w-0 border p-4 shadow-sm">

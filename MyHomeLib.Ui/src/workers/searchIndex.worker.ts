@@ -215,10 +215,12 @@ function computeFacets(books) {
     return Array.from(counts.entries()).map(([genre, count]) => ({ genre, count }))
 }
 
-function searchBooks(term, page, pageSize, genres) {
-    if (!index) return { books: [], total: 0, genres: [] }
+function searchBooks(term, page, pageSize, genres, yearFrom, yearTo) {
+    if (!index) return { books: [], total: 0, genres: [], yearRange: null }
     const hasTerm = term.trim().length > 0
     const genreFilter = genres && genres.length ? genres : null
+    const hasYearFrom = typeof yearFrom === "number" && Number.isFinite(yearFrom)
+    const hasYearTo = typeof yearTo === "number" && Number.isFinite(yearTo)
 
     // Text search — BM25-ranked, AND across all tokens, prefix matching
     let termMatched
@@ -232,6 +234,18 @@ function searchBooks(term, page, pageSize, genres) {
     // Stable genre facets from the pre-filter result set
     const resultGenres = computeFacets(termMatched)
 
+    // Compute year range from the term-matched set
+    let minYear = Infinity
+    let maxYear = -Infinity
+    for (const book of termMatched) {
+        const y = book.date ? parseInt(book.date.slice(0, 4), 10) : NaN
+        if (!isNaN(y) && y > 1000) {
+            if (y < minYear) minYear = y
+            if (y > maxYear) maxYear = y
+        }
+    }
+    const yearRange = minYear <= maxYear ? { min: minYear, max: maxYear } : null
+
     // Genre filter — JS post-filter (OR across selected genres)
     let matched
     if (!genreFilter) {
@@ -242,9 +256,20 @@ function searchBooks(term, page, pageSize, genres) {
         )
     }
 
+    // Year filter
+    if (hasYearFrom || hasYearTo) {
+        matched = matched.filter((book) => {
+            const y = book.date ? parseInt(book.date.slice(0, 4), 10) : NaN
+            if (isNaN(y)) return false
+            if (hasYearFrom && y < yearFrom) return false
+            if (hasYearTo && y > yearTo) return false
+            return true
+        })
+    }
+
     const total = matched.length
     const start = (page - 1) * pageSize
-    return { books: matched.slice(start, start + pageSize), total, genres: resultGenres }
+    return { books: matched.slice(start, start + pageSize), total, genres: resultGenres, yearRange }
 }
 
 self.onmessage = async (event) => {
@@ -438,12 +463,14 @@ self.onmessage = async (event) => {
     }
 
     if (message.type === "search") {
-        const { requestId, term, page, pageSize, genres } = message
+        const { requestId, term, page, pageSize, genres, yearFrom, yearTo } = message
         const result = searchBooks(
             typeof term === "string" ? term : "",
             typeof page === "number" ? page : 1,
             typeof pageSize === "number" ? pageSize : 30,
             Array.isArray(genres) ? genres : [],
+            typeof yearFrom === "number" ? yearFrom : undefined,
+            typeof yearTo === "number" ? yearTo : undefined,
         )
         self.postMessage({ type: "search-result", requestId, payload: result })
         return

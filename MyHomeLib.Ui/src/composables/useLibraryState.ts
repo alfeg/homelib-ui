@@ -59,6 +59,9 @@ export const useLibraryState = createGlobalState(() => {
     const genreFacets = ref([])
     const genreLabelByCode = ref(new Map())
     const searchTerm = ref("")
+    const selectedYearFrom = ref<number | null>(null)
+    const selectedYearTo = ref<number | null>(null)
+    const availableYearRange = ref<{ min: number; max: number } | null>(null)
     const isLoading = ref(false)
     const isReindexing = ref(false)
     const workerReady = ref(false)
@@ -229,6 +232,11 @@ export const useLibraryState = createGlobalState(() => {
         { deep: true },
     )
 
+    watch([selectedYearFrom, selectedYearTo], () => {
+        currentPage.value = 1
+        refreshSearchResults()
+    })
+
     watch(currentPage, () => {
         refreshSearchResults()
     })
@@ -252,6 +260,8 @@ export const useLibraryState = createGlobalState(() => {
                 page,
                 pageSize: RESULTS_PAGE_SIZE,
                 genres,
+                yearFrom: selectedYearFrom.value ?? undefined,
+                yearTo: selectedYearTo.value ?? undefined,
             })
             if (reqId !== searchRequestId) return // superseded
             console.debug(
@@ -260,6 +270,7 @@ export const useLibraryState = createGlobalState(() => {
             filteredBooks.value = result.books
             totalFilteredBooks.value = result.total
             applyGenreLabels(result.genres)
+            if (result.yearRange) availableYearRange.value = result.yearRange
         } catch (err: any) {
             if (err?.superseded) return
             console.error("[search] error:", err)
@@ -268,6 +279,11 @@ export const useLibraryState = createGlobalState(() => {
 
     function clearGenreFilters() {
         selectedGenres.value = []
+    }
+
+    function clearYearFilter() {
+        selectedYearFrom.value = null
+        selectedYearTo.value = null
     }
 
     function toggleGenreFilter(genre) {
@@ -497,6 +513,9 @@ export const useLibraryState = createGlobalState(() => {
         genreFacets.value = []
         searchTerm.value = ""
         currentPage.value = 1
+        selectedYearFrom.value = null
+        selectedYearTo.value = null
+        availableYearRange.value = null
         status.value = ""
         error.value = ""
         hasCache.value = false
@@ -554,6 +573,9 @@ export const useLibraryState = createGlobalState(() => {
         genreFacets,
         hasGenreFilters,
         searchTerm,
+        selectedYearFrom,
+        selectedYearTo,
+        availableYearRange,
         isLoading,
         isReindexing,
         isMagnetSet,
@@ -580,6 +602,7 @@ export const useLibraryState = createGlobalState(() => {
         previousPage,
         toggleGenreFilter,
         clearGenreFilters,
+        clearYearFilter,
         formatBookGenres,
     }
 })

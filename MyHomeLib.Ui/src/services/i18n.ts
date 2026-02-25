@@ -46,6 +46,12 @@ const messages = {
             notFound: "Жанры не найдены.",
             noGenre: "Без жанра",
         },
+        yearRange: {
+            title: "Год издания",
+            from: "От",
+            to: "До",
+            reset: "Сбросить",
+        },
         table: {
             title: "Название",
             authors: "Авторы",
@@ -140,6 +146,12 @@ const messages = {
             total: "Total genres: {count}",
             notFound: "No genres found.",
             noGenre: "No genre",
+        },
+        yearRange: {
+            title: "Year",
+            from: "From",
+            to: "To",
+            reset: "Reset",
         },
         table: {
             title: "Title",

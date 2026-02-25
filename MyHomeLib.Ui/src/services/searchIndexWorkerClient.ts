@@ -17,12 +17,15 @@ export interface SearchQuery {
     page: number
     pageSize: number
     genres: string[]
+    yearFrom?: number
+    yearTo?: number
 }
 
 export interface SearchResult {
     books: BookRecord[]
     total: number
     genres: { genre: string; count: number }[]
+    yearRange?: { min: number; max: number } | null
 }
 
 export function createSearchWorkerClient({
