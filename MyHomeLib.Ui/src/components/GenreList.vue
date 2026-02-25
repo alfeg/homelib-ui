@@ -15,7 +15,7 @@ const { t } = useI18nState()
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1 flex-col">
+    <div class="flex max-h-120 min-h-0 flex-1 flex-col">
         <header class="mb-2 flex shrink-0 items-center justify-between gap-2">
             <h2 class="m-0 text-base font-semibold">{{ t("genres.title") }}</h2>
             <button

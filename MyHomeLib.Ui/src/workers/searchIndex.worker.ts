@@ -231,10 +231,7 @@ function searchBooks(term, page, pageSize, genres, yearFrom, yearTo) {
         termMatched = results.map((r) => booksById.get(String(r.id))).filter(Boolean)
     }
 
-    // Stable genre facets from the pre-filter result set
-    const resultGenres = computeFacets(termMatched)
-
-    // Compute year range from the term-matched set
+    // Compute year range from the full term-matched set (for slider bounds)
     let minYear = Infinity
     let maxYear = -Infinity
     for (const book of termMatched) {
@@ -246,25 +243,31 @@ function searchBooks(term, page, pageSize, genres, yearFrom, yearTo) {
     }
     const yearRange = minYear <= maxYear ? { min: minYear, max: maxYear } : null
 
-    // Genre filter — JS post-filter (OR across selected genres)
-    let matched
-    if (!genreFilter) {
-        matched = termMatched
-    } else {
-        matched = termMatched.filter(
-            (book) => Array.isArray(book.genreCodes) && book.genreCodes.some((c) => genreFilter.includes(c)),
-        )
-    }
-
-    // Year filter
+    // Year filter — applied before genre facets so counts reflect the selected range
+    let yearFiltered
     if (hasYearFrom || hasYearTo) {
-        matched = matched.filter((book) => {
+        yearFiltered = termMatched.filter((book) => {
             const y = book.date ? parseInt(book.date.slice(0, 4), 10) : NaN
             if (isNaN(y)) return false
             if (hasYearFrom && y < yearFrom) return false
             if (hasYearTo && y > yearTo) return false
             return true
         })
+    } else {
+        yearFiltered = termMatched
+    }
+
+    // Genre facets from the year-filtered set (stable across genre selection)
+    const resultGenres = computeFacets(yearFiltered)
+
+    // Genre filter — JS post-filter (OR across selected genres)
+    let matched
+    if (!genreFilter) {
+        matched = yearFiltered
+    } else {
+        matched = yearFiltered.filter(
+            (book) => Array.isArray(book.genreCodes) && book.genreCodes.some((c) => genreFilter.includes(c)),
+        )
     }
 
     const total = matched.length
