@@ -14,9 +14,17 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const isDragActive = ref(false)
 const { t, locale } = useI18nState()
 
+const LUCKY_MAGNET =
+    "magnet:?xt=urn:btih:F3B650F7CEF06DC01FF6B1AA3DFCDCBD88B78765&tr=http%3A%2F%2Fbt.booktracker.work%2Fann%3Fmagnet"
+
 const onSubmit = () => {
     if (props.loading) return
     emit("submit", magnetInput.value)
+}
+
+const onLucky = () => {
+    if (props.loading) return
+    emit("submit", LUCKY_MAGNET)
 }
 
 const openFilePicker = () => fileInput.value?.click()
@@ -91,6 +99,13 @@ const onLocaleToggle = (event: Event) => {
                     @click="openFilePicker"
                 >
                     {{ t("gate.chooseTorrent") }}
+                </button>
+                <button
+                    class="btn btn-outline"
+                    :disabled="loading"
+                    @click="onLucky"
+                >
+                    🍀 {{ t("gate.lucky") }}
                 </button>
             </div>
 

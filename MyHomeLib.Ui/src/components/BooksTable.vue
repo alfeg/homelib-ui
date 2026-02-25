@@ -52,7 +52,8 @@ const { t } = useI18nState()
                         <td>{{ book.lang || "—" }}</td>
                         <td>
                             <button
-                                class="btn btn-outline btn-primary btn-xs"
+                                class="btn btn-primary btn-xs"
+                                :class="downloadingById[String(book.id)] ? 'animate-pulse opacity-80' : 'btn-outline'"
                                 :disabled="downloadingById[String(book.id)]"
                                 @click="$emit('download', book)"
                             >

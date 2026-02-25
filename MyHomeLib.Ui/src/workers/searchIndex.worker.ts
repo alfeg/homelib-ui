@@ -260,8 +260,10 @@ function searchBooks(term, page, pageSize, genres) {
     if (!hasTerm) {
         termMatched = Array.from(booksById.values())
     } else {
-        const raw = index.search(SEARCH_FIELDS.map(field => ({ field, query: term, limit: MAX_SEARCH_IDS })))
-        termMatched = extractSearchIds(raw).map(id => booksById.get(id)).filter(Boolean)
+        const raw = index.search(SEARCH_FIELDS.map((field) => ({ field, query: term, limit: MAX_SEARCH_IDS })))
+        termMatched = extractSearchIds(raw)
+            .map((id) => booksById.get(id))
+            .filter(Boolean)
     }
 
     const resultGenres = computeFacets(termMatched)
@@ -271,10 +273,18 @@ function searchBooks(term, page, pageSize, genres) {
         matched = termMatched
     } else if (!hasTerm) {
         const raw = index.search({ tag: { genreCodes: genreFilter } })
-        matched = extractSearchIds(raw).map(id => booksById.get(id)).filter(Boolean)
+        matched = extractSearchIds(raw)
+            .map((id) => booksById.get(id))
+            .filter(Boolean)
     } else {
-        const raw = index.search(term, { index: [...SEARCH_FIELDS], tag: { genreCodes: genreFilter }, limit: MAX_SEARCH_IDS })
-        matched = extractSearchIds(raw).map(id => booksById.get(id)).filter(Boolean)
+        const raw = index.search(term, {
+            index: [...SEARCH_FIELDS],
+            tag: { genreCodes: genreFilter },
+            limit: MAX_SEARCH_IDS,
+        })
+        matched = extractSearchIds(raw)
+            .map((id) => booksById.get(id))
+            .filter(Boolean)
     }
 
     const total = matched.length
@@ -508,4 +518,3 @@ self.onmessage = async (event) => {
         return
     }
 }
-
