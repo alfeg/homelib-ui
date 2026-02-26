@@ -1,0 +1,54 @@
+{
+    "name": "inpx-parser",
+    "version": "1.0.2",
+    "description": "Parser for INPX e-book library archives (MyHomeLib format)",
+    "keywords": [
+        "inpx",
+        "myhomelib",
+        "ebook",
+        "library",
+        "parser"
+    ],
+    "author": "Viktor Gladkikh",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/alfeg/homelib-ui.git",
+        "directory": "inpx-parser"
+    },
+    "bugs": {
+        "url": "https://github.com/alfeg/homelib-ui/issues"
+    },
+    "homepage": "https://github.com/alfeg/homelib-ui/tree/main/inpx-parser#readme",
+    "type": "module",
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "private": false,
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "types": "./dist/index.d.cts",
+                "default": "./dist/index.cjs"
+            }
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch"
+    },
+    "dependencies": {
+        "fflate": "^0.8.2"
+    },
+    "devDependencies": {
+        "tsup": "^8.4.0",
+        "typescript": "^5.8.2"
+    }
+}

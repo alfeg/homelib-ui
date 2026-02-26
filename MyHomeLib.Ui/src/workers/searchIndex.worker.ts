@@ -1,6 +1,6 @@
 import MiniSearch from "minisearch"
 
-import { parseInpxBuffer } from "./inpxParser"
+import { parseInpxBuffer } from "inpx-parser"
 
 const DEFAULT_INDEX_BATCH_SIZE = 1024
 const MIN_INDEX_BATCH_SIZE = 500
