@@ -1,4 +1,4 @@
-namespace MyHomeLib.Torrent;
+namespace MyHomeLib.Web;
 
 public record TorrentRequest(string Library)
 {

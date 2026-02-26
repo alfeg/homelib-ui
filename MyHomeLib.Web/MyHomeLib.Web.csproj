@@ -15,8 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Fb2.Document" Version="2.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MyHomeLib.Library\MyHomeLib.Library.csproj" />
-    <ProjectReference Include="..\MyHomeLib.Torrent\MyHomeLib.Torrent.csproj" />
   </ItemGroup>
 
   <Target Name="BuildClientUi" BeforeTargets="Build;Publish" Condition="'$(BuildClientApp)' == 'true'">

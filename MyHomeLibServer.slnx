@@ -1,5 +1,4 @@
 <Solution>
   <Project Path="MyHomeLib.Library\MyHomeLib.Library.csproj" />
-  <Project Path="MyHomeLib.Torrent\MyHomeLib.Torrent.csproj" />
   <Project Path="MyHomeLib.Web\MyHomeLib.Web.csproj" />
 </Solution>

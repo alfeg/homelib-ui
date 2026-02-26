@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace MyHomeLib.Torrent;
+namespace MyHomeLib.Web;
 
 public class WildcardPattern(string pattern)
 {
@@ -9,14 +9,11 @@ public class WildcardPattern(string pattern)
     private static string BuildExpression(string pattern)
     {
         if (string.IsNullOrEmpty(pattern)) throw new ArgumentNullException(nameof(pattern));
-        
+
         return "^" + Regex.Escape(pattern)
             .Replace("\\\\\\?","??").Replace("\\?", ".").Replace("??","\\?")
             .Replace("\\\\\\*","**").Replace("\\*", ".*").Replace("**","\\*") + "$";
     }
 
-    public bool IsMatch(string value)
-    {
-        return _regex.IsMatch(value);
-    }
+    public bool IsMatch(string input) => _regex.IsMatch(input);
 }

@@ -1,7 +1,5 @@
 using System.Text;
-using MyHomeLib.Torrent;
 using MyHomeLib.Web;
-using MyHomeListServer.Torrent;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +15,7 @@ builder.Services.AddCors(options =>
         .AllowAnyOrigin()
         .AllowAnyMethod()
         .AllowAnyHeader()
+        // Expose Content-Disposition for filename in cross-origin responses
         .WithExposedHeaders("Content-Disposition")));
 
 #if DEBUG
@@ -75,7 +74,7 @@ app.MapPost("/api/library/inpx", async (
     idleTorrentCleanupService.MarkActivity(request.MagnetUri);
 
     if (request.ForceReindex)
-        logger.LogDebug("forceReindex is ignored for /api/library/inpx.");
+        logger.LogDebug("forceReindex is ignored for /api/library/inpx");
 
     try
     {
@@ -104,7 +103,7 @@ app.MapPost("/api/library/inpx", async (
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Unhandled error in /api/library/inpx.");
+        logger.LogError(ex, "Unhandled error in /api/library/inpx");
         return Results.Text(L(httpContext, "Internal server error.", "Внутренняя ошибка сервера."), statusCode: StatusCodes.Status500InternalServerError);
     }
 }).RequireCors("Api");
@@ -187,7 +186,7 @@ app.MapPost("/api/library/download", async (
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Unhandled error in /api/library/download.");
+        logger.LogError(ex, "Unhandled error in /api/library/download");
         return Results.Text(L(httpContext, "Internal server error.", "Внутренняя ошибка сервера."), statusCode: StatusCodes.Status500InternalServerError);
     }
 }).RequireCors("Api");

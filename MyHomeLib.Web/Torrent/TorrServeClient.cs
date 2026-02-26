@@ -1,8 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.Logging;
 
-namespace MyHomeLib.Torrent;
+namespace MyHomeLib.Web;
 
 /// <summary>
 /// Thin client for the TorrServe HTTP API (https://github.com/YouROK/TorrServer).
@@ -24,8 +25,10 @@ public class TorrServeClient(HttpClient http, string baseUrl, ILogger<TorrServeC
         CancellationToken ct = default)
     {
         logger.LogDebug("[TorrServe] AddTorrent title={Title} saveToDb={Save}", title, saveToDb);
-        var body = new { action = "add", link = magnetUri, title, save_to_db = saveToDb };
-        var resp = await PostAsync<TorrServeTorrent>("/torrents", body, ct);
+        var body = new TorrentAddRequest("add", magnetUri, title, saveToDb);
+        var resp = await PostAsync("/torrents", body,
+            TorrServeJsonContext.Default.TorrentAddRequest,
+            TorrServeJsonContext.Default.TorrServeTorrent, ct);
         logger.LogDebug("[TorrServe] AddTorrent → hash={Hash} stat={Stat} ({StatStr})",
             resp.Hash, resp.Stat, resp.StatString);
         return resp.Hash;
@@ -62,7 +65,9 @@ public class TorrServeClient(HttpClient http, string baseUrl, ILogger<TorrServeC
     {
         try
         {
-            var result = await PostAsync<TorrServeTorrent>("/torrents", new { action = "get", hash }, ct);
+            var result = await PostAsync("/torrents", new TorrentActionRequest("get", hash),
+                TorrServeJsonContext.Default.TorrentActionRequest,
+                TorrServeJsonContext.Default.TorrServeTorrent, ct);
             logger.LogDebug("[TorrServe] GetTorrent hash={Hash} stat={Stat} ({StatStr}) files={Files}",
                 hash, result.Stat, result.StatString, result.Files?.Length ?? 0);
             return result;
@@ -78,7 +83,9 @@ public class TorrServeClient(HttpClient http, string baseUrl, ILogger<TorrServeC
     public async Task RemoveTorrentAsync(string hash, CancellationToken ct = default)
     {
         logger.LogDebug("[TorrServe] RemoveTorrent hash={Hash}", hash);
-        await PostAsync<object>("/torrents", new { action = "rem", hash }, ct);
+        await PostAsync("/torrents", new TorrentActionRequest("rem", hash),
+            TorrServeJsonContext.Default.TorrentActionRequest,
+            TorrServeJsonContext.Default.TorrServeTorrent, ct);
     }
 
     /// <summary>Returns the HTTP stream URL for a specific file index.</summary>
@@ -89,9 +96,29 @@ public class TorrServeClient(HttpClient http, string baseUrl, ILogger<TorrServeC
         return url;
     }
 
-    private async Task<T> PostAsync<T>(string path, object body, CancellationToken ct)
+    /// <summary>Returns true if TorrServe is reachable (GET /echo). Also captures version string.</summary>
+    public async Task<bool> CheckConnectionAsync(CancellationToken ct = default)
     {
-        var json = JsonSerializer.Serialize(body);
+        try
+        {
+            using var resp = await http.GetAsync(_baseUrl + "/echo", ct);
+            if (!resp.IsSuccessStatusCode) return false;
+            LastVersion = (await resp.Content.ReadAsStringAsync(ct)).Trim();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Last server version string returned by /echo.</summary>
+    public string? LastVersion { get; private set; }
+
+    private async Task<TRes> PostAsync<TReq, TRes>(
+        string path, TReq body, JsonTypeInfo<TReq> bodyInfo, JsonTypeInfo<TRes> resultInfo, CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(body, bodyInfo);
         logger.LogDebug("[TorrServe] POST {Url} ← {Body}", _baseUrl + path, json);
         using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         var resp = await http.PostAsync(_baseUrl + path, content, ct);
@@ -99,13 +126,8 @@ public class TorrServeClient(HttpClient http, string baseUrl, ILogger<TorrServeC
         logger.LogDebug("[TorrServe] POST {Url} → {Status} {Body}",
             _baseUrl + path, (int)resp.StatusCode, respJson.Length > 200 ? respJson[..200] + "…" : respJson);
         resp.EnsureSuccessStatusCode();
-        return JsonSerializer.Deserialize<T>(respJson, _jsonOptions)!;
+        return JsonSerializer.Deserialize(respJson, resultInfo)!;
     }
-
-    private static readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
 }
 
 public class TorrServeTorrent
@@ -117,36 +139,36 @@ public class TorrServeTorrent
     [JsonPropertyName("name")]        public string Name       { get; set; } = "";
 
     // Transfer stats (top-level in TorrentStatus)
-    [JsonPropertyName("download_speed")]       public double DownloadSpeed       { get; set; }
-    [JsonPropertyName("upload_speed")]         public double UploadSpeed         { get; set; }
-    [JsonPropertyName("total_peers")]          public int    TotalPeers          { get; set; }
-    [JsonPropertyName("pending_peers")]        public int    PendingPeers        { get; set; }
-    [JsonPropertyName("active_peers")]         public int    ActivePeers         { get; set; }
-    [JsonPropertyName("half_open_peers")]      public int    HalfOpenPeers       { get; set; }
-    [JsonPropertyName("connected_seeders")]    public int    ConnectedSeeders    { get; set; }
-    [JsonPropertyName("loaded_size")]          public long   LoadedSize          { get; set; }
-    [JsonPropertyName("torrent_size")]         public long   TorrentSize         { get; set; }
-    [JsonPropertyName("preloaded_bytes")]      public long   PreloadedBytes      { get; set; }
-    [JsonPropertyName("preload_size")]         public long   PreloadSize         { get; set; }
-    [JsonPropertyName("bytes_written")]        public long   BytesWritten        { get; set; }
-    [JsonPropertyName("bytes_written_data")]   public long   BytesWrittenData    { get; set; }
-    [JsonPropertyName("bytes_read")]           public long   BytesRead           { get; set; }
-    [JsonPropertyName("bytes_read_data")]      public long   BytesReadData       { get; set; }
-    [JsonPropertyName("bytes_read_useful_data")] public long BytesReadUsefulData { get; set; }
-    [JsonPropertyName("chunks_written")]       public long   ChunksWritten       { get; set; }
-    [JsonPropertyName("chunks_read")]          public long   ChunksRead          { get; set; }
-    [JsonPropertyName("chunks_read_useful")]   public long   ChunksReadUseful    { get; set; }
-    [JsonPropertyName("chunks_read_wasted")]   public long   ChunksReadWasted    { get; set; }
-    [JsonPropertyName("pieces_dirtied_good")]  public long   PiecesDirtiedGood   { get; set; }
-    [JsonPropertyName("pieces_dirtied_bad")]   public long   PiecesDirtiedBad    { get; set; }
-    [JsonPropertyName("duration_seconds")]     public double DurationSeconds     { get; set; }
-    [JsonPropertyName("bit_rate")]             public string BitRate             { get; set; } = "";
+    [JsonPropertyName("download_speed")]         public double DownloadSpeed       { get; set; }
+    [JsonPropertyName("upload_speed")]           public double UploadSpeed         { get; set; }
+    [JsonPropertyName("total_peers")]            public int    TotalPeers          { get; set; }
+    [JsonPropertyName("pending_peers")]          public int    PendingPeers        { get; set; }
+    [JsonPropertyName("active_peers")]           public int    ActivePeers         { get; set; }
+    [JsonPropertyName("half_open_peers")]        public int    HalfOpenPeers       { get; set; }
+    [JsonPropertyName("connected_seeders")]      public int    ConnectedSeeders    { get; set; }
+    [JsonPropertyName("loaded_size")]            public long   LoadedSize          { get; set; }
+    [JsonPropertyName("torrent_size")]           public long   TorrentSize         { get; set; }
+    [JsonPropertyName("preloaded_bytes")]        public long   PreloadedBytes      { get; set; }
+    [JsonPropertyName("preload_size")]           public long   PreloadSize         { get; set; }
+    [JsonPropertyName("bytes_written")]          public long   BytesWritten        { get; set; }
+    [JsonPropertyName("bytes_written_data")]     public long   BytesWrittenData    { get; set; }
+    [JsonPropertyName("bytes_read")]             public long   BytesRead           { get; set; }
+    [JsonPropertyName("bytes_read_data")]        public long   BytesReadData       { get; set; }
+    [JsonPropertyName("bytes_read_useful_data")] public long   BytesReadUsefulData { get; set; }
+    [JsonPropertyName("chunks_written")]         public long   ChunksWritten       { get; set; }
+    [JsonPropertyName("chunks_read")]            public long   ChunksRead          { get; set; }
+    [JsonPropertyName("chunks_read_useful")]     public long   ChunksReadUseful    { get; set; }
+    [JsonPropertyName("chunks_read_wasted")]     public long   ChunksReadWasted    { get; set; }
+    [JsonPropertyName("pieces_dirtied_good")]    public long   PiecesDirtiedGood   { get; set; }
+    [JsonPropertyName("pieces_dirtied_bad")]     public long   PiecesDirtiedBad    { get; set; }
+    [JsonPropertyName("duration_seconds")]       public double DurationSeconds     { get; set; }
+    [JsonPropertyName("bit_rate")]               public string BitRate             { get; set; } = "";
 
     // TorrServe v1: files come in a top-level file_stat array
-    [JsonPropertyName("file_stat")]   public TorrServeFile[]? FileStat { get; set; }
+    [JsonPropertyName("file_stat")]  public TorrServeFile[]? FileStat { get; set; }
 
     // TorrServe v2+: files are inside data → "{\"TorrServer\":{\"Files\":[...]}}"
-    [JsonPropertyName("data")]        public string? DataJson  { get; set; }
+    [JsonPropertyName("data")]       public string? DataJson  { get; set; }
 
     /// <summary>Returns the file list from whichever field TorrServe populated.</summary>
     [JsonIgnore]
@@ -162,14 +184,12 @@ public class TorrServeTorrent
 
             try
             {
-                var data = JsonSerializer.Deserialize<TorrServeData>(DataJson, _opts);
+                var data = JsonSerializer.Deserialize(DataJson, TorrServeJsonContext.Default.TorrServeData);
                 return data?.TorrServer?.Files;
             }
             catch { return null; }
         }
     }
-
-    private static readonly JsonSerializerOptions _opts = new() { PropertyNameCaseInsensitive = true };
 }
 
 public class TorrServeFile
@@ -189,3 +209,15 @@ internal class TorrServerSection
 {
     [JsonPropertyName("Files")] public TorrServeFile[]? Files { get; set; }
 }
+
+// Request DTOs — snake_case property names applied via TorrServeJsonContext options
+internal record TorrentAddRequest(string Action, string Link, string Title, bool SaveToDb);
+internal record TorrentActionRequest(string Action, string Hash);
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
+[JsonSerializable(typeof(TorrentAddRequest))]
+[JsonSerializable(typeof(TorrentActionRequest))]
+[JsonSerializable(typeof(TorrServeTorrent))]
+[JsonSerializable(typeof(TorrServeFile))]
+[JsonSerializable(typeof(TorrServeData))]
+internal partial class TorrServeJsonContext : JsonSerializerContext { }

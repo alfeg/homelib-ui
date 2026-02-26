@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
-using MyHomeLib.Torrent;
-using MyHomeListServer.Torrent;
 
 namespace MyHomeLib.Web;
 
@@ -30,7 +28,7 @@ public sealed class IdleTorrentCleanupService(
         }
         catch (FormatException ex)
         {
-            logger.LogDebug(ex, "Ignoring activity mark with invalid magnet URI.");
+            logger.LogDebug(ex, "Ignoring activity mark with invalid magnet URI");
         }
     }
 
@@ -62,7 +60,7 @@ public sealed class IdleTorrentCleanupService(
                         }
                         catch (Exception ex)
                         {
-                            logger.LogWarning(ex, "Failed to remove idle torrent {Hash} from TorrServe.", entry.Key);
+                            logger.LogWarning(ex, "Failed to remove idle torrent {Hash} from TorrServe", entry.Key);
                             _tracked.AddOrUpdate(
                                 entry.Key,
                                 _ => new TrackedTorrent(entry.Value.MagnetUri, DateTime.UtcNow),
@@ -77,7 +75,7 @@ public sealed class IdleTorrentCleanupService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Idle torrent cleanup loop failed, continuing.");
+                logger.LogWarning(ex, "Idle torrent cleanup loop failed, continuing");
             }
 
             try

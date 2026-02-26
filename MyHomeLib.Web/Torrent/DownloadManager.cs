@@ -2,22 +2,13 @@ using System.IO.Compression;
 using Fb2.Document;
 using Microsoft.Extensions.Logging;
 
-namespace MyHomeLib.Torrent;
+namespace MyHomeLib.Web;
 
 public class DownloadManager(
     TorrServeClient torrServe,
     HttpClient httpClient,
     ILogger<DownloadManager> logger)
 {
-
-    /// <summary>Registers the library torrent with TorrServe so it is ready for streaming.</summary>
-    public async Task StartLibraryAsync(string magnetUri, CancellationToken ct = default)
-    {
-        var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
-        logger.LogInformation("[TorrServe] Pre-registering library {Hash}", hash);
-        await torrServe.AddTorrentAsync(magnetUri, hash, saveToDb: true, ct);
-    }
-
     /// <summary>Removes the library torrent from TorrServe to free resources (sleep mode).</summary>
     public async Task SleepLibraryAsync(string magnetUri, CancellationToken ct = default)
     {
