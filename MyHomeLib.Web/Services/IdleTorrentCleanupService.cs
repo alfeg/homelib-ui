@@ -1,19 +1,15 @@
-using System.Collections.Concurrent;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Web.Models;
 
 namespace MyHomeLib.Web.Services;
 
 public sealed class IdleTorrentCleanupService(
-    DownloadManager downloadManager,
-    IOptions<LibraryConfig> config,
-    ILogger<IdleTorrentCleanupService> logger) : BackgroundService
+    IServiceProvider services,
+    IMemoryCache cache,
+    IOptions<TorrentConfig> config,
+    ILogger<IdleTorrentCleanupService> logger)
 {
-    private sealed record TrackedTorrent(string MagnetUri, DateTime LastActivityUtc);
-
-    private readonly LibraryConfig _config = config.Value;
-    private readonly ConcurrentDictionary<string, TrackedTorrent> _tracked = new(StringComparer.OrdinalIgnoreCase);
-
     public void MarkActivity(string magnetUri)
     {
         if (string.IsNullOrWhiteSpace(magnetUri))
@@ -21,11 +17,12 @@ public sealed class IdleTorrentCleanupService(
 
         try
         {
+            var minutes = config.Value.TorrentSleepAfterMinutes;
+            if (minutes <= 0)
+                return;
+
             var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
-            _tracked.AddOrUpdate(
-                hash,
-                _ => new TrackedTorrent(magnetUri, DateTime.UtcNow),
-                (_, existing) => existing with { MagnetUri = magnetUri, LastActivityUtc = DateTime.UtcNow });
+            cache.Set(hash, magnetUri, CreateEntryOptions(magnetUri));
         }
         catch (FormatException ex)
         {
@@ -33,60 +30,42 @@ public sealed class IdleTorrentCleanupService(
         }
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    private MemoryCacheEntryOptions CreateEntryOptions(string magnetUri)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        var options = new MemoryCacheEntryOptions()
+            .SetSlidingExpiration(TimeSpan.FromMinutes(config.Value.TorrentSleepAfterMinutes));
+
+        options.PostEvictionCallbacks.Add(new PostEvictionCallbackRegistration
+        {
+            EvictionCallback = OnEvicted,
+            State = magnetUri
+        });
+
+        return options;
+    }
+
+    private void OnEvicted(object key, object? value, EvictionReason reason, object? state)
+    {
+        if (reason != EvictionReason.Expired)
+            return;
+
+        var magnetUri = (string)state!;
+        var hash = (string)key;
+
+        _ = Task.Run(async () =>
         {
             try
             {
-                var sleepAfterMinutes = _config.TorrentSleepAfterMinutes;
-                if (sleepAfterMinutes > 0)
-                {
-                    var idleThresholdUtc = DateTime.UtcNow.AddMinutes(-sleepAfterMinutes);
-
-                    foreach (var entry in _tracked)
-                    {
-                        if (entry.Value.LastActivityUtc > idleThresholdUtc)
-                            continue;
-
-                        try
-                        {
-                            logger.LogInformation("[TorrServe] Torrent {Hash} idle for >= {Minutes} min — removing", entry.Key, sleepAfterMinutes);
-                            await downloadManager.SleepLibraryAsync(entry.Value.MagnetUri, stoppingToken);
-                            _tracked.TryRemove(entry.Key, out _);
-                        }
-                        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                        {
-                            throw;
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogWarning(ex, "Failed to remove idle torrent {Hash} from TorrServe", entry.Key);
-                            _tracked.AddOrUpdate(
-                                entry.Key,
-                                _ => new TrackedTorrent(entry.Value.MagnetUri, DateTime.UtcNow),
-                                (_, existing) => existing with { LastActivityUtc = DateTime.UtcNow });
-                        }
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
+                logger.LogInformation("[TorrServe] Torrent {Hash} idle — removing", hash);
+                await using var scope = services.CreateAsyncScope();
+                var dm = scope.ServiceProvider.GetRequiredService<DownloadManager>();
+                await dm.SleepLibraryAsync(magnetUri);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Idle torrent cleanup loop failed, continuing");
+                logger.LogWarning(ex, "Failed to remove idle torrent {Hash}, rescheduling", hash);
+                cache.Set(hash, magnetUri, CreateEntryOptions(magnetUri));
             }
-
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-        }
+        });
     }
 }

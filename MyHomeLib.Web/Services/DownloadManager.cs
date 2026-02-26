@@ -10,6 +10,8 @@ public class DownloadManager(
     public async Task<(byte[] Data, string FileName)> GetInpxFileAsync(string magnetUri, CancellationToken ct)
     {
         var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
+        logger.LogInformation("[TorrServe] Fetching INPX for {Hash}", hash);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         var searchResponse = await SearchFiles(
             new SearchRequest(hash, "*.inpx") { MagnetUri = magnetUri }, ct);
@@ -21,6 +23,7 @@ public class DownloadManager(
             new DownloadRequest(hash, inpxPath) { MagnetUri = magnetUri }, ct)
             ?? throw new InvalidOperationException("Failed to download INPX file.");
 
+        logger.LogInformation("[TorrServe] INPX ready ({Kb} KB) in {Elapsed}ms", downloadResponse.Data.Length / 1024, sw.ElapsedMilliseconds);
         return (downloadResponse.Data, Path.GetFileName(inpxPath));
     }
 

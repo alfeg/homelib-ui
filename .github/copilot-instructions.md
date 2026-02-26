@@ -56,11 +56,7 @@ MyHomeLibServer.slnx
 
 ### 1. Backend — INPX delivery
 
-`LibraryService` (`BackgroundService` in `MyHomeLib.Web`):
-
-- On first run: registers the magnet URI with TorrServe → polls until the `.inpx` file appears → caches the raw bytes to disk (`DownloadsDirectory/app_data/library_cache/`).
-- On restart: if the cached `.inpx` file exists on disk, the TorrServe download is skipped; the cached file is served immediately.
-- Exposes `IndexTask` (`TaskCompletionSource`) so the API can wait for readiness.
+`LibraryBooksCacheService` fetches the INPX file on demand from TorrServe via `DownloadManager`. No disk caching — every `/api/library/inpx` request streams directly from TorrServe.
 
 `Program.cs` Minimal API endpoints:
 
@@ -112,17 +108,17 @@ Authors inside a field are `:` separated; each author is `LastName,FirstName,Mid
 
 ## Core Classes — Backend
 
-| Class                  | Project | Role                                                                                                                               |
-| ---------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `LibraryService`       | Web     | BackgroundService; downloads INPX and caches it to disk (`app_data/library_cache/`), exposes `IndexTask`                           |
-| `LibraryConfig`        | Web     | Strongly-typed config POCO for `Library:*` settings                                                                                |
-| `DownloadManager`      | Torrent | Orchestrates book download via TorrServe                                                                                           |
-| `TorrServeClient`      | Torrent | HTTP wrapper for TorrServe API (`/torrents`, `/stream`, `/echo`)                                                                   |
-| `HttpRangeStream`      | Torrent | Seekable `Stream` backed by HTTP Range requests                                                                                    |
-| `MagnetUriHelper`      | Torrent | Parses info-hash hex from a magnet URI (regex)                                                                                     |
-| `AppConfig`            | Torrent | Strongly-typed config POCO for `Torrent:*` settings                                                                                |
-| `InpxReader`           | Library | Async streaming INPX parser; yields `BookItem` via `IAsyncEnumerable`                                                              |
-| `BookItem`             | Library | Book metadata record: `Id`, `Authors`, `Title`, `Genre`, `Series`, `Lang`, `Ext`, `ArchiveFile`, `File`, `Size`, `Date`, `Deleted` |
+| Class             | Project | Role                                                                                                                               |
+| ----------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `LibraryService`  | Web     | BackgroundService; downloads INPX and caches it to disk (`app_data/library_cache/`), exposes `IndexTask`                           |
+| `LibraryConfig`   | Web     | Strongly-typed config POCO for `Library:*` settings                                                                                |
+| `DownloadManager` | Torrent | Orchestrates book download via TorrServe                                                                                           |
+| `TorrServeClient` | Torrent | HTTP wrapper for TorrServe API (`/torrents`, `/stream`, `/echo`)                                                                   |
+| `HttpRangeStream` | Torrent | Seekable `Stream` backed by HTTP Range requests                                                                                    |
+| `MagnetUriHelper` | Torrent | Parses info-hash hex from a magnet URI (regex)                                                                                     |
+| `AppConfig`       | Torrent | Strongly-typed config POCO for `Torrent:*` settings                                                                                |
+| `InpxReader`      | Library | Async streaming INPX parser; yields `BookItem` via `IAsyncEnumerable`                                                              |
+| `BookItem`        | Library | Book metadata record: `Id`, `Authors`, `Title`, `Genre`, `Series`, `Lang`, `Ext`, `ArchiveFile`, `File`, `Size`, `Date`, `Deleted` |
 
 ## Core Files — Frontend (`MyHomeLib.Ui/src/`)
 
@@ -161,12 +157,11 @@ All settings are bound via `IConfiguration` (`appsettings.json` + environment va
 
 ### `Library` section → `LibraryConfig`
 
-| Key                  | Description                                                      |
-| -------------------- | ---------------------------------------------------------------- |
-| `MagnetUri`          | Magnet URI of the library torrent                                                                      |
-| `DownloadsDirectory` | Base folder for the INPX cache (`app_data/library_cache/`); defaults to app base directory             |
-| `InpxPath`           | Optional path to a pre-downloaded `.inpx` file                                                         |
-| `TorrentEnabled`     | Computed: true when `MagnetUri` is set                                                                 |
+| Key                        | Description                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `MagnetUri`                | Magnet URI of the library torrent                                                     |
+| `InpxPath`                 | Optional path to a pre-downloaded `.inpx` file                                        |
+| `TorrentSleepAfterMinutes` | Minutes of inactivity before TorrServe removes the torrent (0 = disabled, default 10) |
 
 ### `Torrent` section → `AppConfig`
 
@@ -176,14 +171,7 @@ All settings are bound via `IConfiguration` (`appsettings.json` + environment va
 
 ## Data Layout
 
-```
-<DownloadsDirectory>/
-  app_data/
-    library_cache/
-      library_<hash>.inpx   # Cached INPX file (raw bytes, keyed by torrent info-hash)
-```
-
-No database files. No book files saved on the server — downloads stream directly to the browser.
+No database files. No book files saved on the server — downloads stream directly to the browser. No disk caching — INPX is fetched on demand from TorrServe.
 
 ## Docker / Deployment
 
@@ -194,7 +182,7 @@ Run with `docker compose up` from the repo root. The `docker-compose.yml` starts
 
 The `Dockerfile` is a multi-stage build: .NET 10 SDK + Node.js 20 build stage → ASP.NET 10 runtime image.
 
-Volumes: `torrserve_data` for TorrServe state, `books_data` mounted at `/data/books`.
+Volumes: `torrserve_data` for TorrServe state.
 
 Use `docker-compose.prod.yml` for production (TorrServe port not exposed).
 

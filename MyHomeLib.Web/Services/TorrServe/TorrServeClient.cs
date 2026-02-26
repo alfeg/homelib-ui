@@ -43,6 +43,7 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
             ?? throw new InvalidOperationException("MagnetUri required for TorrServe download");
 
         logger.LogInformation("[TorrServe] [{Library}] {Name} Starting download", request.Library, request.Name);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         await AddTorrentAsync(magnetUri, hash, saveToDb: true, ct: ct);
         var files = await WaitForFilesAsync(hash, ct);
@@ -56,10 +57,10 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
         if (book == null)
         {
             await archiveStream.CopyToAsync(bookStream, ct);
+            logger.LogInformation("[TorrServe] [{Library}] {Name} done in {Elapsed}ms", request.Library, request.Name, sw.ElapsedMilliseconds);
             return new DownloadResponse(bookStream.ToArray(), string.Empty, string.Empty);
         }
 
-        logger.LogInformation("[TorrServe] [{Library}] {Name} Reading archive entry", request.Library, request.Name);
         using (var zip = new ZipArchive(archiveStream))
         {
             var entry = zip.GetEntry(book)
@@ -77,7 +78,7 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
                 bookStream.Seek(0, SeekOrigin.Begin);
                 var title = fb2.Title?.Content.FirstOrDefault(c => c.Name == "book-title")?.ToString()
                             ?? Path.GetFileNameWithoutExtension(book);
-                logger.LogInformation("[TorrServe] [{Library}] Downloaded {Title}.fb2", request.Library, title);
+                logger.LogInformation("[TorrServe] [{Library}] Downloaded {Title}.fb2 in {Elapsed}ms", request.Library, title, sw.ElapsedMilliseconds);
                 return new DownloadResponse(bookStream.ToArray(), "application/fb2", $"{title}.fb2");
             }
             catch (Exception ex)
@@ -87,7 +88,7 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
             }
         }
 
-        logger.LogInformation("[TorrServe] [{Library}] Downloaded {Book}", request.Library, book);
+        logger.LogInformation("[TorrServe] [{Library}] Downloaded {Book} in {Elapsed}ms", request.Library, book, sw.ElapsedMilliseconds);
         return new DownloadResponse(bookStream.ToArray(), string.Empty, book);
     }
 

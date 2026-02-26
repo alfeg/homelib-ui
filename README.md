@@ -44,8 +44,8 @@ docker compose up -d
 
 ```yaml
 environment:
-  Library__DownloadsDirectory: /data/books          # папка для кеша INPX
   Torrent__TorrServeUrl: http://torrserve:8090      # адрес TorrServe
+  Torrent__TorrentSleepAfterMinutes: 10             # минут бездействия до удаления торрента
 ```
 
 > Разделитель для вложенных ключей в переменных окружения — двойное подчёркивание (`__`).
@@ -86,7 +86,7 @@ npm run build
 ### Запуск бэкенда
 
 ```bash
-# Отредактируйте appsettings.json (DownloadsDirectory, TorrServeUrl)
+# Отредактируйте appsettings.json (TorrServeUrl)
 dotnet run --project MyHomeLib.Web
 ```
 
@@ -105,28 +105,20 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 ## Конфигурация
 
-### Секция `Library`
-
-| Ключ | Обязательно | По умолчанию | Описание |
-|------|-------------|--------------|----------|
-| `DownloadsDirectory` | Нет | `<папка приложения>` | Папка для кеша INPX (`app_data/library_cache/`) |
-| `InpxPath` | Нет | — | Путь к уже скачанному `.inpx`-файлу. Если указан — торрент для индексации не используется |
-
 ### Секция `Torrent`
 
 | Ключ | Обязательно | По умолчанию | Описание |
 |------|-------------|--------------|----------|
 | `TorrServeUrl` | Да | — | URL экземпляра TorrServe, например `http://127.0.0.1:8090` |
+| `TorrentSleepAfterMinutes` | Нет | `10` | Минут бездействия до удаления торрента из TorrServe (0 = отключено) |
 
 ### Пример `appsettings.json`
 
 ```json
 {
-  "Library": {
-    "DownloadsDirectory": "/data/books"
-  },
   "Torrent": {
-    "TorrServeUrl": "http://localhost:8090"
+    "TorrServeUrl": "http://localhost:8090",
+    "TorrentSleepAfterMinutes": 10
   }
 }
 ```
@@ -273,7 +265,7 @@ This starts:
 
 Open [http://localhost:8080](http://localhost:8080) in your browser.
 
-The INPX cache is stored in a named Docker volume mounted at `/data/books`.
+The INPX index is fetched on demand directly from TorrServe.
 
 ### Customising settings
 
@@ -281,8 +273,8 @@ Edit `docker-compose.yml` or set environment variables:
 
 ```yaml
 environment:
-  Library__DownloadsDirectory: /data/books
   Torrent__TorrServeUrl: http://torrserve:8090
+  Torrent__TorrentSleepAfterMinutes: 10
 ```
 
 > Nested config keys use double-underscore as separator in environment variables.
@@ -316,7 +308,7 @@ npm run build
 ### Run the backend
 
 ```bash
-# Edit appsettings.json first (set DownloadsDirectory, TorrServeUrl)
+# Edit appsettings.json first (set TorrServeUrl)
 dotnet run --project MyHomeLib.Web
 ```
 
@@ -337,28 +329,20 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 
 ## Configuration
 
-### `Library` section
-
-| Key | Required | Default | Description |
-|-----|----------|---------|-------------|
-| `DownloadsDirectory` | No | `<app folder>` | Folder for the INPX cache (`app_data/library_cache/`) |
-| `InpxPath` | No | — | Path to a pre-downloaded `.inpx` file. When set, the torrent is not needed for indexing |
-
 ### `Torrent` section
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
 | `TorrServeUrl` | Yes | — | URL of the TorrServe instance, e.g. `http://torrserve:8090` |
+| `TorrentSleepAfterMinutes` | No | `10` | Minutes of inactivity before TorrServe removes the torrent (0 = disabled) |
 
 ### Example `appsettings.json`
 
 ```json
 {
-  "Library": {
-    "DownloadsDirectory": "/data/books"
-  },
   "Torrent": {
-    "TorrServeUrl": "http://localhost:8090"
+    "TorrServeUrl": "http://localhost:8090",
+    "TorrentSleepAfterMinutes": 10
   }
 }
 ```
@@ -367,7 +351,7 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 
 ## Memory usage
 
-- **Server** (~50–100 MB): the INPX file is cached to disk; nothing is kept in RAM permanently beyond the current request.
+- **Server** (~50–100 MB): the INPX file is fetched on demand from TorrServe; nothing is written to disk.
 - **Browser**: MiniSearch index (~545 000 books) lives in IndexedDB and is loaded into a Web Worker. Expect ~300–500 MB browser RAM while the index is active.
 
 ---

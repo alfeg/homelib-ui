@@ -1,9 +1,8 @@
 namespace MyHomeLib.Web.Models;
 
-public class LibraryConfig
+public class TorrentConfig
 {
-    /// <summary>Directory where downloaded books are saved. Must be set explicitly.</summary>
-    public string DownloadsDirectory { get; set; } = string.Empty;
+    public string TorrServeUrl { get; set; } = "http://127.0.0.1:8090";
 
     /// <summary>
     /// How many minutes of inactivity before the library torrent is removed from TorrServe.

@@ -9,12 +9,10 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY MyHomeLib.Library/MyHomeLib.Library.csproj MyHomeLib.Library/
-COPY MyHomeLib.Torrent/MyHomeLib.Torrent.csproj  MyHomeLib.Torrent/
 COPY MyHomeLib.Web/MyHomeLib.Web.csproj          MyHomeLib.Web/
 RUN dotnet restore MyHomeLib.Web/MyHomeLib.Web.csproj
 
 COPY MyHomeLib.Library/ MyHomeLib.Library/
-COPY MyHomeLib.Torrent/  MyHomeLib.Torrent/
 COPY MyHomeLib.Web/      MyHomeLib.Web/
 
 RUN dotnet build MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --no-restore -p:BuildClientApp=false

@@ -11,7 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-builder.Services.Configure<LibraryConfig>(builder.Configuration.GetSection("Library"));
+builder.Services.Configure<TorrentConfig>(builder.Configuration.GetSection("Torrent"));
 
 // CORS — allow any origin for /api/* so the standalone HTML build works from
 // file:// or any external host. Credentials are not used cross-origin.
@@ -39,8 +39,8 @@ var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"]
 builder.Services.AddHttpClient<TorrServeClient>(c => c.BaseAddress = new Uri(torrServeUrl));
 builder.Services.AddTransient<DownloadManager>();
 
-builder.Services.AddSingleton<IdleTorrentCleanupService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleTorrentCleanupService>());
+builder.Services.AddMemoryCache();
+builder.Services.AddTransient<IdleTorrentCleanupService>();
 
 var app = builder.Build();
 
