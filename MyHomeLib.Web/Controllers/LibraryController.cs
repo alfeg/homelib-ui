@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
-using MyHomeLib.Web;
+using Microsoft.Extensions.Localization;
 using MyHomeLib.Web.Models;
 using MyHomeLib.Web.Services;
 using MyHomeLib.Web.Services.Models;
@@ -12,54 +12,26 @@ namespace MyHomeLib.Web.Controllers;
 [EnableCors("Api")]
 public class LibraryController(
     DownloadManager downloadManager,
-    IdleTorrentCleanupService idleTorrentCleanupService,
+    IStringLocalizer<LibraryController> localizer,
     ILogger<LibraryController> logger) : ControllerBase
 {
     [HttpPost("inpx")]
     public async Task<IActionResult> GetInpx(LibraryBooksRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.MagnetUri))
-            return BadRequest(L("magnetUri is required.", "Требуется magnetUri."));
+            return BadRequest(localizer["magnetUri is required."]);
 
-        idleTorrentCleanupService.MarkActivity(request.MagnetUri);
-
-        if (request.ForceReindex)
-            logger.LogDebug("forceReindex is ignored for /api/library/inpx");
-
-        try
+        return await ExecuteAsync(ct, async () =>
         {
             var inpxFile = await downloadManager.GetInpxFileAsync(request.MagnetUri, ct);
             return File(inpxFile.Data, "application/octet-stream", inpxFile.FileName);
-        }
-        catch (FormatException)
+        },
+        ex => ex switch
         {
-            return BadRequest(L("Invalid magnetUri.", "Некорректный magnetUri."));
-        }
-        catch (InvalidOperationException)
-        {
-            return BadRequest(L("Unable to prepare INPX file.", "Не удалось подготовить INPX файл."));
-        }
-        catch (HttpRequestException)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                L("TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."));
-        }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                L("TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."));
-        }
-        catch (TimeoutException)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                L("TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."));
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Unhandled error in /api/library/inpx");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                L("Internal server error.", "Внутренняя ошибка сервера."));
-        }
+            FormatException           => BadRequest(localizer["Invalid magnetUri."]),
+            InvalidOperationException => BadRequest(localizer["Unable to prepare INPX file."]),
+            _                         => null
+        });
     }
 
     [HttpPost("download")]
@@ -70,12 +42,10 @@ public class LibraryController(
             || string.IsNullOrWhiteSpace(request.File)
             || string.IsNullOrWhiteSpace(request.Ext))
         {
-            return BadRequest(L("magnetUri, archiveFile, file and ext are required.", "Требуются поля magnetUri, archiveFile, file и ext."));
+            return BadRequest(localizer["magnetUri, archiveFile, file and ext are required."]);
         }
 
-        idleTorrentCleanupService.MarkActivity(request.MagnetUri);
-
-        try
+        return await ExecuteAsync(ct, async () =>
         {
             var hash = MagnetUriHelper.ParseInfoHash(request.MagnetUri);
             var ext = request.Ext.TrimStart('.');
@@ -99,52 +69,44 @@ public class LibraryController(
                 : response.Name;
 
             return File(response.Data, contentType, downloadName);
-        }
-        catch (FormatException ex)
+        },
+        ex => ex switch
         {
-            return BadRequest(string.IsNullOrWhiteSpace(ex.Message)
-                ? L("Invalid request.", "Некорректный запрос.")
-                : ex.Message);
-        }
-        catch (FileNotFoundException ex)
+            FormatException { Message: var m }           => BadRequest(string.IsNullOrWhiteSpace(m) ? localizer["Invalid request."] : m),
+            FileNotFoundException { Message: var m }     => NotFound(string.IsNullOrWhiteSpace(m) ? localizer["File not found."] : m),
+            InvalidOperationException { Message: var m } => BadRequest(string.IsNullOrWhiteSpace(m) ? localizer["Unable to process download request."] : m),
+            _                                            => null
+        });
+    }
+
+    /// <summary>
+    /// Executes <paramref name="action"/>, first trying <paramref name="handleSpecific"/> for
+    /// action-specific exceptions, then falling back to common TorrServe / unhandled error responses.
+    /// </summary>
+    private async Task<IActionResult> ExecuteAsync(
+        CancellationToken ct,
+        Func<Task<IActionResult>> action,
+        Func<Exception, IActionResult?> handleSpecific)
+    {
+        try
         {
-            return NotFound(string.IsNullOrWhiteSpace(ex.Message)
-                ? L("File not found.", "Файл не найден.")
-                : ex.Message);
+            return await action();
         }
-        catch (InvalidOperationException ex)
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
         {
-            return BadRequest(string.IsNullOrWhiteSpace(ex.Message)
-                ? L("Unable to process download request.", "Не удалось обработать запрос на скачивание.")
-                : ex.Message);
-        }
-        catch (HttpRequestException)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                L("TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."));
-        }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                L("TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."));
-        }
-        catch (TimeoutException)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                L("TorrServe is unavailable. Please try again later.", "TorrServe недоступен. Попробуйте позже."));
+            throw; // Client disconnected — let the framework handle it
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unhandled error in /api/library/download");
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                L("Internal server error.", "Внутренняя ошибка сервера."));
-        }
-    }
+            var specific = handleSpecific(ex);
+            if (specific is not null) return specific;
 
-    private string L(string en, string ru)
-    {
-        var lang = HttpContext.Request.Headers.AcceptLanguage.ToString();
-        return lang.StartsWith("ru", StringComparison.OrdinalIgnoreCase) ? ru : en;
+            if (ex is HttpRequestException or TaskCanceledException or TimeoutException)
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, localizer["TorrServe is unavailable. Please try again later."]);
+
+            logger.LogError(ex, "Unhandled controller error");
+            return StatusCode(StatusCodes.Status500InternalServerError, localizer["Internal server error."]);
+        }
     }
 
     private static string MakeSafeFileName(string name)
@@ -153,3 +115,4 @@ public class LibraryController(
         return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
     }
 }
+

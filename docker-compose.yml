@@ -14,7 +14,6 @@ services:
       - "5080:8080"
     environment:
       Torrent__TorrServeUrl: http://torrserve:8090
-      Torrent__TorrentSleepAfterMinutes: 10
 
       DOTNET_gcServer: 0
       DOTNET_GCHeapHardLimitPercent: 35

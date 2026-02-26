@@ -157,11 +157,10 @@ All settings are bound via `IConfiguration` (`appsettings.json` + environment va
 
 ### `Library` section → `LibraryConfig`
 
-| Key                        | Description                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------- |
-| `MagnetUri`                | Magnet URI of the library torrent                                                     |
-| `InpxPath`                 | Optional path to a pre-downloaded `.inpx` file                                        |
-| `TorrentSleepAfterMinutes` | Minutes of inactivity before TorrServe removes the torrent (0 = disabled, default 10) |
+| Key         | Description                                    |
+| ----------- | ---------------------------------------------- |
+| `MagnetUri` | Magnet URI of the library torrent              |
+| `InpxPath`  | Optional path to a pre-downloaded `.inpx` file |
 
 ### `Torrent` section → `AppConfig`
 

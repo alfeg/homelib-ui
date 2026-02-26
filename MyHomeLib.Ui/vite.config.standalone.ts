@@ -10,7 +10,7 @@ import { viteSingleFile } from "vite-plugin-singlefile"
 export default defineConfig({
     plugins: [vue(), viteSingleFile()],
     define: {
-        "import.meta.env.VITE_DEFAULT_ENDPOINT": JSON.stringify("https://books.alfeg.net"),
+        "import.meta.env.VITE_DEFAULT_ENDPOINT": JSON.stringify("https://books-api.alfeg.net:8443"),
         "import.meta.env.VITE_STANDALONE": JSON.stringify("true"),
     },
     build: {

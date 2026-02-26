@@ -1,22 +1,31 @@
-# MyHomeLib-UI
+# MyHomeLib UI
 
-![MyHomeLib Preview](./docs/preview.png)
+![MyHomeLib UI Preview](./docs/preview.png)
 
 Самохостируемое веб-приложение для поиска и скачивания книг с библиотеки [Флибуста](https://flibusta.is/), распространяемой через BitTorrent.
 
-> **English version** — [see below](#myhomelib--english)
+> **English version** — [see below](#myhomelib-ui--english)
 
 ---
 
 ## Как это работает
 
-Библиотека Флибусты — один большой торрент (~600 ГБ), содержащий тысячи ZIP-архивов с книгами в формате FB2, а также INPX-файл с метаданными всех книг.
+Библиотека Флибусты — один большой торрент (~500 ГБ), содержащий тысячи ZIP-архивов с книгами в формате FB2, а также INPX-файл с метаданными всех книг.
 
 MyHomeLib **не скачивает весь торрент**. Вместо этого:
 
 1. **При первом запуске** — скачивает только INPX-файл (~35 МБ) через [TorrServe](https://github.com/YouROK/TorrServer), парсит его на клиенте (Web Worker) и строит полнотекстовый поисковый индекс [MiniSearch](https://lucaong.github.io/minisearch/) прямо в браузере. Индекс сохраняется в IndexedDB — следующие открытия страницы работают мгновенно.
 2. **При поиске** — запрос к MiniSearch-индексу в Web Worker (AND по всем токенам, prefix-matching, BM25-ранжирование). Результаты выдаются в реальном времени без запросов к серверу.
 3. **При скачивании** — сервер через TorrServe HTTP Range запросы скачивает только нужную книгу из ZIP-архива (из каждого архива весом ~2–2,5 ГБ, загружается лишь нужный диапазон байт с книгой).
+
+---
+
+## Способы запуска
+
+| | Способ | Когда подходит |
+|---|--------|----------------|
+| 🥇 | [Standalone HTML](#standalone-версия-один-html-файл) | Просто пользоваться — без сервера, без установки |
+| 🥈 | [Docker Compose](#быстрый-старт-через-docker-compose) | Самохостинг на своём сервере |
 
 ---
 
@@ -45,16 +54,11 @@ docker compose up -d
 ```yaml
 environment:
   Torrent__TorrServeUrl: http://torrserve:8090      # адрес TorrServe
-  Torrent__TorrentSleepAfterMinutes: 10             # минут бездействия до удаления торрента
 ```
 
 > Разделитель для вложенных ключей в переменных окружения — двойное подчёркивание (`__`).
 
 Магнет-ссылка на торрент вводится прямо в браузере при первом открытии.
-
-### Production Compose
-
-Для продакшн-деплоя используйте `docker-compose.prod.yml` — порт TorrServe не пробрасывается наружу.
 
 ---
 
@@ -110,15 +114,13 @@ Vite dev-сервер проксирует API-запросы на `http://local
 | Ключ | Обязательно | По умолчанию | Описание |
 |------|-------------|--------------|----------|
 | `TorrServeUrl` | Да | — | URL экземпляра TorrServe, например `http://127.0.0.1:8090` |
-| `TorrentSleepAfterMinutes` | Нет | `10` | Минут бездействия до удаления торрента из TorrServe (0 = отключено) |
 
 ### Пример `appsettings.json`
 
 ```json
 {
   "Torrent": {
-    "TorrServeUrl": "http://localhost:8090",
-    "TorrentSleepAfterMinutes": 10
+    "TorrServeUrl": "http://localhost:8090"
   }
 }
 ```
@@ -133,7 +135,7 @@ Vite dev-сервер проксирует API-запросы на `http://local
 2. Откройте его в браузере (двойной клик или `file://`).
 3. По умолчанию приложение подключается к публичному серверу **books.alfeg.net**.
 
-Индекс (~545 000 книг) скачивается с публичного сервера, парсится в браузере и сохраняется в IndexedDB. Повторные открытия — мгновенные.
+Индекс (~685 000 книг) скачивается с публичного сервера, парсится в браузере и сохраняется в IndexedDB. Повторные открытия — мгновенные.
 
 ### Хотите использовать собственный сервер?
 
@@ -148,7 +150,7 @@ Vite dev-сервер проксирует API-запросы на `http://local
 1. Откройте браузер — вы увидите экран подключения библиотеки.
 2. Введите магнет-ссылку на торрент библиотеки в появившейся форме.
 3. MyHomeLib скачивает INPX-файл (~35 МБ) через TorrServe. Прогресс-бар показывает скорость загрузки (↓/↑), количество пиров и кэш-прогресс.
-4. Браузер распарсит INPX и построит MiniSearch-индекс (~545 000 книг, ~30–60 сек).
+4. Браузер распарсит INPX и построит MiniSearch-индекс (~685 000 книг, ~30–60 сек).
 5. Строка поиска становится активной.
 
 **При повторном открытии**: INPX и индекс загружаются из IndexedDB — готово за секунды.
@@ -177,7 +179,7 @@ TorrServe загружает только те фрагменты торрент
 ## Использование памяти
 
 - **Сервер** (~50–100 МБ): INPX-файл кешируется на диск; в RAM ничего не держится постоянно — только текущие запросы.
-- **Браузер**: MiniSearch-индекс (~545 000 книг) хранится в IndexedDB и загружается в Web Worker. RAM браузера — ~300–500 МБ при открытом индексе.
+- **Браузер**: MiniSearch-индекс (~685 000 книг) хранится в IndexedDB и загружается в Web Worker. RAM браузера — ~300–500 МБ при открытом индексе.
 
 ---
 
@@ -186,7 +188,6 @@ TorrServe загружает только те фрагменты торрент
 ```
 MyHomeLibServer.slnx
 ├── MyHomeLib.Library/   # Модель данных книги + парсер INPX (.NET)
-├── MyHomeLib.Torrent/   # Клиент TorrServe, менеджер загрузок, HTTP Range Stream (.NET)
 ├── MyHomeLib.Web/       # ASP.NET Core backend: API, проксирование загрузок, раздача фронтенда
 └── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA (поиск, фильтры, UI)
 ```
@@ -195,10 +196,9 @@ MyHomeLibServer.slnx
 
 | Файл | Назначение |
 |------|-----------|
-| `MyHomeLib.Torrent/TorrServeClient.cs` | HTTP-обёртка над TorrServe API |
-| `MyHomeLib.Torrent/HttpRangeStream.cs` | Seekable Stream поверх HTTP Range |
-| `MyHomeLib.Torrent/DownloadManager.cs` | Оркестрация скачивания через TorrServe |
-| `MyHomeLib.Web/LibraryService.cs` | BackgroundService — скачивает INPX и отдаёт клиенту |
+| `MyHomeLib.Web/Services/TorrServe/TorrServeClient.cs` | HTTP-обёртка над TorrServe API |
+| `MyHomeLib.Web/Services/HttpRangeStream.cs` | Seekable Stream поверх HTTP Range |
+| `MyHomeLib.Web/Services/DownloadManager.cs` | Оркестрация скачивания через TorrServe |
 | `MyHomeLib.Web/Program.cs` | Minimal API: `/api/library/inpx`, `/api/library/download`, `/api/library/status` |
 | `MyHomeLib.Ui/src/workers/searchIndex.worker.ts` | MiniSearch в Web Worker: парсинг INPX, индекс, поиск, IndexedDB |
 | `MyHomeLib.Ui/src/workers/inpxParser.ts` | Парсер INPX-архивов (fflate) |
@@ -217,13 +217,13 @@ MyHomeLibServer.slnx
 
 ---
 
-# MyHomeLib-UI — English
+# MyHomeLib UI — English
 
 A self-hosted web application for searching and downloading books from the [Flibusta](https://flibusta.is/) e-book library distributed as a BitTorrent.
 
 ## How it works
 
-The Flibusta library is a single large torrent (~600 GB) containing thousands of ZIP archives with FB2 books and an INPX index file with metadata for all books.
+The Flibusta library is a single large torrent (~500 GB) containing thousands of ZIP archives with FB2 books and an INPX index file with metadata for all books.
 
 MyHomeLib **never downloads the full torrent**. Instead:
 
@@ -241,13 +241,22 @@ The easiest way to start — no installation or server required.
 2. Open it in any browser (double-click or `file://`).
 3. By default it connects to the public server **books.alfeg.net**.
 
-The index (~545 000 books) is downloaded from the public server, parsed in the browser, and cached in IndexedDB. Repeat visits are instant.
+The index (~685 000 books) is downloaded from the public server, parsed in the browser, and cached in IndexedDB. Repeat visits are instant.
 
 ### Using your own server
 
 On the library connection screen expand **⚙ API Server** and enter your instance URL, e.g. `https://my-server.example.com`. The value is saved in `localStorage`.
 
 > Your server is deployed via Docker Compose (see below). No extra config needed — the magnet URI is entered directly in the browser.
+
+---
+
+## Getting started
+
+| | Option | When to use |
+|---|--------|-------------|
+| 🥇 | [Standalone HTML](#standalone-version-single-html-file) | Just use it — no server, no installation |
+| 🥈 | [Docker Compose](#quick-start-with-docker-compose) | Self-hosting on your own server |
 
 ---
 
@@ -274,16 +283,11 @@ Edit `docker-compose.yml` or set environment variables:
 ```yaml
 environment:
   Torrent__TorrServeUrl: http://torrserve:8090
-  Torrent__TorrentSleepAfterMinutes: 10
 ```
 
 > Nested config keys use double-underscore as separator in environment variables.
 
 The magnet URI is entered directly in the browser on first use.
-
-### Production Compose
-
-Use `docker-compose.prod.yml` for production — TorrServe port is not exposed externally.
 
 ---
 
@@ -334,15 +338,13 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
 | `TorrServeUrl` | Yes | — | URL of the TorrServe instance, e.g. `http://torrserve:8090` |
-| `TorrentSleepAfterMinutes` | No | `10` | Minutes of inactivity before TorrServe removes the torrent (0 = disabled) |
 
 ### Example `appsettings.json`
 
 ```json
 {
   "Torrent": {
-    "TorrServeUrl": "http://localhost:8090",
-    "TorrentSleepAfterMinutes": 10
+    "TorrServeUrl": "http://localhost:8090"
   }
 }
 ```
@@ -352,7 +354,7 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 ## Memory usage
 
 - **Server** (~50–100 MB): the INPX file is fetched on demand from TorrServe; nothing is written to disk.
-- **Browser**: MiniSearch index (~545 000 books) lives in IndexedDB and is loaded into a Web Worker. Expect ~300–500 MB browser RAM while the index is active.
+- **Browser**: MiniSearch index (~600 000 books) lives in IndexedDB and is loaded into a Web Worker. Expect ~300–500 MB browser RAM while the index is active.
 
 ---
 
@@ -361,7 +363,6 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 ```
 MyHomeLibServer.slnx
 ├── MyHomeLib.Library/   # Book data model + INPX parser (.NET)
-├── MyHomeLib.Torrent/   # TorrServe client, download manager, HTTP Range Stream (.NET)
 ├── MyHomeLib.Web/       # ASP.NET Core backend: API, download proxy, frontend serving
 └── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA (search, filters, UI)
 ```
@@ -370,10 +371,9 @@ MyHomeLibServer.slnx
 
 | File | Purpose |
 |------|---------|
-| `MyHomeLib.Torrent/TorrServeClient.cs` | HTTP wrapper for TorrServe API |
-| `MyHomeLib.Torrent/HttpRangeStream.cs` | Seekable `Stream` backed by HTTP Range — lets `ZipArchive` read a remote ZIP without downloading all of it |
-| `MyHomeLib.Torrent/DownloadManager.cs` | Orchestrates book search and download via TorrServe |
-| `MyHomeLib.Web/LibraryService.cs` | BackgroundService — downloads the INPX and serves it to the client |
+| `MyHomeLib.Web/Services/TorrServe/TorrServeClient.cs` | HTTP wrapper for TorrServe API |
+| `MyHomeLib.Web/Services/HttpRangeStream.cs` | Seekable `Stream` backed by HTTP Range — lets `ZipArchive` read a remote ZIP without downloading all of it |
+| `MyHomeLib.Web/Services/DownloadManager.cs` | Orchestrates book search and download via TorrServe |
 | `MyHomeLib.Web/Program.cs` | Minimal API: `/api/library/inpx`, `/api/library/download`, `/api/library/status` |
 | `MyHomeLib.Ui/src/workers/searchIndex.worker.ts` | MiniSearch in a Web Worker: parse INPX, build index, search, IndexedDB persistence |
 | `MyHomeLib.Ui/src/workers/inpxParser.ts` | INPX archive parser (fflate + streaming) |

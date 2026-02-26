@@ -6,12 +6,13 @@ export default defineConfig({
     server: {
         proxy: {
             "/api": {
-                target: "https://books.alfeg.net",
+                target: "https://books-api.alfeg.net",
                 changeOrigin: true,
                 secure: false,
             },
         },
     },
+    optimizeDeps: ["minisearch", "fflate"],
     test: {
         environment: "node",
     },

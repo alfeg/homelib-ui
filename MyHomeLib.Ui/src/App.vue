@@ -78,7 +78,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <main class="bg-base-200 text-base-content min-h-screen">
+    <main class="bg-base-200 text-base-content min-h-screen transition-all duration-500">
         <MagnetGate
             v-if="!isMagnetSet || (!isReady && !isReindexing)"
             :error="error"

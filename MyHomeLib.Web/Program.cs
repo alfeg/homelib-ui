@@ -8,6 +8,7 @@ using MyHomeLib.Web.Services.TorrServe;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 builder.Services.Configure<TorrentConfig>(builder.Configuration.GetSection("Torrent"));
@@ -29,15 +30,22 @@ builder.Services.AddHttpClient<TorrServeClient>((sp, c) =>
     c.BaseAddress = new Uri(sp.GetRequiredService<IOptions<TorrentConfig>>().Value.TorrServeUrl));
 builder.Services.AddTransient<DownloadManager>();
 
-builder.Services.AddMemoryCache();
-builder.Services.AddTransient<IdleTorrentCleanupService>();
-
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 
 app.UseCors();
+
+app.UseRequestLocalization(options =>
+{
+    string[] supported = ["en", "ru"];
+    options.SetDefaultCulture("en")
+           .AddSupportedCultures(supported)
+           .AddSupportedUICultures(supported);
+    options.FallBackToParentCultures = true;
+    options.FallBackToParentUICultures = true;
+});
 
 if (!app.Environment.IsDevelopment())
 {

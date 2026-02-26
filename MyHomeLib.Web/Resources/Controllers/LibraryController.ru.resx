@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+
+  <data name="magnetUri is required." xml:space="preserve">
+    <value>Требуется magnetUri.</value>
+  </data>
+  <data name="Invalid magnetUri." xml:space="preserve">
+    <value>Некорректный magnetUri.</value>
+  </data>
+  <data name="Unable to prepare INPX file." xml:space="preserve">
+    <value>Не удалось подготовить INPX файл.</value>
+  </data>
+  <data name="magnetUri, archiveFile, file and ext are required." xml:space="preserve">
+    <value>Требуются поля magnetUri, archiveFile, file и ext.</value>
+  </data>
+  <data name="Invalid request." xml:space="preserve">
+    <value>Некорректный запрос.</value>
+  </data>
+  <data name="File not found." xml:space="preserve">
+    <value>Файл не найден.</value>
+  </data>
+  <data name="Unable to process download request." xml:space="preserve">
+    <value>Не удалось обработать запрос на скачивание.</value>
+  </data>
+  <data name="TorrServe is unavailable. Please try again later." xml:space="preserve">
+    <value>TorrServe недоступен. Попробуйте позже.</value>
+  </data>
+  <data name="Internal server error." xml:space="preserve">
+    <value>Внутренняя ошибка сервера.</value>
+  </data>
+</root>
