@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace MyHomeLib.Web;
+namespace MyHomeLib.Web.Services;
 
 public static partial class MagnetUriHelper
 {

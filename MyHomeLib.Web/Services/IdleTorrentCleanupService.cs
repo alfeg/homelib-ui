@@ -1,7 +1,8 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
+using MyHomeLib.Web.Models;
 
-namespace MyHomeLib.Web;
+namespace MyHomeLib.Web.Services;
 
 public sealed class IdleTorrentCleanupService(
     DownloadManager downloadManager,

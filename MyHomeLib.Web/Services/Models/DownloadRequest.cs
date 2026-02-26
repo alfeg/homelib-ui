@@ -1,4 +1,4 @@
-namespace MyHomeLib.Web;
+namespace MyHomeLib.Web.Services.Models;
 
 public record DownloadRequest(string Library, string Archive, string? Book = null)
     : TorrentRequest(Library)

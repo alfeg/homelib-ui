@@ -1,4 +1,4 @@
-namespace MyHomeLib.Web;
+namespace MyHomeLib.Web.Models;
 
 public class LibraryConfig
 {

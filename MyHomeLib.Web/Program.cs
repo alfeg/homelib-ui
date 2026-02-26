@@ -1,5 +1,10 @@
 using System.Text;
 using MyHomeLib.Web;
+using MyHomeLib.Web.Models;
+using MyHomeLib.Web.Services;
+using MyHomeLib.Web.Services.Models;
+using MyHomeLib.Web.Services.TorrServe;
+using MagnetUriHelper = MyHomeLib.Web.Services.MagnetUriHelper;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,19 +36,9 @@ if (builder.Environment.IsDevelopment())
 var torrServeUrl = builder.Configuration["Torrent:TorrServeUrl"]
     ?? throw new InvalidOperationException("Torrent:TorrServeUrl is required.");
 
-builder.Services.AddSingleton<TorrServeClient>(sp =>
-    new TorrServeClient(
-        new HttpClient(),
-        torrServeUrl,
-        sp.GetRequiredService<ILogger<TorrServeClient>>()));
+builder.Services.AddHttpClient<TorrServeClient>(c => c.BaseAddress = new Uri(torrServeUrl));
+builder.Services.AddTransient<DownloadManager>();
 
-builder.Services.AddSingleton<DownloadManager>(sp =>
-    new DownloadManager(
-        sp.GetRequiredService<TorrServeClient>(),
-        new HttpClient(),
-        sp.GetRequiredService<ILogger<DownloadManager>>()));
-
-builder.Services.AddSingleton<LibraryBooksCacheService>();
 builder.Services.AddSingleton<IdleTorrentCleanupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleTorrentCleanupService>());
 
@@ -63,7 +58,7 @@ if (!app.Environment.IsDevelopment())
 app.MapPost("/api/library/inpx", async (
     LibraryBooksRequest request,
     HttpContext httpContext,
-    LibraryBooksCacheService booksCache,
+    DownloadManager downloadManager,
     IdleTorrentCleanupService idleTorrentCleanupService,
     ILogger<Program> logger,
     CancellationToken ct) =>
@@ -78,7 +73,7 @@ app.MapPost("/api/library/inpx", async (
 
     try
     {
-        var inpxFile = await booksCache.GetInpxFileAsync(request.MagnetUri, ct);
+        var inpxFile = await downloadManager.GetInpxFileAsync(request.MagnetUri, ct);
         return Results.File(inpxFile.Data, "application/octet-stream", inpxFile.FileName);
     }
     catch (FormatException)

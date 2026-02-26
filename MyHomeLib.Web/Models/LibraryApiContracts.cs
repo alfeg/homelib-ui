@@ -1,4 +1,4 @@
-namespace MyHomeLib.Web;
+namespace MyHomeLib.Web.Models;
 
 public sealed record LibraryBooksRequest(string MagnetUri, bool ForceReindex = false);
 

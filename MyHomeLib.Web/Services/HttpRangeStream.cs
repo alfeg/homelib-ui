@@ -1,4 +1,4 @@
-namespace MyHomeLib.Web;
+namespace MyHomeLib.Web.Services;
 
 /// <summary>
 /// A seekable read-only <see cref="Stream"/> backed by HTTP Range requests.
