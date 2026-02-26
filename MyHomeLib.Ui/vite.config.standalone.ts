@@ -5,7 +5,7 @@ import { viteSingleFile } from "vite-plugin-singlefile"
 /**
  * Standalone single-file HTML build.
  * Run: npm run build-standalone
- * Output: dist-standalone/index.html  (fully self-contained, no external deps)
+ * Output: ../docs/index.html  (fully self-contained, no external deps)
  */
 export default defineConfig({
     plugins: [vue(), viteSingleFile()],
@@ -15,7 +15,7 @@ export default defineConfig({
     },
     build: {
         target: "esnext",
-        outDir: "dist-standalone",
+        outDir: "../docs",
         cssCodeSplit: false,
         assetsInlineLimit: 100_000_000,
         rollupOptions: {
