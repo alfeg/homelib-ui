@@ -135,23 +135,23 @@ const onLocaleToggle = (event: Event) => {
                     @keyup.enter="onSubmit"
                 />
 
-                <div class="flex flex-wrap gap-2">
+                <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
-                        class="btn btn-primary"
+                        class="btn btn-primary w-full sm:w-auto"
                         :disabled="loading"
                         @click="onSubmit"
                     >
                         {{ loading ? t("gate.loading") : t("gate.openLibrary") }}
                     </button>
                     <button
-                        class="btn btn-outline btn-primary"
+                        class="btn btn-outline btn-primary w-full sm:w-auto"
                         :disabled="loading"
                         @click="openFilePicker"
                     >
                         {{ t("gate.chooseTorrent") }}
                     </button>
                     <button
-                        class="btn btn-outline"
+                        class="btn btn-outline w-full sm:w-auto"
                         :disabled="loading"
                         @click="onLucky"
                     >
