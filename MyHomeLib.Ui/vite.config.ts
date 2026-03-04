@@ -12,7 +12,7 @@ export default defineConfig({
         port: 5175,
         proxy: {
             "/api": {
-                target: "https://books-api.alfeg.net",
+                target: "https://books-api.alfeg.net:8443",
                 changeOrigin: true,
                 secure: false,
             },

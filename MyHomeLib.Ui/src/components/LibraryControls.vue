@@ -111,60 +111,70 @@ function phaseStatus() {
 
     return { text: t("common.phaseLoading"), cls: "badge-info" }
 }
+
+function lastDescriptionLine() {
+    if (!props.metadata?.description) return null
+    const lines = props.metadata.description.split(/\r\n|\n|\r/).filter((line) => line.trim())
+    return lines.length > 0 ? lines[lines.length - 1] : null
+}
 </script>
 
 <template>
     <header class="mb-4 flex flex-col items-start justify-between gap-4 lg:flex-row">
-        <div>
+        <div class="flex flex-col gap-1">
             <h1 class="text-2xl font-semibold">{{ t("app.title") }}</h1>
-            <p class="text-base-content/70">
-                {{ t("common.hash") }}:
-                <a
-                    class="hover:text-primary inline-flex items-center gap-1 font-mono transition-colors"
-                    :href="magnetUri"
-                    :title="magnetUri"
+            <div
+                class="md:divide-base-content/20 flex flex-col gap-1 md:flex-row md:items-start md:gap-0 md:divide-x lg:items-center"
+            >
+                <p
+                    v-if="lastDescriptionLine()"
+                    class="text-base-content/80 text-sm md:pr-4"
                 >
-                    <svg
-                        class="inline-block h-3.5 w-3.5 shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
+                    {{ lastDescriptionLine() }}
+                </p>
+                <p class="text-base-content/70 md:px-4">
+                    {{ t("common.hash") }}:
+                    <a
+                        class="hover:text-primary inline-flex items-baseline gap-1 font-mono underline transition-colors"
+                        :href="magnetUri"
+                        :title="magnetUri"
                     >
-                        <path d="M6 3h2v8a4 4 0 0 0 8 0V3h2v8a6 6 0 0 1-12 0V3z" />
-                        <line
-                            x1="6"
-                            x2="9"
-                            y1="20"
-                            y2="20"
-                        />
-                        <line
-                            x1="15"
-                            x2="18"
-                            y1="20"
-                            y2="20"
-                        />
-                    </svg>
-                    {{ hash }}
-                </a>
-            </p>
-            <p
-                v-if="metadata"
-                class="text-base-content/70"
-            >
-                {{
-                    t("common.versionBooks", { version: metadata.version, count: booksCountText(metadata.totalBooks) })
-                }}
-            </p>
-            <p
-                v-if="lastUpdatedAt"
-                class="text-base-content/70"
-            >
-                {{ t("common.lastUpdate", { value: lastUpdatedAt }) }}
-            </p>
+                        <svg
+                            class="inline-block h-4 w-4 shrink-0"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2.5"
+                            viewBox="0 -6 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <!-- Left pole (red) - mirrored -->
+                            <path
+                                d="M12 15a4 4 0 0 1 -4-4V3h-2v8a6 6 0 0 0 6 6"
+                                stroke="#ef4444"
+                            />
+                            <!-- Right pole (blue) -->
+                            <path
+                                d="M12 15a4 4 0 0 0 4-4V3h2v8a6 6 0 0 1-6 6"
+                                stroke="#3b82f6"
+                            />
+                        </svg>
+                        {{ hash }}
+                    </a>
+                </p>
+                <p
+                    v-if="metadata"
+                    class="text-base-content/70 md:pl-4"
+                >
+                    {{ booksCountText(metadata.totalBooks) }}
+                </p>
+                <!-- <p
+                    v-if="lastUpdatedAt"
+                    class="text-base-content/70 md:pl-4"
+                >
+                    {{ t("common.lastUpdate", { value: lastUpdatedAt }) }}
+                </p> -->
+            </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
             <label class="swap btn btn-ghost btn-sm border-base-300 border px-2">

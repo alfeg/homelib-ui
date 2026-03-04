@@ -16,7 +16,6 @@ const messages = {
         app: { title: "Поиск MyHomeLib" },
         common: {
             hash: "Хеш",
-            versionBooks: "Версия {version} · {count}",
             lastUpdate: "Последнее обновление: {value}",
             cache: "кэш",
             backend: "сервер",
@@ -123,7 +122,6 @@ const messages = {
         app: { title: "MyHomeLib Search" },
         common: {
             hash: "Hash",
-            versionBooks: "Version {version} · {count}",
             lastUpdate: "Last update: {value}",
             cache: "cache",
             backend: "backend",

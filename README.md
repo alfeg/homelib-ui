@@ -131,6 +131,10 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 Если вы просто хотите пользоваться библиотекой, не поднимая собственный сервер — используйте standalone-сборку.
 
+**🌐 Публичная ссылка:** [https://alfeg.github.io/homelib-ui/index.html](https://alfeg.github.io/homelib-ui/index.html)
+
+Или скачайте файл:
+
 1. Скачайте файл [`MyHomeLib.Ui/dist-standalone/index.html`](MyHomeLib.Ui/dist-standalone/index.html).
 2. Откройте его в браузере (двойной клик или `file://`).
 3. По умолчанию приложение подключается к публичному серверу **books.alfeg.net**.
@@ -236,6 +240,10 @@ MyHomeLib **never downloads the full torrent**. Instead:
 ## Standalone build (single HTML file)
 
 The easiest way to start — no installation or server required.
+
+**🌐 Public link:** [https://alfeg.github.io/homelib-ui/index.html](https://alfeg.github.io/homelib-ui/index.html)
+
+Or download the file:
 
 1. Download [`MyHomeLib.Ui/dist-standalone/index.html`](MyHomeLib.Ui/dist-standalone/index.html).
 2. Open it in any browser (double-click or `file://`).
