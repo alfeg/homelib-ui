@@ -17,7 +17,6 @@ const props = defineProps<{
         totalBytes?: number | null
     }
     progressLabel?: string
-    statusText?: string
 }>()
 const emit = defineEmits<{
     (e: "submit", value: string): void
@@ -107,7 +106,7 @@ const onLocaleToggle = (event: Event) => {
                         max="100"
                     />
                     <p class="text-base-content/70 text-center text-sm">
-                        {{ progressLabel || statusText || t("gate.loading") }}
+                        {{ progressLabel || t("gate.loading") }}
                     </p>
                     <div
                         v-if="error"

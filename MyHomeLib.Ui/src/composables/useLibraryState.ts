@@ -65,7 +65,6 @@ export const useLibraryState = createGlobalState(() => {
     const isLoading = ref(false)
     const isReindexing = ref(false)
     const workerReady = ref(false)
-    const status = ref("")
     const error = ref("")
     const hasCache = ref(false)
     const lastUpdatedAt = ref("")
@@ -161,12 +160,6 @@ export const useLibraryState = createGlobalState(() => {
     const searchWorkerClient = createSearchWorkerClient({
         onProgress: (progress) => {
             setProgress(progress)
-            status.value = buildIndexingStatusText(
-                progress.processed ?? 0,
-                progress.total ?? 0,
-                progress.percent ?? 0,
-                indexProgress.etaSeconds,
-            )
         },
         onError: (err) => {
             error.value = err instanceof Error ? err.message : t("error.searchWorkerFailed")
@@ -388,24 +381,14 @@ export const useLibraryState = createGlobalState(() => {
                 downloadedBytes: 0,
                 totalBytes: null,
             })
-            status.value = reindexing ? t("status.reindexDownloading") : t("status.loadingDownloading")
-
             const inpxBuffer = await apiClient.fetchInpx(
                 magnetUri.value,
                 ({ downloadedBytes, totalBytes, percent }) => {
                     setProgress({ phase: "loading-backend", downloadedBytes, totalBytes, percent: percent ?? 0 })
-                    status.value = totalBytes
-                        ? t("status.downloadingInpxTotal", {
-                              downloaded: formatMegabytes(downloadedBytes),
-                              total: formatMegabytes(totalBytes),
-                              percent: percent ?? 0,
-                          })
-                        : t("status.downloadingInpxSimple", { downloaded: formatMegabytes(downloadedBytes) })
                 },
             )
 
             // Step 2: Transfer buffer to worker — parse + index + persist, no books on main thread
-            status.value = t("status.inpxDownloadedParsing")
             const buildResult: any = await searchWorkerClient.parseAndBuild(inpxBuffer, { hash: magnetHash.value })
 
             metadata.value = buildResult?.metadata ?? null
@@ -422,11 +405,9 @@ export const useLibraryState = createGlobalState(() => {
                 downloadedBytes: 0,
                 totalBytes: null,
             })
-            status.value = t("status.libraryIndexed")
             refreshSearchResults()
         } catch (err) {
             setProgress({ phase: "error", processed: 0, total: 0, percent: 0, downloadedBytes: 0, totalBytes: null })
-            status.value = reindexing ? t("status.reindexFailed") : t("status.loadFailed")
             error.value = err instanceof Error ? err.message : t("error.inpxLoadFailed")
             throw err
         } finally {
@@ -446,8 +427,6 @@ export const useLibraryState = createGlobalState(() => {
             downloadedBytes: 0,
             totalBytes: null,
         })
-        status.value = t("status.cachedLibraryRestoring")
-
         // Fast path: restore index + books from worker's own IDB — no book array ever on main thread
         const restoreResult = await searchWorkerClient.restoreIndex({ hash: magnetHash.value })
 
@@ -465,7 +444,6 @@ export const useLibraryState = createGlobalState(() => {
                 downloadedBytes: 0,
                 totalBytes: null,
             })
-            status.value = null // t("status.loadedFromCache")
             refreshSearchResults()
             return
         }
@@ -539,7 +517,6 @@ export const useLibraryState = createGlobalState(() => {
             await loadLibraryForCurrentMagnet()
         } catch (err) {
             error.value = err instanceof Error ? err.message : t("error.savedLibraryFailed")
-            status.value = t("status.savedLibraryLoadFailedTryReindex")
         }
     }
 
@@ -547,7 +524,6 @@ export const useLibraryState = createGlobalState(() => {
         if (!magnetHash.value || !magnetUri.value) return
 
         error.value = ""
-        status.value = t("status.reindexClearing")
         setProgress({
             phase: "clearing-local",
             processed: 0,
@@ -559,11 +535,9 @@ export const useLibraryState = createGlobalState(() => {
 
         try {
             await searchWorkerClient.clearPersistedIndex(magnetHash.value)
-            status.value = t("status.localCacheCleared")
             await fetchAndBuild({ reindexing: true })
         } catch (err) {
             error.value = err instanceof Error ? err.message : t("error.reindexFailed")
-            status.value = t("status.reindexTryAgain")
         }
     }
 
@@ -585,7 +559,6 @@ export const useLibraryState = createGlobalState(() => {
         selectedYearFrom.value = null
         selectedYearTo.value = null
         availableYearRange.value = null
-        status.value = ""
         error.value = ""
         hasCache.value = false
         lastUpdatedAt.value = ""
@@ -608,7 +581,6 @@ export const useLibraryState = createGlobalState(() => {
         selectedYearFrom.value = null
         selectedYearTo.value = null
         availableYearRange.value = null
-        status.value = ""
         error.value = ""
         hasCache.value = false
         lastUpdatedAt.value = ""
@@ -672,7 +644,6 @@ export const useLibraryState = createGlobalState(() => {
         isReindexing,
         isMagnetSet,
         isReady,
-        status,
         error,
         hasCache,
         lastUpdatedAt,

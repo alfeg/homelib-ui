@@ -16,7 +16,6 @@ const props = defineProps<{
     hash: string
     magnetUri: string
     metadata: LibraryMetadata | null
-    status: string
     progress: IndexProgress
     hasCache: boolean
     lastUpdatedAt: string
@@ -256,12 +255,6 @@ function lastDescriptionLine() {
             </button>
         </div>
     </header>
-    <p
-        v-if="status"
-        class="text-base-content mb-2"
-    >
-        {{ status }}
-    </p>
     <p
         v-if="progressText()"
         class="text-base-content/70 mb-3"
