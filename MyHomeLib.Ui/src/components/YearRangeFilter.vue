@@ -24,11 +24,17 @@ const hasFilter = () => props.yearFrom !== null || props.yearTo !== null
 </script>
 
 <template>
-    <div>
+    <div data-test="year-range-root">
         <div class="mb-2 flex items-center justify-between gap-2">
-            <h2 class="m-0 text-base font-semibold">{{ t("yearRange.title") }}</h2>
+            <h2
+                class="m-0 text-base font-semibold"
+                data-test="year-range-title"
+            >
+                {{ t("yearRange.title") }}
+            </h2>
             <button
                 class="btn btn-outline btn-primary btn-xs"
+                data-test="year-range-reset-btn"
                 :disabled="!hasFilter()"
                 @click="$emit('clear')"
             >
@@ -38,9 +44,15 @@ const hasFilter = () => props.yearFrom !== null || props.yearTo !== null
 
         <div class="flex items-center gap-2">
             <label class="flex flex-1 flex-col gap-0.5">
-                <span class="text-base-content/60 text-xs">{{ t("yearRange.from") }}</span>
+                <span
+                    class="text-base-content/60 text-xs"
+                    data-test="year-range-from-label"
+                >
+                    {{ t("yearRange.from") }}
+                </span>
                 <input
                     class="input input-xs input-bordered w-full"
+                    data-test="year-range-from-input"
                     :max="availableRange.max"
                     :min="availableRange.min"
                     :placeholder="String(availableRange.min)"
@@ -51,9 +63,15 @@ const hasFilter = () => props.yearFrom !== null || props.yearTo !== null
             </label>
             <span class="text-base-content/40 mt-4">—</span>
             <label class="flex flex-1 flex-col gap-0.5">
-                <span class="text-base-content/60 text-xs">{{ t("yearRange.to") }}</span>
+                <span
+                    class="text-base-content/60 text-xs"
+                    data-test="year-range-to-label"
+                >
+                    {{ t("yearRange.to") }}
+                </span>
                 <input
                     class="input input-xs input-bordered w-full"
+                    data-test="year-range-to-input"
                     :max="availableRange.max"
                     :min="availableRange.min"
                     :placeholder="String(availableRange.max)"
@@ -64,6 +82,11 @@ const hasFilter = () => props.yearFrom !== null || props.yearTo !== null
             </label>
         </div>
 
-        <p class="text-base-content/50 mt-1 text-xs">{{ availableRange.min }} – {{ availableRange.max }}</p>
+        <p
+            class="text-base-content/50 mt-1 text-xs"
+            data-test="year-range-bounds"
+        >
+            {{ availableRange.min }} – {{ availableRange.max }}
+        </p>
     </div>
 </template>

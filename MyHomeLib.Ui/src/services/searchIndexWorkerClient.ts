@@ -53,12 +53,21 @@ type BuildProgressPayload = {
     totalBytes?: number | null
 }
 
+type RestoreMetadataPayload = {
+    hash: string
+    metadata?: LibraryMetadata | null
+    total?: number
+    persistedAt?: string
+}
+
 export function createSearchWorkerClient({
     onProgress,
     onError,
+    onRestoreMetadata,
 }: {
     onProgress?: (payload: BuildProgressPayload) => void
     onError?: (error: Error) => void
+    onRestoreMetadata?: (payload: RestoreMetadataPayload) => void
 } = {}) {
     const worker = new SearchIndexWorker()
     let pendingBuild: Pending<BuildResult> = null
@@ -107,6 +116,11 @@ export function createSearchWorkerClient({
         if (message.type === "restore-complete") {
             pendingRestore?.resolve(message.payload ?? { restored: false, reason: "unknown" })
             pendingRestore = null
+            return
+        }
+
+        if (message.type === "restore-metadata") {
+            onRestoreMetadata?.(message.payload ?? { hash: "" })
             return
         }
 

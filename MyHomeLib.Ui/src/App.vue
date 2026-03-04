@@ -77,9 +77,13 @@ onMounted(() => {
 </script>
 
 <template>
-    <main class="bg-base-200 text-base-content min-h-screen transition-all duration-500">
+    <main
+        class="bg-base-200 text-base-content min-h-screen transition-all duration-500"
+        data-test="app-root"
+    >
         <MagnetGate
             v-if="!isMagnetSet || (!isReady && !isReindexing && indexProgress.phase !== 'loading-cache')"
+            data-test="magnet-gate"
             :error="error"
             :loading="isLoading"
             :progress="isMagnetSet ? indexProgress : undefined"
@@ -92,8 +96,10 @@ onMounted(() => {
         <section
             v-else
             class="mx-auto max-w-450 p-5"
+            data-test="library-section"
         >
             <LibraryControls
+                data-test="library-controls"
                 :hasCache="hasCache"
                 :hash="magnetHash"
                 :lastUpdatedAt="lastUpdatedAt"
@@ -110,9 +116,11 @@ onMounted(() => {
             <div
                 v-if="isReady"
                 class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[420px_1fr]"
+                data-test="library-ready-layout"
             >
                 <GenreSidebar
                     :availableYearRange="availableYearRange"
+                    data-test="genre-sidebar"
                     :genres="genreFacets"
                     :selectedGenres="selectedGenres"
                     :yearFrom="selectedYearFrom"
@@ -124,9 +132,13 @@ onMounted(() => {
                     @yearTo="(v) => (selectedYearTo = v)"
                 />
 
-                <div class="card bg-base-100 border-base-300 min-w-0 border p-4 shadow-sm">
+                <div
+                    class="card bg-base-100 border-base-300 min-w-0 border p-4 shadow-sm"
+                    data-test="results-card"
+                >
                     <SearchBar
                         v-model="searchTerm"
+                        data-test="search-bar"
                         :filtered="totalFilteredBooks"
                         :total="totalBooks"
                     />
@@ -134,6 +146,7 @@ onMounted(() => {
                     <p
                         v-if="error"
                         class="alert alert-error mb-2"
+                        data-test="app-error"
                     >
                         {{ error }}
                     </p>
@@ -141,6 +154,7 @@ onMounted(() => {
                     <BooksTable
                         :books="filteredBooks"
                         :currentPage="currentPage"
+                        data-test="books-table"
                         :downloadingById="downloadingById"
                         :formatGenres="formatBookGenres"
                         :totalPages="totalPages"
@@ -156,8 +170,12 @@ onMounted(() => {
             <div
                 v-else
                 class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[420px_1fr]"
+                data-test="library-skeleton-layout"
             >
-                <aside class="card bg-base-100 border-base-300 flex flex-col border p-3">
+                <aside
+                    class="card bg-base-100 border-base-300 flex flex-col border p-3"
+                    data-test="sidebar-skeleton"
+                >
                     <div class="skeleton mb-3 h-6 w-32" />
                     <div class="skeleton mb-2 h-4 w-full" />
                     <div class="skeleton mb-2 h-4 w-full" />
@@ -169,7 +187,10 @@ onMounted(() => {
                     </div>
                 </aside>
 
-                <div class="card bg-base-100 border-base-300 min-w-0 border p-4 shadow-sm">
+                <div
+                    class="card bg-base-100 border-base-300 min-w-0 border p-4 shadow-sm"
+                    data-test="content-skeleton"
+                >
                     <div class="skeleton mb-4 h-10 w-full" />
                     <div class="skeleton mb-3 h-10 w-full" />
                     <div class="skeleton mb-2 h-12 w-full" />

@@ -64,9 +64,13 @@ const onLocaleToggle = (event: Event) => {
 </script>
 
 <template>
-    <section class="flex min-h-screen items-center justify-center p-4">
+    <section
+        class="flex min-h-screen items-center justify-center p-4"
+        data-test="magnet-gate-root"
+    >
         <div
             class="card bg-base-100 border-base-300 grid w-full max-w-3xl gap-3 border p-8 shadow-xl"
+            data-test="magnet-gate-card"
             :class="!isLoadingMode && isDragActive ? 'border-primary border-2 border-dashed' : ''"
             @dragenter.prevent="!isLoadingMode && (isDragActive = true)"
             @dragleave.prevent="isDragActive = false"
@@ -78,12 +82,23 @@ const onLocaleToggle = (event: Event) => {
                 }
             "
         >
-            <h1 class="text-2xl font-semibold">{{ isLoadingMode ? t("gate.titleLoading") : t("gate.title") }}</h1>
+            <h1
+                class="text-2xl font-semibold"
+                data-test="magnet-gate-title"
+            >
+                {{ isLoadingMode ? t("gate.titleLoading") : t("gate.title") }}
+            </h1>
             <div class="flex items-center justify-between gap-2">
-                <p class="text-slate-500">{{ isLoadingMode ? "" : t("gate.subtitle") }}</p>
+                <p
+                    class="text-slate-500"
+                    data-test="magnet-gate-subtitle"
+                >
+                    {{ isLoadingMode ? "" : t("gate.subtitle") }}
+                </p>
                 <label class="swap btn btn-ghost btn-sm border-base-300 border px-2">
                     <input
                         :checked="locale === 'en'"
+                        data-test="magnet-gate-locale-toggle"
                         name="locale-toggle"
                         type="checkbox"
                         @change="onLocaleToggle"
@@ -99,22 +114,33 @@ const onLocaleToggle = (event: Event) => {
                     <span
                         v-if="!error"
                         class="loading loading-spinner loading-lg text-primary"
+                        data-test="magnet-gate-spinner"
                     />
                     <progress
                         class="progress progress-primary w-full"
-                        :value="progress?.percent || undefined"
+                        data-test="magnet-gate-progress"
                         max="100"
+                        :value="progress?.percent || undefined"
                     />
-                    <p class="text-base-content/70 text-center text-sm">
+                    <p
+                        class="text-base-content/70 text-center text-sm"
+                        data-test="magnet-gate-progress-text"
+                    >
                         {{ progressLabel || t("gate.loading") }}
                     </p>
                     <div
                         v-if="error"
                         class="flex w-full flex-col gap-3"
                     >
-                        <p class="alert alert-error">{{ error }}</p>
+                        <p
+                            class="alert alert-error"
+                            data-test="magnet-gate-error"
+                        >
+                            {{ error }}
+                        </p>
                         <button
                             class="btn btn-outline btn-sm self-start"
+                            data-test="magnet-gate-dismiss-btn"
                             @click="emit('dismiss')"
                         >
                             {{ t("gate.dismiss") }}
@@ -128,6 +154,7 @@ const onLocaleToggle = (event: Event) => {
                 <input
                     v-model="magnetInput"
                     class="input input-bordered w-full text-base"
+                    data-test="magnet-gate-input"
                     :disabled="loading"
                     placeholder="magnet:?xt=urn:btih:..."
                     type="text"
@@ -137,6 +164,7 @@ const onLocaleToggle = (event: Event) => {
                 <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
                         class="btn btn-primary w-full sm:w-auto"
+                        data-test="magnet-gate-open-btn"
                         :disabled="loading"
                         @click="onSubmit"
                     >
@@ -144,6 +172,7 @@ const onLocaleToggle = (event: Event) => {
                     </button>
                     <button
                         class="btn btn-outline btn-primary w-full sm:w-auto"
+                        data-test="magnet-gate-choose-torrent-btn"
                         :disabled="loading"
                         @click="openFilePicker"
                     >
@@ -151,6 +180,7 @@ const onLocaleToggle = (event: Event) => {
                     </button>
                     <button
                         class="btn btn-outline w-full sm:w-auto"
+                        data-test="magnet-gate-lucky-btn"
                         :disabled="loading"
                         @click="onLucky"
                     >
@@ -162,15 +192,22 @@ const onLocaleToggle = (event: Event) => {
                     ref="fileInput"
                     accept=".torrent,application/x-bittorrent"
                     class="hidden"
+                    data-test="magnet-gate-file-input"
                     :disabled="loading"
                     type="file"
                     @change="onFileInput"
                 />
 
-                <p class="text-base-content/70">{{ t("gate.dragHint") }}</p>
+                <p
+                    class="text-base-content/70"
+                    data-test="magnet-gate-drag-hint"
+                >
+                    {{ t("gate.dragHint") }}
+                </p>
                 <p
                     v-if="error"
                     class="alert alert-error"
+                    data-test="magnet-gate-error"
                 >
                     {{ error }}
                 </p>

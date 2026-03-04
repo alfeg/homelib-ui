@@ -164,6 +164,13 @@ export const useLibraryState = createGlobalState(() => {
         onError: (err) => {
             error.value = err instanceof Error ? err.message : t("error.searchWorkerFailed")
         },
+        onRestoreMetadata: (payload) => {
+            // Ignore stale worker messages from previous magnet restore attempts.
+            if (!payload?.hash || payload.hash !== magnetHash.value) return
+            metadata.value = payload.metadata ?? null
+            totalBooks.value = payload.total ?? 0
+            lastUpdatedAt.value = payload.persistedAt ? new Date(payload.persistedAt).toLocaleString() : ""
+        },
     })
 
     function resolveGenreLabel(genreCode) {

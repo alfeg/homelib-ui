@@ -32,10 +32,12 @@ function toggleCollapse() {
 <template>
     <aside
         class="card bg-base-100 border-base-300 flex flex-col border p-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-12rem)]"
+        data-test="genre-sidebar-root"
     >
         <!-- Mobile toggle button -->
         <button
             class="btn btn-ghost btn-sm mb-2 justify-between lg:hidden"
+            data-test="genre-sidebar-toggle-btn"
             @click="toggleCollapse"
         >
             <span class="font-semibold">{{ t("genres.title") }}</span>
@@ -57,10 +59,14 @@ function toggleCollapse() {
         </button>
 
         <!-- Collapsible content -->
-        <div :class="{ hidden: isCollapsed, 'lg:block': true }">
+        <div
+            :class="{ hidden: isCollapsed, 'lg:block': true }"
+            data-test="genre-sidebar-content"
+        >
             <GenreList
                 :genres="genres"
                 :selectedGenres="selectedGenres"
+                data-test="genre-list"
                 @clear="$emit('clear')"
                 @toggle="(g) => $emit('toggle', g)"
             />
@@ -68,11 +74,13 @@ function toggleCollapse() {
             <div
                 v-if="availableYearRange"
                 class="border-base-300 mt-3 shrink-0 border-t pt-3"
+                data-test="year-filter-section"
             >
                 <YearRangeFilter
                     :availableRange="availableYearRange"
                     :yearFrom="yearFrom"
                     :yearTo="yearTo"
+                    data-test="year-range-filter"
                     @clear="$emit('clearYear')"
                     @yearFrom="(v) => $emit('yearFrom', v)"
                     @yearTo="(v) => $emit('yearTo', v)"

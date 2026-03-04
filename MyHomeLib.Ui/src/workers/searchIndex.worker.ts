@@ -589,6 +589,17 @@ self.onmessage = async (event) => {
                 return
             }
 
+            // Emit metadata immediately so UI can render header details while heavy restore continues.
+            self.postMessage({
+                type: "restore-metadata",
+                payload: {
+                    hash,
+                    metadata: persisted.metadata ?? null,
+                    total: persisted.total ?? 0,
+                    persistedAt: persisted.updatedAt ?? "",
+                },
+            })
+
             if (!persisted.indexPayload) {
                 self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "missing-index" } })
                 return

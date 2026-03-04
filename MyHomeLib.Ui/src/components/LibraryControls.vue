@@ -138,23 +138,36 @@ function lastDescriptionLine() {
 </script>
 
 <template>
-    <header class="mb-4 flex flex-col items-start justify-between gap-4 lg:flex-row">
+    <header
+        class="mb-4 flex flex-col items-start justify-between gap-4 lg:flex-row"
+        data-test="library-controls-root"
+    >
         <div class="flex flex-col gap-1">
-            <h1 class="text-2xl font-semibold">{{ t("app.title") }}</h1>
+            <h1
+                class="text-2xl font-semibold"
+                data-test="library-controls-title"
+            >
+                {{ t("app.title") }}
+            </h1>
             <div
                 class="md:divide-base-content/20 flex flex-col gap-1 md:flex-row md:items-start md:gap-0 md:divide-x lg:items-center"
             >
                 <p
                     v-if="lastDescriptionLine()"
                     class="text-base-content/80 text-sm md:pr-4"
+                    data-test="library-controls-description"
                 >
                     {{ lastDescriptionLine() }}
                 </p>
-                <p class="text-base-content/70 md:px-4">
+                <p
+                    class="text-base-content/70 md:px-4"
+                    data-test="library-controls-hash"
+                >
                     {{ t("common.hash") }}:
                     <a
                         class="hover:text-primary inline-flex items-baseline gap-1 font-mono underline transition-colors"
                         :href="magnetUri"
+                        data-test="library-controls-hash-link"
                         :title="magnetUri"
                     >
                         <svg
@@ -183,6 +196,7 @@ function lastDescriptionLine() {
                 <p
                     v-if="metadata"
                     class="text-base-content/70 md:pl-4"
+                    data-test="library-controls-books-count"
                 >
                     {{ booksCountText(metadata.totalBooks) }}
                 </p>
@@ -198,6 +212,7 @@ function lastDescriptionLine() {
             <label class="swap btn btn-ghost btn-sm border-base-300 border px-2">
                 <input
                     :checked="locale === 'en'"
+                    data-test="library-controls-locale-toggle"
                     name="locale-toggle"
                     type="checkbox"
                     @change="onLocaleToggle"
@@ -209,6 +224,7 @@ function lastDescriptionLine() {
                 <input
                     :checked="theme === 'dark'"
                     class="theme-controller"
+                    data-test="library-controls-theme-toggle"
                     name="theme-toggle"
                     type="checkbox"
                     value="dark"
@@ -236,12 +252,14 @@ function lastDescriptionLine() {
             </label>
             <span
                 class="badge badge-sm tracking-wide uppercase"
+                data-test="library-controls-phase-badge"
                 :class="phaseStatus().cls"
             >
                 {{ phaseStatus().text }}
             </span>
             <button
                 class="btn btn-outline btn-secondary btn-sm"
+                data-test="library-controls-change-library-btn"
                 :disabled="reindexing"
                 @click="$emit('change-library')"
             >
@@ -249,6 +267,7 @@ function lastDescriptionLine() {
             </button>
             <button
                 class="btn btn-outline btn-error btn-sm"
+                data-test="library-controls-full-reset-btn"
                 @click="$emit('reset')"
             >
                 {{ t("buttons.fullReset") }}
@@ -258,6 +277,7 @@ function lastDescriptionLine() {
     <p
         v-if="progressText()"
         class="text-base-content/70 mb-3"
+        data-test="library-controls-progress-text"
     >
         {{ progressText() }}
     </p>
