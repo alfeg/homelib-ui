@@ -1,4 +1,11 @@
 FROM node:lts-alpine AS ui-build
+
+WORKDIR /src/inpx-parser
+COPY inpx-parser/package*.json ./
+RUN npm ci
+COPY inpx-parser/ ./
+RUN npm run build
+
 WORKDIR /src/MyHomeLib.Ui
 COPY MyHomeLib.Ui/package*.json ./
 RUN npm ci
