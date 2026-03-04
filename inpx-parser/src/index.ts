@@ -1,2 +1,9 @@
-export type { ParsedBook, ParsedMetadata, ParseResult, ParseProgressCallback } from "./inpxParser.js"
-export { parseInpxBuffer } from "./inpxParser.js"
+export type {
+  ParsedBook,
+  ParsedMetadata,
+  ParseResult,
+  ParseProgressCallback,
+  ParseBooksBatchCallback,
+  StreamingParseResult,
+} from "./inpxParser.js";
+export { parseInpxBuffer, parseInpxBufferStreaming } from "./inpxParser.js";

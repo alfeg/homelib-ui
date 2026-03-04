@@ -28,17 +28,43 @@ export interface SearchResult {
     yearRange?: { min: number; max: number } | null
 }
 
+type BuildResult = {
+    total?: number
+    persisted?: boolean
+    metadata?: LibraryMetadata | null
+    datasetSignature?: string
+    persistenceError?: string
+}
+
+type ClearPersistedResult = {
+    cleared: boolean
+    reason?: string
+    message?: string
+}
+
+type Pending<T> = { resolve: (value: T) => void; reject: (reason?: unknown) => void } | null
+
+type BuildProgressPayload = {
+    phase?: string
+    processed?: number
+    total?: number
+    percent?: number
+    downloadedBytes?: number
+    totalBytes?: number | null
+}
+
 export function createSearchWorkerClient({
     onProgress,
     onError,
 }: {
-    onProgress?: (payload: any) => void
+    onProgress?: (payload: BuildProgressPayload) => void
     onError?: (error: Error) => void
 } = {}) {
-    const worker = new SearchIndexWorker({ type: "module" })
-    let pendingBuild: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
-    let pendingRestore: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
-    let pendingClear: { resolve: (value: any) => void; reject: (reason?: unknown) => void } | null = null
+    const worker = new SearchIndexWorker()
+    let pendingBuild: Pending<BuildResult> = null
+    let pendingRestore: Pending<RestoreResult> = null
+    let pendingClear: Pending<ClearPersistedResult> = null
+    let pendingClearAll: Pending<ClearPersistedResult> = null
     let pendingSearch: {
         resolve: (value: SearchResult) => void
         reject: (reason?: unknown) => void
@@ -90,6 +116,12 @@ export function createSearchWorkerClient({
             return
         }
 
+        if (message.type === "clear-all-persisted-complete") {
+            pendingClearAll?.resolve(message.payload ?? { cleared: false, reason: "unknown" })
+            pendingClearAll = null
+            return
+        }
+
         if (message.type === "search-result") {
             if (pendingSearch && message.requestId === pendingSearch.requestId) {
                 pendingSearch.resolve(message.payload as SearchResult)
@@ -108,6 +140,8 @@ export function createSearchWorkerClient({
         pendingRestore = null
         pendingClear?.reject(err)
         pendingClear = null
+        pendingClearAll?.reject(err)
+        pendingClearAll = null
         pendingSearch?.reject(err)
         pendingSearch = null
         onError?.(err)
@@ -118,7 +152,7 @@ export function createSearchWorkerClient({
             if (pendingBuild) {
                 pendingBuild.reject(new Error("Index build interrupted by a new build request."))
             }
-            return new Promise((resolve, reject) => {
+            return new Promise<BuildResult>((resolve, reject) => {
                 pendingBuild = { resolve, reject }
                 worker.postMessage({ type: "parse-and-build", buffer, hash, batchSize }, [buffer])
             })
@@ -139,9 +173,18 @@ export function createSearchWorkerClient({
             if (pendingClear) {
                 pendingClear.reject(new Error("Persisted index clear interrupted by a new clear request."))
             }
-            return new Promise((resolve, reject) => {
+            return new Promise<ClearPersistedResult>((resolve, reject) => {
                 pendingClear = { resolve, reject }
                 worker.postMessage({ type: "clear-persisted", hash })
+            })
+        },
+        clearAllPersisted() {
+            if (pendingClearAll) {
+                pendingClearAll.reject(new Error("Global persisted data clear interrupted by a new clear request."))
+            }
+            return new Promise<ClearPersistedResult>((resolve, reject) => {
+                pendingClearAll = { resolve, reject }
+                worker.postMessage({ type: "clear-all-persisted" })
             })
         },
         search(query: SearchQuery): Promise<SearchResult> {

@@ -23,7 +23,11 @@ const props = defineProps<{
     theme: string
 }>()
 
-defineEmits<{ (e: "reindex"): void; (e: "reset"): void; (e: "theme-toggle", value: boolean): void }>()
+defineEmits<{
+    (e: "change-library"): void
+    (e: "reset"): void
+    (e: "theme-toggle", value: boolean): void
+}>()
 const { t, locale } = useI18nState()
 
 const onLocaleToggle = (event: Event) => {
@@ -223,11 +227,11 @@ function lastDescriptionLine() {
                 {{ phaseStatus().text }}
             </span>
             <button
-                class="btn btn-outline btn-primary btn-sm"
+                class="btn btn-outline btn-secondary btn-sm"
                 :disabled="reindexing"
-                @click="$emit('reindex')"
+                @click="$emit('change-library')"
             >
-                {{ reindexing ? t("buttons.reindexing") : t("buttons.reindex") }}
+                {{ t("buttons.changeLibrary") }}
             </button>
             <button
                 class="btn btn-outline btn-error btn-sm"

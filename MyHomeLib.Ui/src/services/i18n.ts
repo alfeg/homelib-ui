@@ -28,6 +28,7 @@ const messages = {
         buttons: {
             reindex: "Переиндексировать",
             reindexing: "Переиндексация...",
+            changeLibrary: "Сменить библиотеку",
             fullReset: "Полный сброс",
             previous: "Назад",
             next: "Вперёд",
@@ -134,6 +135,7 @@ const messages = {
         buttons: {
             reindex: "Reindex",
             reindexing: "Reindexing...",
+            changeLibrary: "Change Library",
             fullReset: "Full Reset",
             previous: "Previous",
             next: "Next",

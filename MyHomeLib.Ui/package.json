@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@vueuse/core": "^14.2.1",
-    "inpx-parser": "^1.0.2",
+    "inpx-parser": "file:../inpx-parser",
     "minisearch": "^7.2.0",
     "vue": "^3.5.29"
   },

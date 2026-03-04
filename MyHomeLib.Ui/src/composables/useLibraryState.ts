@@ -495,14 +495,33 @@ export const useLibraryState = createGlobalState(() => {
     }
 
     async function resetAll() {
-        const hashToClear = magnetHash.value
-
         magnetStore.clear()
 
-        if (hashToClear) {
-            await searchWorkerClient.clearPersistedIndex(hashToClear)
-        }
+        await searchWorkerClient.clearAllPersisted()
 
+        magnetUri.value = ""
+        magnetHash.value = ""
+        metadata.value = null
+        totalBooks.value = 0
+        filteredBooks.value = []
+        totalFilteredBooks.value = 0
+        selectedGenres.value = []
+        genreFacets.value = []
+        searchTerm.value = ""
+        currentPage.value = 1
+        selectedYearFrom.value = null
+        selectedYearTo.value = null
+        availableYearRange.value = null
+        status.value = ""
+        error.value = ""
+        hasCache.value = false
+        lastUpdatedAt.value = ""
+        workerReady.value = false
+        resetProgress()
+    }
+
+    function openLibraryGate() {
+        magnetStore.clear()
         magnetUri.value = ""
         magnetHash.value = ""
         metadata.value = null
@@ -595,6 +614,7 @@ export const useLibraryState = createGlobalState(() => {
         submitTorrentFile,
         bootstrap,
         reindexCurrent,
+        openLibraryGate,
         resetAll,
         downloadBook,
         goToPage,

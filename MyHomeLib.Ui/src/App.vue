@@ -29,7 +29,7 @@ const {
     hasCache,
     lastUpdatedAt,
     isReindexing,
-    reindexCurrent,
+    openLibraryGate,
     resetAll,
     genreFacets,
     selectedGenres,
@@ -105,7 +105,7 @@ onMounted(() => {
                 :reindexing="isReindexing"
                 :status="status"
                 :theme="selectedTheme"
-                @reindex="reindexCurrent"
+                @changeLibrary="openLibraryGate"
                 @reset="resetAll"
                 @themeToggle="(enabled) => onThemeChange(enabled ? 'dark' : 'light')"
             />
