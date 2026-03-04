@@ -1,6 +1,6 @@
 {
     "name": "inpx-parser",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Parser for INPX e-book library archives (MyHomeLib format)",
     "keywords": [
         "inpx",
