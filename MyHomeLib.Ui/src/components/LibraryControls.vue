@@ -7,6 +7,7 @@ interface IndexProgress {
     processed: number
     total: number
     percent: number
+    etaSeconds?: number | null
     downloadedBytes?: number
     totalBytes?: number | null
 }
@@ -39,6 +40,32 @@ function formatMegabytes(bytes: number) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatEta(seconds?: number | null) {
+    if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return null
+    const total = Math.round(seconds)
+    const minutes = Math.floor(total / 60)
+    const secs = total % 60
+    return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+}
+
+function indexingText(progress: IndexProgress) {
+    const eta = formatEta(progress.etaSeconds)
+    if (eta) {
+        return t("status.indexingWithEta", {
+            processed: progress.processed,
+            total: progress.total,
+            percent: progress.percent,
+            eta,
+        })
+    }
+
+    return t("status.indexing", {
+        processed: progress.processed,
+        total: progress.total,
+        percent: progress.percent,
+    })
+}
+
 function booksCountText(n: number): string {
     if (locale.value === "ru") {
         const mod10 = n % 10
@@ -54,23 +81,11 @@ function progressText() {
     if (!props.progress) return ""
 
     if (props.progress.phase === "indexing") {
-        return t("status.indexing", {
-            processed: props.progress.processed,
-            total: props.progress.total,
-            percent: props.progress.percent,
-        })
+        return indexingText(props.progress)
     }
 
     if (props.progress.phase === "parsing") {
-        if (props.progress.total) {
-            return t("status.parsingWithTotal", {
-                processed: props.progress.processed,
-                total: props.progress.total,
-                percent: props.progress.percent,
-            })
-        }
-
-        return t("status.parsingSimple", { percent: props.progress.percent })
+        return indexingText(props.progress)
     }
 
     if (props.progress.phase === "loading-cache") {

@@ -561,7 +561,7 @@ async function searchBooks(term, page, pageSize, genres, yearFrom, yearTo) {
     // Sort books to match the order of pageIds (maintain BM25 relevance order)
     const booksMap = new Map(books.map((b) => [b.id, b]))
     const orderedBooks = pageIds.map((id) => booksMap.get(id)).filter(Boolean)
-    
+
     return { books: orderedBooks, total, genres: resultGenres, yearRange }
 }
 

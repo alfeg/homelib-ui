@@ -159,6 +159,17 @@ function updateSigHash(hash: number, value: string): number {
   return h >>> 0;
 }
 
+function countValidBooks(lines: string[]): number {
+  let count = 0;
+  for (const line of lines) {
+    if (!line) continue;
+    const fields = line.split(ROW_DELIMITER);
+    if (!fields.length || !fields[5]) continue;
+    count++;
+  }
+  return count;
+}
+
 export function parseInpxBuffer(
   buffer: ArrayBuffer,
   onProgress?: ParseProgressCallback,
@@ -238,7 +249,6 @@ export async function parseInpxBufferStreaming(
     totalBooks: 0,
   };
   const inpEntries = entryNames.filter((n) => n.toLowerCase().endsWith(".inp"));
-  const totalEntries = inpEntries.length;
 
   if (archive["collection.info"]) {
     metadata.description = decodeText(archive["collection.info"]).trim();
@@ -252,7 +262,16 @@ export async function parseInpxBufferStreaming(
     `${metadata.description}|${metadata.version}`,
   );
 
-  onProgress?.("parsing", 0, totalEntries, totalEntries ? 0 : 100);
+  // Pre-count valid rows so parsing progress can be reported per total books.
+  let totalBooksExpected = 0;
+  for (let ei = 0; ei < inpEntries.length; ei++) {
+    const entryName = inpEntries[ei];
+    const text = decodeText(archive[entryName]);
+    const lines = text.split(/\r?\n/);
+    totalBooksExpected += countValidBooks(lines);
+  }
+
+  onProgress?.("parsing", 0, totalBooksExpected, totalBooksExpected ? 0 : 100);
 
   let fallbackId = 1;
   let totalBooks = 0;
@@ -299,12 +318,12 @@ export async function parseInpxBufferStreaming(
       if (batch.length >= resolvedBatchSize) {
         await flushBatch();
       }
-    }
 
-    const pct = totalEntries
-      ? Math.round(((ei + 1) / totalEntries) * 100)
-      : 100;
-    onProgress?.("parsing", ei + 1, totalEntries, pct);
+      const pct = totalBooksExpected
+        ? Math.round((totalBooks / totalBooksExpected) * 100)
+        : 100;
+      onProgress?.("parsing", totalBooks, totalBooksExpected, pct);
+    }
   }
 
   await flushBatch();

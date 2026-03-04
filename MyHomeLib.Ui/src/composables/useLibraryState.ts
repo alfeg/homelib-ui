@@ -78,9 +78,36 @@ export const useLibraryState = createGlobalState(() => {
         processed: 0,
         total: 0,
         percent: 0,
+        etaSeconds: null,
         downloadedBytes: 0,
         totalBytes: null,
     })
+
+    const indexingStartedAtMs = ref<number | null>(null)
+
+    function formatEta(seconds: number) {
+        const total = Math.max(0, Math.round(seconds))
+        const minutes = Math.floor(total / 60)
+        const secs = total % 60
+        return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+    }
+
+    function buildIndexingStatusText(processed: number, total: number, percent: number, etaSeconds?: number | null) {
+        if (typeof etaSeconds === "number" && Number.isFinite(etaSeconds) && etaSeconds > 0) {
+            return t("status.indexingWithEta", {
+                processed,
+                total,
+                percent,
+                eta: formatEta(etaSeconds),
+            })
+        }
+
+        return t("status.indexing", {
+            processed,
+            total,
+            percent,
+        })
+    }
 
     const isMagnetSet = computed(() => !!magnetUri.value)
     const isReady = computed(() => indexProgress.phase === "ready")
@@ -88,21 +115,20 @@ export const useLibraryState = createGlobalState(() => {
 
     const progressLabel = computed(() => {
         if (indexProgress.phase === "indexing") {
-            return t("status.indexing", {
-                processed: indexProgress.processed,
-                total: indexProgress.total,
-                percent: indexProgress.percent,
-            })
+            return buildIndexingStatusText(
+                indexProgress.processed,
+                indexProgress.total,
+                indexProgress.percent,
+                indexProgress.etaSeconds,
+            )
         }
         if (indexProgress.phase === "parsing") {
-            if (indexProgress.total) {
-                return t("status.parsingWithTotal", {
-                    processed: indexProgress.processed,
-                    total: indexProgress.total,
-                    percent: indexProgress.percent,
-                })
-            }
-            return t("status.parsingSimple", { percent: indexProgress.percent })
+            return buildIndexingStatusText(
+                indexProgress.processed,
+                indexProgress.total,
+                indexProgress.percent,
+                indexProgress.etaSeconds,
+            )
         }
         if (indexProgress.phase === "loading-cache") return t("status.loadingCache")
         if (indexProgress.phase === "clearing-local") return t("status.clearingLocal")
@@ -135,11 +161,12 @@ export const useLibraryState = createGlobalState(() => {
     const searchWorkerClient = createSearchWorkerClient({
         onProgress: (progress) => {
             setProgress(progress)
-            status.value = t("status.indexing", {
-                processed: progress.processed,
-                total: progress.total,
-                percent: progress.percent,
-            })
+            status.value = buildIndexingStatusText(
+                progress.processed ?? 0,
+                progress.total ?? 0,
+                progress.percent ?? 0,
+                indexProgress.etaSeconds,
+            )
         },
         onError: (err) => {
             error.value = err instanceof Error ? err.message : t("error.searchWorkerFailed")
@@ -193,10 +220,55 @@ export const useLibraryState = createGlobalState(() => {
     }
 
     function setProgress(next) {
+        const incomingPhase = next.phase ?? indexProgress.phase
+        const phaseChanged = incomingPhase !== indexProgress.phase
+
+        if (phaseChanged) {
+            if (incomingPhase === "indexing" || incomingPhase === "parsing") {
+                indexingStartedAtMs.value = performance.now()
+            } else {
+                indexingStartedAtMs.value = null
+            }
+        }
+
         indexProgress.phase = next.phase ?? indexProgress.phase
         indexProgress.processed = next.processed ?? indexProgress.processed
         indexProgress.total = next.total ?? indexProgress.total
         indexProgress.percent = next.percent ?? indexProgress.percent
+
+        if (indexProgress.phase === "indexing" || indexProgress.phase === "parsing") {
+            const total = Number(indexProgress.total)
+            const processed = Number(indexProgress.processed)
+
+            if (
+                Number.isFinite(total) &&
+                total > 0 &&
+                Number.isFinite(processed) &&
+                processed > 0 &&
+                processed < total
+            ) {
+                if (indexingStartedAtMs.value == null) {
+                    indexingStartedAtMs.value = performance.now()
+                }
+
+                const elapsedSec = (performance.now() - indexingStartedAtMs.value) / 1000
+                if (elapsedSec >= 0.75) {
+                    const rate = processed / elapsedSec
+                    if (rate > 0) {
+                        const eta = Math.round((total - processed) / rate)
+                        indexProgress.etaSeconds = Number.isFinite(eta) && eta > 0 ? eta : null
+                    } else {
+                        indexProgress.etaSeconds = null
+                    }
+                } else {
+                    indexProgress.etaSeconds = null
+                }
+            } else {
+                indexProgress.etaSeconds = null
+            }
+        } else {
+            indexProgress.etaSeconds = null
+        }
 
         if ("downloadedBytes" in next) {
             indexProgress.downloadedBytes = next.downloadedBytes
@@ -213,6 +285,7 @@ export const useLibraryState = createGlobalState(() => {
             processed: 0,
             total: 0,
             percent: 0,
+            etaSeconds: null,
             downloadedBytes: 0,
             totalBytes: null,
         })
