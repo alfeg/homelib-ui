@@ -1,6 +1,7 @@
 name: Build Standalone Docs
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -12,6 +13,12 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build-and-commit-docs:
@@ -28,7 +35,17 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: MyHomeLib.Ui/package-lock.json
+          cache-dependency-path: |
+            MyHomeLib.Ui/package-lock.json
+            inpx-parser/package-lock.json
+
+      - name: Install parser dependencies
+        working-directory: inpx-parser
+        run: npm ci
+
+      - name: Build parser package
+        working-directory: inpx-parser
+        run: npm run build
 
       - name: Install UI dependencies
         working-directory: MyHomeLib.Ui
@@ -44,6 +61,14 @@ jobs:
           VITE_BUILD_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
         run: npm run build-standalone
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
       - name: Commit docs changes
         run: |
           if git diff --quiet -- docs/index.html; then
@@ -56,3 +81,15 @@ jobs:
           git add docs/index.html
           git commit -m "ci: update standalone docs bundle"
           git push
+
+  deploy-pages:
+    if: github.actor != 'github-actions[bot]'
+    needs: build-and-commit-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
