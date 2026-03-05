@@ -10,7 +10,7 @@
     "build-standalone": "vite build --config vite.config.standalone.ts",
     "preview": "vite preview",
     "ts": "vue-tsc --noEmit",
-    "lint": "eslint src --quiet --fix && prettier -w ./",
+    "lint": "eslint src --fix && prettier -w ./",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -1,0 +1,57 @@
+name: Build Standalone Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "MyHomeLib.Ui/**"
+      - "inpx-parser/**"
+      - ".github/workflows/build-standalone-pages.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-commit-docs:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: MyHomeLib.Ui/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: MyHomeLib.Ui
+        run: npm ci
+
+      - name: Build standalone docs bundle
+        working-directory: MyHomeLib.Ui
+        env:
+          VITE_BUILD_REPOSITORY: ${{ github.repository }}
+          VITE_BUILD_REF: ${{ github.ref_name }}
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_BUILD_RUN_ID: ${{ github.run_id }}
+          VITE_BUILD_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+        run: npm run build-standalone
+
+      - name: Commit docs changes
+        run: |
+          if git diff --quiet -- docs/index.html; then
+            echo "No docs changes to commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "ci: update standalone docs bundle"
+          git push

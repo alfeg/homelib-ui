@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue"
 
-import { useI18nState } from "../services/i18n"
-import GenreList from "./GenreList.vue"
-import YearRangeFilter from "./YearRangeFilter.vue"
+import { useI18nState } from "../../services/i18n"
+import GenreList from "../molecules/GenreList.vue"
+import YearRangeFilter from "../molecules/YearRangeFilter.vue"
 
 const { t } = useI18nState()
 const isCollapsed = ref(true)
@@ -64,9 +64,9 @@ function toggleCollapse() {
             data-test="genre-sidebar-content"
         >
             <GenreList
+                data-test="genre-list"
                 :genres="genres"
                 :selectedGenres="selectedGenres"
-                data-test="genre-list"
                 @clear="$emit('clear')"
                 @toggle="(g) => $emit('toggle', g)"
             />
@@ -78,9 +78,9 @@ function toggleCollapse() {
             >
                 <YearRangeFilter
                     :availableRange="availableYearRange"
+                    data-test="year-range-filter"
                     :yearFrom="yearFrom"
                     :yearTo="yearTo"
-                    data-test="year-range-filter"
                     @clear="$emit('clearYear')"
                     @yearFrom="(v) => $emit('yearFrom', v)"
                     @yearTo="(v) => $emit('yearTo', v)"

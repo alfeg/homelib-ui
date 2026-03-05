@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue"
 
-import { setLocale, useI18nState } from "../services/i18n"
-import type { LibraryMetadata } from "../types/library"
+import { setLocale, useI18nState } from "../../services/i18n"
+import type { LibraryMetadata } from "../../types/library"
 
 interface IndexProgress {
     phase: string
@@ -334,8 +334,8 @@ function lastDescriptionLine() {
             </label>
             <div class="dropdown dropdown-end">
                 <button
-                    class="btn btn-outline btn-circle btn-sm"
                     :aria-label="t('buttons.configuration')"
+                    class="btn btn-outline btn-circle btn-sm"
                     data-test="library-controls-configuration-btn"
                     tabindex="0"
                     :title="t('buttons.configuration')"

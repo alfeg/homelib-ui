@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { apiEndpoint } from "../services/endpointStore"
-import { useI18nState } from "../services/i18n"
+import { apiEndpoint } from "../../services/endpointStore"
+import { useI18nState } from "../../services/i18n"
 
 const { t } = useI18nState()
 </script>

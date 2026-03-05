@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useI18nState } from "../services/i18n"
-import TablePagination from "./TablePagination.vue"
+import { useI18nState } from "../../services/i18n"
+import TablePagination from "../molecules/TablePagination.vue"
 
 defineProps<{
     books: any[]
@@ -44,8 +44,8 @@ const { t } = useI18nState()
                         v-for="book in books"
                         :key="`${book.id}-${book.file || ''}-${book.archiveFile || ''}`"
                         class="odd:bg-base-100 even:bg-base-300/30"
-                        data-test="books-table-row"
                         :class="{ 'opacity-70': downloadingById[String(book.id)] }"
+                        data-test="books-table-row"
                     >
                         <td data-test="books-table-book-title">{{ book.title }}</td>
                         <td data-test="books-table-book-authors">{{ book.authors }}</td>
@@ -66,8 +66,8 @@ const { t } = useI18nState()
                         <td>
                             <button
                                 class="btn btn-primary btn-xs"
-                                data-test="books-table-download-btn"
                                 :class="downloadingById[String(book.id)] ? 'animate-pulse opacity-80' : 'btn-outline'"
+                                data-test="books-table-download-btn"
                                 :disabled="downloadingById[String(book.id)]"
                                 @click="$emit('download', book)"
                             >

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 
-import { IS_STANDALONE } from "../services/endpointStore"
-import { setLocale, useI18nState } from "../services/i18n"
-import EndpointSettings from "./EndpointSettings.vue"
+import { IS_STANDALONE } from "../../services/endpointStore"
+import { setLocale, useI18nState } from "../../services/i18n"
+import EndpointSettings from "../molecules/EndpointSettings.vue"
 
 const props = defineProps<{
     loading: boolean
@@ -70,8 +70,8 @@ const onLocaleToggle = (event: Event) => {
     >
         <div
             class="card bg-base-100 border-base-300 grid w-full max-w-3xl gap-3 border p-8 shadow-xl"
-            data-test="magnet-gate-card"
             :class="!isLoadingMode && isDragActive ? 'border-primary border-2 border-dashed' : ''"
+            data-test="magnet-gate-card"
             @dragenter.prevent="!isLoadingMode && (isDragActive = true)"
             @dragleave.prevent="isDragActive = false"
             @dragover.prevent="!isLoadingMode && (isDragActive = true)"

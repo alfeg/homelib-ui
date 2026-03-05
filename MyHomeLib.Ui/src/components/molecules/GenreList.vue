@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useI18nState } from "../services/i18n"
+import { useI18nState } from "../../services/i18n"
 
 defineProps<{
     genres: Array<{ genre: string; label: string; count: number }>

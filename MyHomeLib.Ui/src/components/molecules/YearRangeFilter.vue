@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useI18nState } from "../services/i18n"
+import { useI18nState } from "../../services/i18n"
 
 const props = defineProps<{
     yearFrom: number | null
