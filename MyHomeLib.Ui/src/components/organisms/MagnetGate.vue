@@ -30,7 +30,7 @@ const isDragActive = ref(false)
 const { t, locale } = useI18nState()
 
 const LUCKY_MAGNET =
-    "magnet:?xt=urn:btih:2072C0F450A333C84B06AFD482BB563664D36398&tr=http%3A%2F%2Fbt.booktracker.work%2Fann%3Fmagnet"
+    "magnet:?xt=urn:btih:3E347E8C4A3174BA3EA7F771B9065FEA153806F0&tr=http%3A%2F%2Fbt.booktracker.work%2Fann%3Fmagnet"
 
 const onSubmit = () => {
     if (props.loading) return
