@@ -4,6 +4,9 @@ import MiniSearch, { type AsPlainObject } from "minisearch"
 const DEFAULT_INDEX_BATCH_SIZE = 4096
 const MIN_INDEX_BATCH_SIZE = 1000
 const MAX_INDEX_BATCH_SIZE = 10000
+// Bump when the persisted index/facets layout changes: older cache records
+// are treated as stale and the index is rebuilt from the INPX download.
+const PERSISTENCE_FORMAT_VERSION = 2
 const PERSISTENCE_META_DB_NAME = "myhomelib-search-index-meta-cache"
 const PERSISTENCE_META_STORE_NAME = "indexes"
 const PERSISTENCE_META_DB_VERSION = 1
@@ -18,7 +21,7 @@ const LIBRARY_CACHE_BOOKS_STORE_NAME = "books"
 const LIBRARY_CACHE_DB_VERSION = 1
 
 let index = null // MiniSearch instance
-let facetDataById = new Map() // Lightweight: { id, genreCodes, date }
+let facetDataById = new Map() // Lightweight: { id, genreCodes, year }
 let activeHash = ""
 let persistenceMetaDbPromise = null
 let persistenceJsonDbPromise = null
@@ -27,6 +30,7 @@ const libraryCacheDbPromises = new Map()
 type PersistedMetaRecord = {
     hash: string
     signature: string
+    formatVersion?: number
     total: number
     metadata: unknown
     updatedAt: string
@@ -36,12 +40,16 @@ type PersistedIndexJsRecord = {
     hash: string
     encoding: string
     indexPayload: unknown
+    facetsEncoding?: string
+    facetsPayload?: unknown
     updatedAt: string
 }
 
 type PersistedIndexRecord = PersistedMetaRecord & {
     encoding: string
     indexPayload: unknown
+    facetsEncoding?: string
+    facetsPayload?: unknown
 }
 
 function toUint8Array(value: unknown): Uint8Array | null {
@@ -56,12 +64,12 @@ function toArrayBuffer(value: Uint8Array): ArrayBuffer {
     return value.buffer.slice(start, end) as ArrayBuffer
 }
 
-async function encodeIndexPayload(indexJs: AsPlainObject): Promise<{ encoding: string; payload: unknown }> {
+async function encodeJsonPayload(value: unknown): Promise<{ encoding: string; payload: unknown }> {
     if (typeof CompressionStream !== "function") {
-        return { encoding: INDEX_PAYLOAD_ENCODING_JS_OBJECT, payload: indexJs }
+        return { encoding: INDEX_PAYLOAD_ENCODING_JS_OBJECT, payload: value }
     }
 
-    const jsonText = JSON.stringify(indexJs)
+    const jsonText = JSON.stringify(value)
     const rawBytes = new TextEncoder().encode(jsonText)
     const stream = new Blob([rawBytes]).stream().pipeThrough(new CompressionStream("gzip"))
     const compressedBuffer = await new Response(stream).arrayBuffer()
@@ -69,18 +77,18 @@ async function encodeIndexPayload(indexJs: AsPlainObject): Promise<{ encoding: s
 
     // Keep raw JS object when compression ratio is poor to avoid CPU overhead on restore.
     if (compressedBytes.byteLength >= rawBytes.byteLength * 0.95) {
-        return { encoding: INDEX_PAYLOAD_ENCODING_JS_OBJECT, payload: indexJs }
+        return { encoding: INDEX_PAYLOAD_ENCODING_JS_OBJECT, payload: value }
     }
 
     return { encoding: INDEX_PAYLOAD_ENCODING_GZIP_JSON, payload: compressedBytes }
 }
 
-async function decodeIndexPayload(record: PersistedIndexRecord): Promise<AsPlainObject | null> {
-    if (record.encoding === INDEX_PAYLOAD_ENCODING_JS_OBJECT) {
-        return (record.indexPayload ?? null) as AsPlainObject | null
+async function decodeJsonPayload(encoding: string, payload: unknown): Promise<unknown> {
+    if (encoding === INDEX_PAYLOAD_ENCODING_JS_OBJECT) {
+        return payload ?? null
     }
 
-    if (record.encoding !== INDEX_PAYLOAD_ENCODING_GZIP_JSON) {
+    if (encoding !== INDEX_PAYLOAD_ENCODING_GZIP_JSON) {
         return null
     }
 
@@ -88,7 +96,7 @@ async function decodeIndexPayload(record: PersistedIndexRecord): Promise<AsPlain
         return null
     }
 
-    const bytes = toUint8Array(record.indexPayload)
+    const bytes = toUint8Array(payload)
     if (!bytes || bytes.byteLength === 0) {
         return null
     }
@@ -96,7 +104,7 @@ async function decodeIndexPayload(record: PersistedIndexRecord): Promise<AsPlain
     const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(new DecompressionStream("gzip"))
     const decompressedBuffer = await new Response(stream).arrayBuffer()
     const jsonText = new TextDecoder().decode(new Uint8Array(decompressedBuffer))
-    return JSON.parse(jsonText) as AsPlainObject
+    return JSON.parse(jsonText)
 }
 
 // Normalise a term: Cyrillic-aware lowercase + collapse e/yo.
@@ -125,7 +133,7 @@ const NO_GENRE_CODE = "__no_genre__"
 
 function toIndexDoc(book) {
     return {
-        id: String(book.id),
+        id: Number(book.id),
         title: String(book.title ?? ""),
         authors: String(book.authors ?? ""),
         series: String(book.series ?? ""),
@@ -133,16 +141,43 @@ function toIndexDoc(book) {
     }
 }
 
+// Parsed once at build/restore time so searches never touch date strings.
+function parseYearFromDate(date): number | null {
+    if (typeof date !== "string" || date.length < 4) return null
+    const year = Number.parseInt(date.slice(0, 4), 10)
+    return Number.isNaN(year) ? null : year
+}
+
 function toFacetData(book) {
     return {
-        id: book.id,
+        id: Number(book.id),
         genreCodes: Array.isArray(book.genreCodes) ? book.genreCodes : [],
-        date: book.date ?? "",
+        year: parseYearFromDate(book.date),
     }
 }
 
 function createIndex() {
     return new MiniSearch(INDEX_OPTIONS)
+}
+
+// --- Query-path caches ---------------------------------------------------
+// Search results are recomputed per message; without these, every page flip
+// re-copies and re-scans the full facet set (O(n) per click at 100k+ books).
+let cachedAllFacets = null // Array.from(facetDataById.values()), built lazily
+let lastTermCache = null // { term, termMatched, yearRange }
+let lastQueryCache = null // { key, matched, resultGenres }
+
+function invalidateSearchCaches() {
+    cachedAllFacets = null
+    lastTermCache = null
+    lastQueryCache = null
+}
+
+function getAllFacets() {
+    if (!cachedAllFacets) {
+        cachedAllFacets = Array.from(facetDataById.values())
+    }
+    return cachedAllFacets
 }
 
 function openPersistenceMetaDb() {
@@ -216,19 +251,25 @@ async function readPersistedIndex(hash) {
         ...meta,
         encoding: indexEntry.encoding ?? INDEX_PAYLOAD_ENCODING_JS_OBJECT,
         indexPayload: indexEntry.indexPayload ?? null,
+        facetsEncoding: indexEntry.facetsEncoding ?? INDEX_PAYLOAD_ENCODING_JS_OBJECT,
+        facetsPayload: indexEntry.facetsPayload ?? null,
     }
 }
 
-async function writePersistedIndex(hash, signature, indexJs, total, metadata) {
+async function writePersistedIndex(hash, signature, indexJs, facets, total, metadata) {
     const [metaDb, jsonDb] = await Promise.all([openPersistenceMetaDb(), openPersistenceJsonDb()])
     const updatedAt = new Date().toISOString()
-    const encoded = await encodeIndexPayload(indexJs)
+    const encodedIndex = await encodeJsonPayload(indexJs)
+    // Compact facet array persisted alongside the index: restore reads one
+    // record instead of walking the full books store.
+    const encodedFacets = await encodeJsonPayload(facets)
 
     await new Promise((resolve, reject) => {
         const tx = metaDb.transaction(PERSISTENCE_META_STORE_NAME, "readwrite")
         tx.objectStore(PERSISTENCE_META_STORE_NAME).put({
             hash,
             signature,
+            formatVersion: PERSISTENCE_FORMAT_VERSION,
             total,
             metadata: metadata ?? null,
             updatedAt,
@@ -242,8 +283,10 @@ async function writePersistedIndex(hash, signature, indexJs, total, metadata) {
         const tx = jsonDb.transaction(PERSISTENCE_JSON_STORE_NAME, "readwrite")
         tx.objectStore(PERSISTENCE_JSON_STORE_NAME).put({
             hash,
-            encoding: encoded.encoding,
-            indexPayload: encoded.payload,
+            encoding: encodedIndex.encoding,
+            indexPayload: encodedIndex.payload,
+            facetsEncoding: encodedFacets.encoding,
+            facetsPayload: encodedFacets.payload,
             updatedAt,
         })
 
@@ -289,26 +332,18 @@ function openLibraryCacheDb(hash) {
     return dbPromise
 }
 
-async function readPersistedLibraryFacets(hash) {
+// Fallback path when the persisted facets payload is missing: bulk-read the
+// books store (getAll is far faster than a per-row cursor) and derive facets.
+async function readPersistedLibraryFacets(hash): Promise<{ id: number; genreCodes: string[]; year: number | null }[]> {
     const db = await openLibraryCacheDb(hash)
 
     return new Promise((resolve, reject) => {
         const tx = db.transaction(LIBRARY_CACHE_BOOKS_STORE_NAME, "readonly")
-        const request = tx.objectStore(LIBRARY_CACHE_BOOKS_STORE_NAME).openCursor()
-        const facets = []
+        const request = tx.objectStore(LIBRARY_CACHE_BOOKS_STORE_NAME).getAll()
 
         request.onsuccess = () => {
-            const cursor = request.result
-            if (!cursor) {
-                resolve(facets)
-                return
-            }
-
-            if (cursor.value) {
-                facets.push(toFacetData(cursor.value))
-            }
-
-            cursor.continue()
+            const rows = request.result ?? []
+            resolve(rows.map((row) => toFacetData(row)))
         }
         request.onerror = () => reject(request.error ?? new Error("Failed to read library facets from cache DB."))
     })
@@ -467,6 +502,7 @@ function resetInMemoryIndex() {
     index = null
     facetDataById = new Map()
     activeHash = ""
+    invalidateSearchCaches()
 }
 
 function resolveBatchSize(value) {
@@ -492,57 +528,84 @@ function computeFacets(facets) {
 
 async function searchBooks(term, page, pageSize, genres, yearFrom, yearTo) {
     if (!index) return { books: [], total: 0, genres: [], yearRange: null }
-    const hasTerm = term.trim().length > 0
+    const normalizedTerm = term.trim()
+    const hasTerm = normalizedTerm.length > 0
     const genreFilter = genres && genres.length ? genres : null
     const hasYearFrom = typeof yearFrom === "number" && Number.isFinite(yearFrom)
     const hasYearTo = typeof yearTo === "number" && Number.isFinite(yearTo)
 
-    // Text search — BM25-ranked, AND across all tokens, prefix matching
+    // Term-level cache: the matched set and year range depend on the term
+    // only, so genre/year filter changes reuse them.
     let termMatched
-    if (!hasTerm) {
-        termMatched = Array.from(facetDataById.values())
+    let yearRange
+    if (lastTermCache && lastTermCache.term === normalizedTerm) {
+        termMatched = lastTermCache.termMatched
+        yearRange = lastTermCache.yearRange
     } else {
-        const results = index.search(term, SEARCH_OPTIONS)
-        termMatched = results.map((r) => facetDataById.get(Number(r.id))).filter(Boolean)
-    }
-
-    // Compute year range from the full term-matched set (for slider bounds)
-    let minYear = Infinity
-    let maxYear = -Infinity
-    for (const facet of termMatched) {
-        const y = facet.date ? parseInt(facet.date.slice(0, 4), 10) : NaN
-        if (!isNaN(y) && y > 1000) {
-            if (y < minYear) minYear = y
-            if (y > maxYear) maxYear = y
+        // Text search — BM25-ranked, AND across all tokens, prefix matching
+        if (!hasTerm) {
+            termMatched = getAllFacets()
+        } else {
+            const results = index.search(normalizedTerm, SEARCH_OPTIONS)
+            termMatched = results.map((r) => facetDataById.get(r.id)).filter(Boolean)
         }
+
+        // Compute year range from the full term-matched set (for slider bounds)
+        let minYear = Infinity
+        let maxYear = -Infinity
+        for (const facet of termMatched) {
+            const y = facet.year
+            if (y !== null && y > 1000) {
+                if (y < minYear) minYear = y
+                if (y > maxYear) maxYear = y
+            }
+        }
+        yearRange = minYear <= maxYear ? { min: minYear, max: maxYear } : null
+
+        lastTermCache = { term: normalizedTerm, termMatched, yearRange }
     }
-    const yearRange = minYear <= maxYear ? { min: minYear, max: maxYear } : null
 
-    // Year filter — applied before genre facets so counts reflect the selected range
-    let yearFiltered
-    if (hasYearFrom || hasYearTo) {
-        yearFiltered = termMatched.filter((facet) => {
-            const y = facet.date ? parseInt(facet.date.slice(0, 4), 10) : NaN
-            if (isNaN(y)) return false
-            if (hasYearFrom && y < yearFrom) return false
-            if (hasYearTo && y > yearTo) return false
-            return true
-        })
-    } else {
-        yearFiltered = termMatched
-    }
+    // Query-level cache: filtered set + genre facets. Page flips hit this and
+    // reduce to a slice + page-sized IndexedDB fetch.
+    const queryKey = JSON.stringify([
+        normalizedTerm,
+        genreFilter,
+        hasYearFrom ? yearFrom : null,
+        hasYearTo ? yearTo : null,
+    ])
 
-    // Genre facets from the year-filtered set (stable across genre selection)
-    const resultGenres = computeFacets(yearFiltered)
-
-    // Genre filter — JS post-filter (OR across selected genres)
     let matched
-    if (!genreFilter) {
-        matched = yearFiltered
+    let resultGenres
+    if (lastQueryCache && lastQueryCache.key === queryKey) {
+        matched = lastQueryCache.matched
+        resultGenres = lastQueryCache.resultGenres
     } else {
-        matched = yearFiltered.filter(
-            (facet) => Array.isArray(facet.genreCodes) && facet.genreCodes.some((c) => genreFilter.includes(c)),
-        )
+        // Year filter — applied before genre facets so counts reflect the selected range
+        let yearFiltered
+        if (hasYearFrom || hasYearTo) {
+            yearFiltered = termMatched.filter((facet) => {
+                if (facet.year === null) return false
+                if (hasYearFrom && facet.year < yearFrom) return false
+                if (hasYearTo && facet.year > yearTo) return false
+                return true
+            })
+        } else {
+            yearFiltered = termMatched
+        }
+
+        // Genre facets from the year-filtered set (stable across genre selection)
+        resultGenres = computeFacets(yearFiltered)
+
+        // Genre filter — JS post-filter (OR across selected genres)
+        if (!genreFilter) {
+            matched = yearFiltered
+        } else {
+            matched = yearFiltered.filter(
+                (facet) => Array.isArray(facet.genreCodes) && facet.genreCodes.some((c) => genreFilter.includes(c)),
+            )
+        }
+
+        lastQueryCache = { key: queryKey, matched, resultGenres }
     }
 
     const total = matched.length
@@ -589,6 +652,11 @@ self.onmessage = async (event) => {
                 return
             }
 
+            if ((persisted.formatVersion ?? 1) !== PERSISTENCE_FORMAT_VERSION) {
+                self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "stale" } })
+                return
+            }
+
             // Emit metadata immediately so UI can render header details while heavy restore continues.
             self.postMessage({
                 type: "restore-metadata",
@@ -605,17 +673,24 @@ self.onmessage = async (event) => {
                 return
             }
 
-            const indexJs = await decodeIndexPayload(persisted)
+            const indexJs = (await decodeJsonPayload(
+                persisted.encoding,
+                persisted.indexPayload,
+            )) as AsPlainObject | null
             if (!indexJs) {
                 self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "missing-index" } })
                 return
             }
 
-            const persistedFacets = (await readPersistedLibraryFacets(hash)) as {
-                id: number
-                genreCodes: string[]
-                date: string
-            }[]
+            // Prefer the compact persisted facets record; fall back to
+            // deriving facets from the full books store.
+            let persistedFacets = (await decodeJsonPayload(
+                persisted.facetsEncoding ?? INDEX_PAYLOAD_ENCODING_JS_OBJECT,
+                persisted.facetsPayload,
+            )) as { id: number; genreCodes: string[]; year: number | null }[] | null
+            if (!Array.isArray(persistedFacets) || !persistedFacets.length) {
+                persistedFacets = await readPersistedLibraryFacets(hash)
+            }
             if (!persistedFacets.length) {
                 self.postMessage({ type: "restore-complete", payload: { restored: false, reason: "missing-books" } })
                 return
@@ -625,6 +700,7 @@ self.onmessage = async (event) => {
             index = restoredIndex
             facetDataById = new Map(persistedFacets.map((facet) => [facet.id, facet]))
             activeHash = hash
+            invalidateSearchCaches()
 
             self.postMessage({
                 type: "restore-complete",
@@ -723,11 +799,13 @@ self.onmessage = async (event) => {
         try {
             await deletePersistedLibraryBooks(targetHash)
 
-            // Parse, persist, and index each batch in one pass.
+            // Parse, persist, and index each batch in one pass. The IndexedDB
+            // write runs while the batch is indexed, so per-batch cost is
+            // max(IO, CPU) rather than their sum.
             const { metadata, datasetSignature } = await parseInpxBufferStreaming(
                 buffer,
                 async (booksBatch) => {
-                    await writePersistedLibraryBooksBatch(targetHash, booksBatch)
+                    const writePromise = writePersistedLibraryBooksBatch(targetHash, booksBatch)
 
                     for (const book of booksBatch) {
                         const id = Number(book.id)
@@ -738,6 +816,8 @@ self.onmessage = async (event) => {
                     }
 
                     processed += booksBatch.length
+                    invalidateSearchCaches()
+                    await writePromise
                 },
                 (phase, parsedProcessed, parsedTotal, percent) => {
                     self.postMessage({
@@ -761,6 +841,7 @@ self.onmessage = async (event) => {
             })
 
             index = newIndex
+            invalidateSearchCaches()
 
             const indexJs = index.toJSON()
             let persisted = false
@@ -768,7 +849,7 @@ self.onmessage = async (event) => {
 
             if (shouldPersist) {
                 try {
-                    await writePersistedIndex(targetHash, datasetSignature, indexJs, total, metadata)
+                    await writePersistedIndex(targetHash, datasetSignature, indexJs, getAllFacets(), total, metadata)
                     persisted = true
                 } catch (err) {
                     persistenceError = err instanceof Error ? err.message : "Failed to persist index."
