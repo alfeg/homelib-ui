@@ -62,11 +62,18 @@ function isPromiseLike(value: unknown): value is Promise<unknown> {
 function decodeText(bytes: Uint8Array): string {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return "";
 
+  // Encoding is uniform within a file, so a prefix sample is enough to
+  // detect CP1251 mojibake without regex-scanning multi-MB entries.
+  const MOJIBAKE_SAMPLE_LENGTH = 65536;
   const looksLikeMojibake = (text: string) => {
     if (!text) return false;
-    const artifacts = text.match(/[РС][\u0080-\u00bf]/g);
+    const sample =
+      text.length > MOJIBAKE_SAMPLE_LENGTH
+        ? text.slice(0, MOJIBAKE_SAMPLE_LENGTH)
+        : text;
+    const artifacts = sample.match(/[РС][\u0080-\u00bf]/g);
     if (!artifacts || artifacts.length === 0) return false;
-    return artifacts.length / text.length > 0.01;
+    return artifacts.length / sample.length > 0.01;
   };
 
   try {
@@ -159,14 +166,54 @@ function updateSigHash(hash: number, value: string): number {
   return h >>> 0;
 }
 
-function countValidBooks(lines: string[]): number {
+// Hashes the same character sequence as the previous
+// `${id}|${title}|...` template literal (FNV-1a is byte-sequential), so
+// signatures stay stable across versions — without allocating a per-book
+// concatenated string.
+function updateSigHashBook(hash: number, book: ParsedBook): number {
+  let h = updateSigHash(hash, String(book.id));
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.title);
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.authors);
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.series);
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.lang);
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.genre);
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.file);
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.archiveFile);
+  h = updateSigHash(h, "|");
+  h = updateSigHash(h, book.ext);
+  return h;
+}
+
+// Byte-level equivalent of splitting on \r?\n + \x04 and checking that
+// field[5] is non-empty. \n, \r and \x04 are single bytes in both UTF-8 and
+// CP1251, so this needs no text decoding and allocates nothing.
+function countValidBooksInBytes(bytes: Uint8Array): number {
   let count = 0;
-  for (const line of lines) {
-    if (!line) continue;
-    const fields = line.split(ROW_DELIMITER);
-    if (!fields.length || !fields[5]) continue;
-    count++;
+  let delimiters = 0;
+  let lineHasContent = false;
+  let fileFieldHasContent = false;
+
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b === 0x0a) {
+      if (lineHasContent && fileFieldHasContent) count++;
+      delimiters = 0;
+      lineHasContent = false;
+      fileFieldHasContent = false;
+    } else if (b !== 0x0d) {
+      lineHasContent = true;
+      if (b === 0x04) delimiters++;
+      else if (delimiters === 5) fileFieldHasContent = true;
+    }
   }
+  if (lineHasContent && fileFieldHasContent) count++;
   return count;
 }
 
@@ -214,10 +261,7 @@ export function parseInpxBuffer(
 
       const book = mapBook(fields, archiveFile, fallbackId++);
       books.push(book);
-      sigHash = updateSigHash(
-        sigHash,
-        `${book.id}|${book.title}|${book.authors}|${book.series}|${book.lang}|${book.genre}|${book.file}|${book.archiveFile}|${book.ext}`,
-      );
+      sigHash = updateSigHashBook(sigHash, book);
     }
 
     const pct = totalEntries
@@ -263,12 +307,10 @@ export async function parseInpxBufferStreaming(
   );
 
   // Pre-count valid rows so parsing progress can be reported per total books.
+  // Runs on raw bytes — no decoding or line splitting on this pass.
   let totalBooksExpected = 0;
   for (let ei = 0; ei < inpEntries.length; ei++) {
-    const entryName = inpEntries[ei];
-    const text = decodeText(archive[entryName]);
-    const lines = text.split(/\r?\n/);
-    totalBooksExpected += countValidBooks(lines);
+    totalBooksExpected += countValidBooksInBytes(archive[inpEntries[ei]]);
   }
 
   onProgress?.("parsing", 0, totalBooksExpected, totalBooksExpected ? 0 : 100);
@@ -277,6 +319,8 @@ export async function parseInpxBufferStreaming(
   let totalBooks = 0;
   let totalBatches = 0;
   let batch: ParsedBook[] = [];
+  let lastReportedPercent = totalBooksExpected ? 0 : 100;
+  let lastReportedProcessed = 0;
 
   const resolvedBatchSize = Number.isFinite(batchSize)
     ? Math.max(1, Math.floor(batchSize))
@@ -310,23 +354,33 @@ export async function parseInpxBufferStreaming(
 
       const book = mapBook(fields, archiveFile, fallbackId++);
       totalBooks++;
-      sigHash = updateSigHash(
-        sigHash,
-        `${book.id}|${book.title}|${book.authors}|${book.series}|${book.lang}|${book.genre}|${book.file}|${book.archiveFile}|${book.ext}`,
-      );
+      sigHash = updateSigHashBook(sigHash, book);
       batch.push(book);
       if (batch.length >= resolvedBatchSize) {
         await flushBatch();
       }
 
+      // Report only on whole-percent changes: callers forward progress as
+      // postMessage, and per-book calls flood the consumer at library scale.
       const pct = totalBooksExpected
         ? Math.round((totalBooks / totalBooksExpected) * 100)
         : 100;
-      onProgress?.("parsing", totalBooks, totalBooksExpected, pct);
+      if (pct !== lastReportedPercent) {
+        lastReportedPercent = pct;
+        lastReportedProcessed = totalBooks;
+        onProgress?.("parsing", totalBooks, totalBooksExpected, pct);
+      }
     }
   }
 
   await flushBatch();
+
+  // Guarantee a final report with exact totals: percent throttling can stop
+  // short of the last rows, and the byte-level pre-count may disagree with
+  // the parsed row count on edge cases.
+  if (lastReportedPercent !== 100 || lastReportedProcessed !== totalBooks) {
+    onProgress?.("parsing", totalBooks, totalBooks, 100);
+  }
 
   metadata.totalBooks = totalBooks;
 

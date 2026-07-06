@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { createGlobalState } from "@vueuse/core"
+import { createGlobalState, watchDebounced } from "@vueuse/core"
 
 import { computed, reactive, ref, watch } from "vue"
 
@@ -291,10 +291,16 @@ export const useLibraryState = createGlobalState(() => {
         })
     }
 
-    watch(searchTerm, () => {
-        currentPage.value = 1
-        refreshSearchResults()
-    })
+    // Debounced: every keystroke would otherwise trigger a full worker
+    // search (year range + genre facet recompute over the matched set).
+    watchDebounced(
+        searchTerm,
+        () => {
+            currentPage.value = 1
+            refreshSearchResults()
+        },
+        { debounce: 200 },
+    )
 
     watch(
         selectedGenres,
