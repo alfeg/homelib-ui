@@ -1,6 +1,6 @@
 {
     "name": "inpx-parser",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Parser for INPX e-book library archives (MyHomeLib format)",
     "keywords": [
         "inpx",
@@ -45,10 +45,13 @@
         "dev": "tsup --watch"
     },
     "dependencies": {
-        "fflate": "^0.8.2"
+        "fflate": "^0.8.3"
     },
     "devDependencies": {
-        "tsup": "^8.4.0",
-        "typescript": "^5.8.2"
+        "tsup": "^8.5.1",
+        "typescript": "^5.9.3"
+    },
+    "overrides": {
+        "esbuild": "^0.28.1"
     }
 }

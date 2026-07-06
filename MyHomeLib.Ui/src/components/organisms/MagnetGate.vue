@@ -29,7 +29,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const isDragActive = ref(false)
 const { t, locale } = useI18nState()
 
-const LUCKY_MAGNET = "magnet:?xt=urn:btih:D8E404D51927F79DEB16F083E88CC62460455F39&tr=http%3A%2F%2Fbt.booktracker.work%2Fann%3Fmagnet"
+const LUCKY_MAGNET =
+    "magnet:?xt=urn:btih:D8E404D51927F79DEB16F083E88CC62460455F39&tr=http%3A%2F%2Fbt.booktracker.work%2Fann%3Fmagnet"
 
 const onSubmit = () => {
     if (props.loading) return

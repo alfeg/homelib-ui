@@ -1,7 +1,6 @@
 {
     "compilerOptions": {
         "allowImportingTsExtensions": true,
-        "baseUrl": "./",
         "forceConsistentCasingInFileNames": true,
         "isolatedModules": true,
         "jsx": "preserve",
@@ -14,7 +13,7 @@
         "noUnusedLocals": true,
         "noUnusedParameters": false,
         "paths": {
-            "@/*": ["src/*"]
+            "@/*": ["./src/*"]
         },
         "resolveJsonModule": true,
         "skipLibCheck": true,
@@ -24,7 +23,7 @@
         "types": ["vite/client", "node"],
         "useDefineForClassFields": true
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "vite.config.ts"],
+    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
     "references": [
         {
             "path": "./tsconfig.node.json"
