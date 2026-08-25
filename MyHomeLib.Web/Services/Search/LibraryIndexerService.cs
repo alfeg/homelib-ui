@@ -25,7 +25,7 @@ public class LibraryIndexerService(
     private const int DocumentSchemaVersion = 3;
 
     /// <summary>Attempts allowed when the downloaded INPX turns out not to be readable.</summary>
-    private const int InpxAcquireAttempts = 3;
+    private const int InpxAcquireAttempts = 5;
 
     private static readonly TimeSpan InpxRetryDelay = TimeSpan.FromSeconds(5);
 
@@ -72,6 +72,10 @@ public class LibraryIndexerService(
         if (!await meili.WaitUntilHealthyAsync(TimeSpan.FromMinutes(5), ct))
             throw new InvalidOperationException("Meilisearch did not become healthy within 5 minutes.");
 
+        // Read before touching the INPX: an index that is already built is what lets a
+        // failed read degrade instead of taking the whole server down.
+        var stored = await meili.GetIndexStateAsync(ct);
+
         // Acquiring and parsing are one retried step. A cold torrent can serve a file that
         // is the right size and shape but wrong content, and the damage only shows up when
         // something deep inside fails to inflate — reported as "unsupported compression
@@ -103,6 +107,22 @@ public class LibraryIndexerService(
                 // A local file is whatever it is; fetching it again will not change anything.
                 if (attempt >= InpxAcquireAttempts || !string.IsNullOrWhiteSpace(_config.InpxPath))
                 {
+                    // The INPX is only read to decide whether a rebuild is needed. If one was
+                    // built earlier it is still perfectly good, and refusing to serve it would
+                    // turn a transient download problem into an outage. Serve what we have and
+                    // say so; the next restart will try the collection again.
+                    if (stored is { Total: > 0 } && stored.SchemaVersion == DocumentSchemaVersion)
+                    {
+                        logger.LogError(ex,
+                            "[Index] collection index unreadable after {Attempts} attempts — serving the " +
+                            "existing index of {Total:N0} books built at {IndexedAt}",
+                            attempt, stored.Total, stored.IndexedAt);
+
+                        state.Ready(stored.Total, stored.CollectionTitle, stored.CollectionVersion,
+                            DateTimeOffset.TryParse(stored.IndexedAt, out var previous) ? previous : DateTimeOffset.UtcNow);
+                        return;
+                    }
+
                     throw new InvalidDataException(
                         $"The collection index could not be read: {ex.Message} " +
                         "This usually means an incomplete download rather than a damaged collection.", ex);
@@ -126,7 +146,6 @@ public class LibraryIndexerService(
         await meili.EnsureIndexAsync(meili.IndexUid, "uid", ct);
         await meili.ApplySettingsAsync(meili.IndexUid, BookIndexSettings, ct);
 
-        var stored = await meili.GetIndexStateAsync(ct);
         if (!_config.ForceReindex
             && stored?.Signature == signature
             && stored.SchemaVersion == DocumentSchemaVersion)
