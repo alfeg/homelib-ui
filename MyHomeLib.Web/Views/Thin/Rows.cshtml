@@ -1,5 +1,14 @@
 @model RowsModel
 
+@if (Model.Leading.Count > 0)
+{
+    @if (Model.LeadingCaption is not null)
+    {
+        <div class="cap">@Model.LeadingCaption</div>
+    }
+    @await Html.PartialAsync("_Rows", Model.Leading)
+}
+
 @if (Model.Caption is not null)
 {
     <div class="cap">@Model.Caption</div>

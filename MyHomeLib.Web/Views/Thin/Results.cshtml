@@ -1,10 +1,5 @@
 @model ResultsModel
 
-@if (Model.SearchAction is not null)
-{
-    @await Html.PartialAsync("_SearchForm", (Model.SearchAction, Model.Query, Model.HiddenFields))
-}
-
 @if (Model.Result.Total == 0)
 {
     <p class="m">Nothing found.</p>

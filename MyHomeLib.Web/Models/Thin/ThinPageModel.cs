@@ -23,6 +23,18 @@ public abstract class ThinPageModel
 
     /// <summary>Meta-refresh interval; 0 disables it. The thin pages ship no JavaScript.</summary>
     public int AutoRefreshSeconds { get; init; }
+
+    /// <summary>
+    /// Every page carries the search box. On a reader there is no address bar worth using
+    /// and no back gesture worth trusting, so a page without a way out is a dead end.
+    /// </summary>
+    public bool ShowSearch { get; init; } = true;
+
+    /// <summary>Prefills the search box, so refining a query does not start from nothing.</summary>
+    public string? SearchQuery { get; init; }
+
+    /// <summary>Carried through the search form, to keep a filter across a refinement.</summary>
+    public IReadOnlyList<(string Name, string Value)> SearchHidden { get; init; } = [];
 }
 
 public class IndexModel : ThinPageModel
@@ -55,6 +67,10 @@ public class RowsModel : ThinPageModel
 {
     public required IReadOnlyList<RowItem> Rows { get; init; }
     public string? Caption { get; init; }
+
+    /// <summary>Optional section shown above the main rows, e.g. the authors of a series.</summary>
+    public IReadOnlyList<RowItem> Leading { get; init; } = [];
+    public string? LeadingCaption { get; init; }
     public string? PreviousHref { get; init; }
     public string? NextHref { get; init; }
     public string PagerCaption { get; init; } = "";

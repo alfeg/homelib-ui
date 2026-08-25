@@ -30,6 +30,13 @@ public class ThinController(
 
     private static readonly Crumb Home = new("/m", "Home");
     private static readonly Crumb GenresCrumb = new("/m/genres", "Genres");
+    private static readonly Crumb RecentCrumb = new("/m/new", "Recent");
+
+    /// <summary>
+    /// The same way out from every page. A reader has no useful address bar and an
+    /// unreliable back gesture, so each page has to carry its own navigation.
+    /// </summary>
+    private static readonly Crumb[] MainNav = [Home, GenresCrumb, RecentCrumb];
 
     private readonly LibraryConfig _config = libraryConfig.Value;
 
@@ -82,7 +89,9 @@ public class ThinController(
             Title = $"{heading} — {CollectionTitle}",
             Heading = heading,
             Subtitle = $"{found.Books.Total:N0} found",
-            Crumbs = [Home, GenresCrumb],
+            Crumbs = MainNav,
+            SearchQuery = q,
+            SearchHidden = string.IsNullOrWhiteSpace(genre) ? [] : [("genre", genre)],
             Result = found.Books,
             Books = [.. found.Books.Books.Select(BookRow)],
             SearchAction = "/m/search",
@@ -113,7 +122,7 @@ public class ThinController(
             Title = $"Recently added — {CollectionTitle}",
             Heading = "Recently added",
             Subtitle = $"{result.Total:N0} found",
-            Crumbs = [Home, GenresCrumb],
+            Crumbs = MainNav,
             Result = result,
             Books = [.. result.Books.Select(BookRow)],
             PreviousHref = Paged("/m/new", "", result.Page - 1, result.HasPreviousPage),
@@ -139,7 +148,7 @@ public class ThinController(
             {
                 Title = $"Genres — {CollectionTitle}",
                 Heading = "By genre",
-                Crumbs = [Home],
+                Crumbs = MainNav,
                 Rows =
                 [
                     .. categories.Select(c => new RowItem(
@@ -159,7 +168,7 @@ public class ThinController(
             Title = $"{picked.Name} — {CollectionTitle}",
             Heading = picked.Name,
             Subtitle = $"{picked.Count:N0} books",
-            Crumbs = [Home, GenresCrumb],
+            Crumbs = [Home, GenresCrumb, RecentCrumb],
             Rows =
             [
                 .. picked.Genres.Select(g => new RowItem(
@@ -188,7 +197,7 @@ public class ThinController(
             Title = $"{name} — {CollectionTitle}",
             Heading = name,
             Subtitle = $"{author.Books.Total:N0} books",
-            Crumbs = [Home],
+            Crumbs = MainNav,
             Series =
             [
                 .. author.Series.Select(entry => new RowItem(
@@ -226,14 +235,28 @@ public class ThinController(
 
         var query = BuildQuery(("name", name), ("author", author));
 
+        // Reached from a search, a series page knew nothing about who wrote it and offered
+        // no way onward. The authors are already in the results, so name them.
+        var authors = result.Books
+            .SelectMany(book => book.AuthorList)
+            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .GroupBy(a => a)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+            .Take(4)
+            .Select(g => new RowItem($"/m/author?name={Uri.EscapeDataString(g.Key)}", g.Key, null, "›"))
+            .ToList();
+
         return View("Rows", new RowsModel
         {
             Title = $"{name} — {CollectionTitle}",
             Heading = name,
             Subtitle = $"{result.Total:N0} books",
             Crumbs = string.IsNullOrWhiteSpace(author)
-                ? [Home]
-                : [Home, new Crumb($"/m/author?name={Uri.EscapeDataString(author)}", author)],
+                ? MainNav
+                : [Home, GenresCrumb, new Crumb($"/m/author?name={Uri.EscapeDataString(author)}", author)],
+            Leading = authors,
+            LeadingCaption = authors.Count == 1 ? "Author" : "Authors",
             Rows =
             [
                 .. result.Books.Select(book => new RowItem(
@@ -260,7 +283,7 @@ public class ThinController(
             Title = $"{book.Title} — {CollectionTitle}",
             Heading = string.IsNullOrWhiteSpace(book.Title) ? book.File : book.Title,
             Subtitle = string.IsNullOrWhiteSpace(book.Authors) ? null : book.Authors,
-            Crumbs = [Home, GenresCrumb],
+            Crumbs = MainNav,
             Book = book,
             SeriesRows = string.IsNullOrWhiteSpace(book.Series)
                 ? []
@@ -344,6 +367,7 @@ public class ThinController(
             Heading = CollectionTitle,
             Subtitle = failed ? "indexing failed" : "preparing the library",
             AutoRefreshSeconds = failed ? 0 : RefreshSeconds,
+            ShowSearch = false,
             Status = snapshot,
             RefreshSeconds = RefreshSeconds,
         });

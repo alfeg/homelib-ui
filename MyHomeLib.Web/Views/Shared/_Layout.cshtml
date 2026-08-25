@@ -148,6 +148,11 @@
     </div>
 
     <div class="bd">
+        @if (Model.ShowSearch)
+        {
+            @await Html.PartialAsync("_SearchForm", ("/m/search", Model.SearchQuery, Model.SearchHidden))
+        }
+
         @RenderBody()
     </div>
 </body>
