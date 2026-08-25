@@ -29,7 +29,13 @@
     }
     <title>@Model.Title</title>
     <style>
-        * { box-sizing: border-box }
+        * {
+            box-sizing: border-box;
+            /* Chromium paints a translucent overlay over a tapped element. On a monochrome
+               panel that lands as a solid black block, and the browser repaints the whole
+               row to draw it. */
+            -webkit-tap-highlight-color: transparent;
+        }
 
         body {
             font: 17px/1.45 "PT Sans", Tahoma, Arial, sans-serif;
@@ -41,8 +47,16 @@
 
         a { color: #000; text-decoration: none }
 
-        /* e-ink has no hover, so pressed state is an inversion */
-        a:active { background: #000; color: #fff }
+        /* There is no hover on a reader, so a pressed state still has to exist — but it has
+           to be cheap. Inverting a whole row meant repainting every pixel of it, which on
+           e-ink is a visible black flash. An underline touches one line of text. */
+        a:active { text-decoration: underline }
+
+        /* The bordered controls are small enough that inverting them costs little and reads
+           clearly as a button being pressed. */
+        button:active,
+        .pg a:active,
+        .d:active { background: #000; color: #fff; text-decoration: none }
 
         .hd { padding: 11px 12px 6px; border-bottom: 3px double #000 }
         .hd h1 { font-size: 21px; margin: 0; font-weight: bold }
