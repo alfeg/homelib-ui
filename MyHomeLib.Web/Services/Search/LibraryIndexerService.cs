@@ -96,6 +96,23 @@ public class LibraryIndexerService(
         // failed read degrade instead of taking the whole server down.
         var stored = await meili.GetIndexStateAsync(ct);
 
+        // The stored record describes what was indexed, not what is in the index now. Those
+        // can disagree — an index emptied out from under us, a load that died between the
+        // delete and the write, two indexers racing — and trusting the record then serves a
+        // library with nothing in it while cheerfully reporting a full count. Ask the index.
+        var documentsHeld = await meili.CountDocumentsAsync(meili.IndexUid, ct);
+
+        var recordLooksTrustworthy = stored is not null
+            && stored.SchemaVersion == DocumentSchemaVersion
+            && documentsHeld >= stored.Total;
+
+        if (stored is { Total: > 0 } && documentsHeld < stored.Total)
+        {
+            logger.LogWarning(
+                "[Index] the index holds {Held:N0} documents but the last run recorded {Expected:N0} — rebuilding",
+                documentsHeld, stored.Total);
+        }
+
         // Acquiring and parsing are one retried step. A cold torrent can serve a file that
         // is the right size and shape but wrong content, and the damage only shows up when
         // something deep inside fails to inflate — reported as "unsupported compression
@@ -132,7 +149,8 @@ public class LibraryIndexerService(
                     // built earlier it is still perfectly good, and refusing to serve it would
                     // turn a transient download problem into an outage. Serve what we have and
                     // say so; the next restart will try the collection again.
-                    if (stored is { Total: > 0 } && stored.SchemaVersion == DocumentSchemaVersion)
+                    if (stored is { Total: > 0 } && stored.SchemaVersion == DocumentSchemaVersion
+                        && documentsHeld >= stored.Total)
                     {
                         logger.LogError(ex,
                             "[Index] collection index unreadable after {Attempts} attempts — serving the " +
@@ -169,7 +187,7 @@ public class LibraryIndexerService(
 
         if (!_config.ForceReindex
             && stored?.Signature == signature
-            && stored.SchemaVersion == DocumentSchemaVersion)
+            && recordLooksTrustworthy)
         {
             logger.LogInformation("[Index] fingerprint unchanged — {Total:N0} books already indexed", stored.Total);
             state.Ready(stored.Total, stored.CollectionTitle, stored.CollectionVersion,
@@ -187,7 +205,11 @@ public class LibraryIndexerService(
                 stored!.SchemaVersion, DocumentSchemaVersion);
         }
 
-        var storedArchives = _config.ForceReindex || schemaChanged ? [] : stored?.Archives ?? [];
+        // A short index cannot be repaired incrementally: the per-archive fingerprints would
+        // match and the diff would find nothing to do.
+        var storedArchives = _config.ForceReindex || schemaChanged || !recordLooksTrustworthy
+            ? []
+            : stored?.Archives ?? [];
         var isFirstBuild = storedArchives.Count == 0;
 
         var changed = fingerprint.Archives
