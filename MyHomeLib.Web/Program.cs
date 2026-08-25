@@ -11,7 +11,20 @@ using MyHomeLib.Web.Services;
 using MyHomeLib.Web.Services.Search;
 using MyHomeLib.Web.Services.TorrServe;
 
+// The index command runs without a web host: it builds the search index and exits, so
+// index population can be scripted instead of being a side effect of starting the server.
+var indexOnly = LibraryCli.IsIndexCommand(args);
+
+if (LibraryCli.IsHelpRequest(args))
+{
+    LibraryCli.PrintHelp();
+    return LibraryCli.ExitSuccess;
+}
+
 var builder = WebApplication.CreateBuilder(args);
+
+if (indexOnly && LibraryCli.WantsForce(args))
+    builder.Configuration["Library:ForceReindex"] = "true";
 
 builder.Services.AddControllersWithViews();
 
@@ -77,9 +90,21 @@ builder.Services.AddHttpClient<MeiliClient>((sp, c) =>
 builder.Services.AddSingleton<IndexState>();
 builder.Services.AddSingleton<GenreLabelService>();
 builder.Services.AddScoped<LibrarySearchService>();
-builder.Services.AddHostedService<LibraryIndexerService>();
+builder.Services.AddSingleton<LibraryIndexerService>();
+
+// Only serve-mode runs it in the background; the index command drives it directly.
+if (!indexOnly)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<LibraryIndexerService>());
 
 var app = builder.Build();
+
+if (indexOnly)
+{
+    using var indexCancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; indexCancellation.Cancel(); };
+
+    return await LibraryCli.RunIndexAsync(app.Services, indexCancellation.Token);
+}
 
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/error");
@@ -145,3 +170,5 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 app.Run();
+
+return LibraryCli.ExitSuccess;

@@ -4,6 +4,22 @@ using MyHomeLib.Web.Models;
 
 namespace MyHomeLib.Web.Services.Search;
 
+/// <summary>What an indexing run actually did, so a script can tell the cases apart.</summary>
+public enum IndexOutcome
+{
+    /// <summary>The collection changed (or a rebuild was forced) and documents were written.</summary>
+    Rebuilt,
+
+    /// <summary>The collection was already indexed and identical; nothing to do.</summary>
+    UpToDate,
+
+    /// <summary>
+    /// The collection could not be read, but a previously built index was present and is
+    /// being served. The index is usable but may be stale.
+    /// </summary>
+    ServedExisting,
+}
+
 /// <summary>
 /// Builds the Meilisearch index at startup: acquire the INPX, parse it, bulk load it.
 /// Skips the whole thing when the stored signature matches the INPX on hand, so a
@@ -52,7 +68,7 @@ public class LibraryIndexerService(
     {
         try
         {
-            await RunAsync(ct);
+            await IndexAsync(ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -65,7 +81,11 @@ public class LibraryIndexerService(
         }
     }
 
-    private async Task RunAsync(CancellationToken ct)
+    /// <summary>
+    /// Runs one indexing pass. Public so the <c>index</c> command can drive it without a web
+    /// host; the hosted service is just this method on a background thread.
+    /// </summary>
+    public async Task<IndexOutcome> IndexAsync(CancellationToken ct)
     {
         state.Set(IndexPhase.WaitingForSearchEngine, "Waiting for the search engine");
 
@@ -120,7 +140,7 @@ public class LibraryIndexerService(
 
                         state.Ready(stored.Total, stored.CollectionTitle, stored.CollectionVersion,
                             DateTimeOffset.TryParse(stored.IndexedAt, out var previous) ? previous : DateTimeOffset.UtcNow);
-                        return;
+                        return IndexOutcome.ServedExisting;
                     }
 
                     throw new InvalidDataException(
@@ -153,7 +173,7 @@ public class LibraryIndexerService(
             logger.LogInformation("[Index] fingerprint unchanged — {Total:N0} books already indexed", stored.Total);
             state.Ready(stored.Total, stored.CollectionTitle, stored.CollectionVersion,
                 DateTimeOffset.TryParse(stored.IndexedAt, out var at) ? at : DateTimeOffset.UtcNow);
-            return;
+            return IndexOutcome.UpToDate;
         }
 
         // Work out the smallest change that gets the index current. A brand-new index, or an
@@ -224,6 +244,7 @@ public class LibraryIndexerService(
 
         logger.LogInformation("[Index] done — {Pushed:N0} pushed, {Total:N0} in the collection", indexed, total);
         state.Ready(total, collectionTitle, metadata.Version, indexedAt);
+        return IndexOutcome.Rebuilt;
     }
 
     /// <summary>Meilisearch filter literals are single-quoted.</summary>
