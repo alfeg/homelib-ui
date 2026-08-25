@@ -1,12 +1,13 @@
 @model AuthorModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<MyHomeLib.Web.ThinUi> T
 
 @if (Model.Series.Count > 0)
 {
-    <div class="cap">Series (@Model.Series.Count)</div>
+    <div class="cap">@T["Series ({0})", Model.Series.Count]</div>
     @await Html.PartialAsync("_Rows", Model.Series)
 }
 
-<div class="cap">Books</div>
+<div class="cap">@T["Books"]</div>
 
 @await Html.PartialAsync("_Rows", Model.Books)
 @await Html.PartialAsync("_Pager", (Model.PreviousHref, Model.NextHref, Model.PagerCaption))

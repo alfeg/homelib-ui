@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="xml:space" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Home" xml:space="preserve">
+    <value>Главная</value>
+  </data>
+  <data name="Genres" xml:space="preserve">
+    <value>Жанры</value>
+  </data>
+  <data name="Recent" xml:space="preserve">
+    <value>Новинки</value>
+  </data>
+  <data name="By genre" xml:space="preserve">
+    <value>По жанрам</value>
+  </data>
+  <data name="By language" xml:space="preserve">
+    <value>По языкам</value>
+  </data>
+  <data name="Recently added" xml:space="preserve">
+    <value>Недавно добавленные</value>
+  </data>
+  <data name="All books" xml:space="preserve">
+    <value>Все книги</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Обзор</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Найти</value>
+  </data>
+  <data name="Author, title or series" xml:space="preserve">
+    <value>Автор, название или серия</value>
+  </data>
+  <data name="Nothing found." xml:space="preserve">
+    <value>Ничего не найдено.</value>
+  </data>
+  <data name="Author" xml:space="preserve">
+    <value>Автор</value>
+  </data>
+  <data name="Authors" xml:space="preserve">
+    <value>Авторы</value>
+  </data>
+  <data name="Series" xml:space="preserve">
+    <value>Серия</value>
+  </data>
+  <data name="Series matches" xml:space="preserve">
+    <value>Совпадения по сериям</value>
+  </data>
+  <data name="Books" xml:space="preserve">
+    <value>Книги</value>
+  </data>
+  <data name="Genre" xml:space="preserve">
+    <value>Жанр</value>
+  </data>
+  <data name="Details" xml:space="preserve">
+    <value>Подробности</value>
+  </data>
+  <data name="Download" xml:space="preserve">
+    <value>Скачать</value>
+  </data>
+  <data name="Format" xml:space="preserve">
+    <value>Формат</value>
+  </data>
+  <data name="Size" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Язык</value>
+  </data>
+  <data name="Added to library" xml:space="preserve">
+    <value>Добавлена</value>
+  </data>
+  <data name="Library id" xml:space="preserve">
+    <value>Идентификатор</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>Состояние</value>
+  </data>
+  <data name="Phase" xml:space="preserve">
+    <value>Этап</value>
+  </data>
+  <data name="Refreshing" xml:space="preserve">
+    <value>Обновление</value>
+  </data>
+  <data name="Try again" xml:space="preserve">
+    <value>Повторить</value>
+  </data>
+  <data name="{0} books" xml:space="preserve">
+    <value>{0} книг</value>
+  </data>
+  <data name="{0} titles" xml:space="preserve">
+    <value>{0} названий</value>
+  </data>
+  <data name="{0} found" xml:space="preserve">
+    <value>{0} найдено</value>
+  </data>
+  <data name="{0} books here" xml:space="preserve">
+    <value>{0} книг здесь</value>
+  </data>
+  <data name="{0} languages" xml:space="preserve">
+    <value>{0} языков</value>
+  </data>
+  <data name="{0} books · added {1}" xml:space="preserve">
+    <value>{0} книг · добавлено {1}</value>
+  </data>
+  <data name="Series ({0})" xml:space="preserve">
+    <value>Серии ({0})</value>
+  </data>
+  <data name="OPDS catalog at /opds" xml:space="preserve">
+    <value>OPDS-каталог: /opds</value>
+  </data>
+  <data name="preparing the library" xml:space="preserve">
+    <value>библиотека готовится</value>
+  </data>
+  <data name="indexing failed" xml:space="preserve">
+    <value>ошибка индексации</value>
+  </data>
+  <data name="Check the server log. The page will not refresh by itself." xml:space="preserve">
+    <value>Смотрите журнал сервера. Страница не будет обновляться сама.</value>
+  </data>
+  <data name="every {0} s" xml:space="preserve">
+    <value>каждые {0} с</value>
+  </data>
+</root>

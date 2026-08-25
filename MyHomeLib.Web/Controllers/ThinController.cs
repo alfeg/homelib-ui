@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Web.Models;
 using MyHomeLib.Web.Models.Thin;
@@ -21,6 +23,7 @@ public class ThinController(
     LibrarySearchService search,
     GenreLabelService genreLabels,
     IndexState state,
+    IStringLocalizer<ThinUi> t,
     IOptions<LibraryConfig> libraryConfig) : Controller
 {
     private const int PageSize = 20;
@@ -28,15 +31,15 @@ public class ThinController(
     /// <summary>How often the indexing page reloads itself while the library is building.</summary>
     private const int RefreshSeconds = 5;
 
-    private static readonly Crumb Home = new("/m", "Home");
-    private static readonly Crumb GenresCrumb = new("/m/genres", "Genres");
-    private static readonly Crumb RecentCrumb = new("/m/new", "Recent");
+    private Crumb Home => new("/m", t["Home"]);
+    private Crumb GenresCrumb => new("/m/genres", t["Genres"]);
+    private Crumb RecentCrumb => new("/m/new", t["Recent"]);
 
     /// <summary>
     /// The same way out from every page. A reader has no useful address bar and an
     /// unreliable back gesture, so each page has to carry its own navigation.
     /// </summary>
-    private static readonly Crumb[] MainNav = [Home, GenresCrumb, RecentCrumb];
+    private Crumb[] MainNav => [Home, GenresCrumb, RecentCrumb];
 
     private readonly LibraryConfig _config = libraryConfig.Value;
 
@@ -51,14 +54,14 @@ public class ThinController(
         {
             Title = CollectionTitle,
             Heading = CollectionTitle,
-            Subtitle = $"{state.TotalBooks:N0} books",
+            Subtitle = t["{0} books", state.TotalBooks.ToString("N0")],
             TotalBooks = state.TotalBooks,
             Sections =
             [
-                new RowItem("/m/genres", "By genre", null, "›"),
-                new RowItem("/m/langs", "By language", null, "›"),
-                new RowItem("/m/new", "Recently added", null, "›"),
-                new RowItem("/m/all", "All books", $"{state.TotalBooks:N0} titles", "›"),
+                new RowItem("/m/genres", t["By genre"], null, "›"),
+                new RowItem("/m/langs", t["By language"], null, "›"),
+                new RowItem("/m/new", t["Recently added"], null, "›"),
+                new RowItem("/m/all", t["All books"], t["{0} titles", state.TotalBooks.ToString("N0")], "›"),
             ],
         });
     }
@@ -83,7 +86,7 @@ public class ThinController(
         var heading = !string.IsNullOrWhiteSpace(genre) ? genreLabels.Label(genre)
                     : !string.IsNullOrWhiteSpace(q) ? $"“{q}”"
                     : !string.IsNullOrWhiteSpace(lang) ? LanguageNames.Label(lang)
-                    : "All books";
+                    : t["All books"];
 
         var query = BuildQuery(("q", q), ("genre", genre), ("lang", lang));
 
@@ -97,7 +100,7 @@ public class ThinController(
         {
             Title = $"{heading} — {CollectionTitle}",
             Heading = heading,
-            Subtitle = $"{found.Books.Total:N0} found",
+            Subtitle = t["{0} found", found.Books.Total.ToString("N0")],
             Crumbs = MainNav,
             SearchQuery = q,
             SearchHidden = carried,
@@ -128,9 +131,9 @@ public class ThinController(
 
         return View("Rows", new RowsModel
         {
-            Title = $"Languages — {CollectionTitle}",
-            Heading = "By language",
-            Subtitle = $"{counts.Count(c => c.Value > 0)} languages",
+            Title = $"{t["By language"]} — {CollectionTitle}",
+            Heading = t["By language"],
+            Subtitle = t["{0} languages", counts.Count(c => c.Value > 0).ToString()],
             Crumbs = MainNav,
             Rows =
             [
@@ -140,7 +143,7 @@ public class ThinController(
                     .Select(c => new RowItem(
                         $"/m/search?lang={Uri.EscapeDataString(c.Key)}",
                         LanguageNames.LabelWithCode(c.Key),
-                        $"{c.Value:N0} books",
+                        t["{0} books", c.Value.ToString("N0")],
                         "›")),
             ],
         });
@@ -156,9 +159,9 @@ public class ThinController(
 
         return View("Results", new ResultsModel
         {
-            Title = $"Recently added — {CollectionTitle}",
-            Heading = "Recently added",
-            Subtitle = $"{result.Total:N0} found",
+            Title = $"{t["Recently added"]} — {CollectionTitle}",
+            Heading = t["Recently added"],
+            Subtitle = t["{0} found", result.Total.ToString("N0")],
             Crumbs = MainNav,
             Result = result,
             Books = [.. result.Books.Select(BookRow)],
@@ -183,14 +186,14 @@ public class ThinController(
         {
             return View("Rows", new RowsModel
             {
-                Title = $"Genres — {CollectionTitle}",
-                Heading = "By genre",
+                Title = $"{t["Genres"]} — {CollectionTitle}",
+                Heading = t["By genre"],
                 Crumbs = MainNav,
                 Rows =
                 [
                     .. categories.Select(c => new RowItem(
                         $"/m/genres?category={Uri.EscapeDataString(c.Name)}",
-                        c.Name, $"{c.Count:N0} books", "›")),
+                        c.Name, t["{0} books", c.Count.ToString("N0")], "›")),
                 ],
             });
         }
@@ -204,13 +207,13 @@ public class ThinController(
         {
             Title = $"{picked.Name} — {CollectionTitle}",
             Heading = picked.Name,
-            Subtitle = $"{picked.Count:N0} books",
+            Subtitle = t["{0} books", picked.Count.ToString("N0")],
             Crumbs = [Home, GenresCrumb, RecentCrumb],
             Rows =
             [
                 .. picked.Genres.Select(g => new RowItem(
                     $"/m/search?genre={Uri.EscapeDataString(g.Code)}",
-                    g.Label, $"{g.Count:N0} books", "›")),
+                    g.Label, t["{0} books", g.Count.ToString("N0")], "›")),
             ],
         });
     }
@@ -233,7 +236,7 @@ public class ThinController(
         {
             Title = $"{name} — {CollectionTitle}",
             Heading = name,
-            Subtitle = $"{author.Books.Total:N0} books",
+            Subtitle = t["{0} books", author.Books.Total.ToString("N0")],
             Crumbs = MainNav,
             Series =
             [
@@ -241,8 +244,8 @@ public class ThinController(
                     $"/m/series?name={Uri.EscapeDataString(entry.Name)}&author={Uri.EscapeDataString(name)}",
                     entry.Name,
                     entry.YearRange.Length > 0
-                        ? $"{entry.Count:N0} books · added {entry.YearRange}"
-                        : $"{entry.Count:N0} books",
+                        ? t["{0} books · added {1}", entry.Count.ToString("N0"), entry.YearRange]
+                        : t["{0} books", entry.Count.ToString("N0")],
                     "›")),
             ],
             Books = [.. author.Books.Books.Select(BookRow)],
@@ -288,12 +291,12 @@ public class ThinController(
         {
             Title = $"{name} — {CollectionTitle}",
             Heading = name,
-            Subtitle = $"{result.Total:N0} books",
+            Subtitle = t["{0} books", result.Total.ToString("N0")],
             Crumbs = string.IsNullOrWhiteSpace(author)
                 ? MainNav
                 : [Home, GenresCrumb, new Crumb($"/m/author?name={Uri.EscapeDataString(author)}", author)],
             Leading = authors,
-            LeadingCaption = authors.Count == 1 ? "Author" : "Authors",
+            LeadingCaption = authors.Count == 1 ? t["Author"] : t["Authors"],
             Rows =
             [
                 .. result.Books.Select(book => new RowItem(
@@ -340,15 +343,34 @@ public class ThinController(
             ],
             Facts =
             [
-                ("Format", $".{book.Ext}"),
-                ("Size", book.Size > 0 ? $"{book.Size / 1024:N0} KB" : "—"),
-                ("Language", LanguageNames.LabelWithCode(book.Lang)),
+                (t["Format"], $".{book.Ext}"),
+                (t["Size"], book.Size > 0 ? $"{book.Size / 1024:N0} KB" : "—"),
+                (t["Language"], LanguageNames.LabelWithCode(book.Lang)),
                 // Labelled "added" deliberately: the INPX date records when the book entered
                 // the collection, not when it was written or published.
-                ("Added to library", book.Added ?? book.Year?.ToString() ?? "—"),
-                ("Library id", book.Id > 0 ? book.Id.ToString() : "—"),
+                (t["Added to library"], book.Added ?? book.Year?.ToString() ?? "—"),
+                (t["Library id"], book.Id > 0 ? book.Id.ToString() : "—"),
             ],
         });
+    }
+
+    /// <summary>
+    /// Switches the interface language and returns to the page the reader was on. A cookie
+    /// rather than a query parameter, so the choice survives the next link; a redirect rather
+    /// than script, because these pages ship none.
+    /// </summary>
+    [HttpGet("culture/{code}")]
+    public IActionResult Culture(string code, [FromQuery] string? returnUrl)
+    {
+        var culture = string.Equals(code, "ru", StringComparison.OrdinalIgnoreCase) ? "ru" : "en";
+
+        Response.Cookies.Append(
+            CookieRequestCultureProvider.DefaultCookieName,
+            CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(culture)),
+            new CookieOptions { Expires = DateTimeOffset.UtcNow.AddYears(1), IsEssential = true, Path = "/" });
+
+        // Only ever return to our own pages: a returnUrl is attacker-supplied by definition.
+        return Redirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/m");
     }
 
     // ── Building blocks ──────────────────────────────────────────────────────
@@ -402,7 +424,7 @@ public class ThinController(
         {
             Title = CollectionTitle,
             Heading = CollectionTitle,
-            Subtitle = failed ? "indexing failed" : "preparing the library",
+            Subtitle = failed ? t["indexing failed"] : t["preparing the library"],
             AutoRefreshSeconds = failed ? 0 : RefreshSeconds,
             ShowSearch = false,
             Status = snapshot,

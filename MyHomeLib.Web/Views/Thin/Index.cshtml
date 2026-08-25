@@ -1,7 +1,8 @@
 @model IndexModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<MyHomeLib.Web.ThinUi> T
 
-<div class="cap">Browse</div>
+<div class="cap">@T["Browse"]</div>
 
 @await Html.PartialAsync("_Rows", Model.Sections)
 
-<p class="m">OPDS catalog at /opds</p>
+<p class="m">@T["OPDS catalog at /opds"]</p>

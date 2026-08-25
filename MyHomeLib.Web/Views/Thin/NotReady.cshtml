@@ -1,4 +1,5 @@
 @model NotReadyModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<MyHomeLib.Web.ThinUi> T
 @*
     First boot takes minutes, so the wait is made legible: a progress bar plus a meta
     refresh set on the layout. The browser does the polling; no script is served.
@@ -6,9 +7,9 @@
 @if (Model.Failed)
 {
     <p class="m">@Model.Status.Error</p>
-    <p class="m">Check the server log. The page will not refresh by itself.</p>
+    <p class="m">@T["Check the server log. The page will not refresh by itself."]</p>
 
-    <a href="/m" class="d">Try again</a>
+    <a href="/m" class="d">@T["Try again"]</a>
 }
 else
 {
@@ -20,16 +21,16 @@ else
 
     <p class="m">@Model.Status.Message</p>
 
-    <div class="cap">Status</div>
+    <div class="cap">@T["Status"]</div>
 
     <table class="f">
         <tr>
-            <th>Phase</th>
+            <th>@T["Phase"]</th>
             <td>@Model.Status.Phase</td>
         </tr>
         <tr>
-            <th>Refreshing</th>
-            <td>every @Model.RefreshSeconds s</td>
+            <th>@T["Refreshing"]</th>
+            <td>@T["every {0} s", Model.RefreshSeconds]</td>
         </tr>
     </table>
 }

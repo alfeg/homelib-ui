@@ -1,4 +1,10 @@
 @model ThinPageModel
+@using System.Globalization
+@inject Microsoft.Extensions.Localization.IStringLocalizer<MyHomeLib.Web.ThinUi> T
+@{
+    var here = Context.Request.Path + Context.Request.QueryString;
+    var current = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+}
 @*
     Minimal document for e-ink readers: no JavaScript, no external requests, no web fonts.
 
@@ -117,10 +123,29 @@
         }
 
         .f td { padding: 7px 0; font-size: 15px; vertical-align: top }
+
+        /* Interface language, kept small and out of the way in the header */
+        .lang { float: right; font-size: 13px; color: #666 }
+        .lang a { text-decoration: underline; margin-left: 8px }
+        .lang b { margin-left: 8px }
     </style>
 </head>
 <body>
     <div class="hd">
+        <div class="lang">
+            @foreach (var (code, label) in new[] { ("ru", "RU"), ("en", "EN") })
+            {
+                if (string.Equals(code, current, StringComparison.OrdinalIgnoreCase))
+                {
+                    <b>@label</b>
+                }
+                else
+                {
+                    <a href="/m/culture/@code?returnUrl=@Uri.EscapeDataString(here)">@label</a>
+                }
+            }
+        </div>
+
         <h1>@Model.Heading</h1>
 
         @if (Model.Crumbs.Count > 0 || !string.IsNullOrWhiteSpace(Model.Subtitle))

@@ -1,8 +1,9 @@
 @model ResultsModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<MyHomeLib.Web.ThinUi> T
 
 @if (Model.Result.Total == 0)
 {
-    <p class="m">Nothing found.</p>
+    <p class="m">@T["Nothing found."]</p>
 }
 else
 {
@@ -12,19 +13,19 @@ else
     *@
     if (Model.AuthorCards.Count > 0)
     {
-        <div class="cap">@(Model.AuthorCards.Count == 1 ? "Author" : "Authors")</div>
+        <div class="cap">@(Model.AuthorCards.Count == 1 ? T["Author"] : T["Authors"])</div>
         @await Html.PartialAsync("_Rows", Model.AuthorCards)
     }
 
     if (Model.SeriesCards.Count > 0)
     {
-        <div class="cap">@(Model.SeriesCards.Count == 1 ? "Series" : "Series matches")</div>
+        <div class="cap">@(Model.SeriesCards.Count == 1 ? T["Series"] : T["Series matches"])</div>
         @await Html.PartialAsync("_Rows", Model.SeriesCards)
     }
 
     if (Model.HasCards)
     {
-        <div class="cap">Books</div>
+        <div class="cap">@T["Books"]</div>
     }
 
     @await Html.PartialAsync("_Rows", Model.Books)

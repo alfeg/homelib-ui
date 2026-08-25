@@ -1,24 +1,25 @@
 @model BookModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<MyHomeLib.Web.ThinUi> T
 
 @if (Model.SeriesRows.Count > 0)
 {
-    <div class="cap">Series</div>
+    <div class="cap">@T["Series"]</div>
     @await Html.PartialAsync("_Rows", Model.SeriesRows)
 }
 
 @if (Model.AuthorRows.Count > 0)
 {
-    <div class="cap">@(Model.AuthorRows.Count == 1 ? "Author" : "Authors")</div>
+    <div class="cap">@(Model.AuthorRows.Count == 1 ? T["Author"] : T["Authors"])</div>
     @await Html.PartialAsync("_Rows", Model.AuthorRows)
 }
 
 @if (Model.GenreRows.Count > 0)
 {
-    <div class="cap">@(Model.GenreRows.Count == 1 ? "Genre" : "Genres")</div>
+    <div class="cap">@(Model.GenreRows.Count == 1 ? T["Genre"] : T["Genres"])</div>
     @await Html.PartialAsync("_Rows", Model.GenreRows)
 }
 
-<div class="cap">Details</div>
+<div class="cap">@T["Details"]</div>
 
 <table class="f">
     @foreach (var fact in Model.Facts)
@@ -30,7 +31,7 @@
     }
 </table>
 
-<div class="cap">Download</div>
+<div class="cap">@T["Download"]</div>
 
 <a href="/download/@Model.Book.Uid" class="d">.@Model.Book.Ext</a>
 <a href="/download/@(Model.Book.Uid).zip" class="d">.@(Model.Book.Ext).zip</a>
