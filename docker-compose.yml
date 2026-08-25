@@ -7,13 +7,44 @@ services:
     volumes:
       - torrserve_data:/opt/torrserver
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.24
+    restart: unless-stopped
+    ports:
+      - "7701:7700"
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-homelib-local-dev-master-key}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+      # Indexing 586k documents is the memory spike, not steady-state serving.
+      MEILI_MAX_INDEXING_MEMORY: 512Mb
+      MEILI_MAX_INDEXING_THREADS: 2
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   myhomelib:
     build: .
     restart: unless-stopped
+    depends_on:
+      meilisearch:
+        condition: service_healthy
     ports:
       - "5080:8080"
     environment:
       Torrent__TorrServeUrl: http://torrserve:8090
+
+      # The library this instance serves. Required — clients cannot supply a magnet.
+      Library__MagnetUri: ${LIBRARY_MAGNET_URI:?set LIBRARY_MAGNET_URI in .env}
+      Library__Title: ${LIBRARY_TITLE:-MyHomeLib}
+
+      Meili__Url: http://meilisearch:7700
+      Meili__MasterKey: ${MEILI_MASTER_KEY:-homelib-local-dev-master-key}
+      Meili__IndexUid: books
 
       DOTNET_gcServer: 0
       DOTNET_GCHeapHardLimitPercent: 35
@@ -22,3 +53,4 @@ services:
 
 volumes:
   torrserve_data:
+  meili_data:

@@ -1,4 +1,4 @@
-﻿namespace MyHomeLib.Library;
+namespace MyHomeLib.Library;
 
 public class BookItem : IBookItem
 {
@@ -17,7 +17,7 @@ public class BookItem : IBookItem
             return [];
 
         return Authors
-            .Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(InpReader.AuthorDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(raw =>
             {
                 var parts = raw.Split(',');
@@ -33,25 +33,46 @@ public class BookItem : IBookItem
             .ToList();
     }
 
+    /// <summary>Display form of <see cref="Authors"/>: "Ivan Petrov, Anna Sidorova".</summary>
+    public string DisplayAuthors() => string.Join(", ", ParsedAuthors());
+
+    /// <summary>Raw genre string in INPX format: colon-separated genre codes.</summary>
     public string? Genre { get; set; }
+
+    /// <summary>Individual genre codes parsed out of <see cref="Genre"/>.</summary>
+    public IReadOnlyList<string> ParsedGenreCodes()
+    {
+        if (string.IsNullOrWhiteSpace(Genre))
+            return [];
+
+        return Genre
+            .Split(InpReader.GenreDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+    }
 
     public string? Title { get; set; }
 
     public string? Series { get; set; }
 
-    public string? SeriesNo { get; set; }    
+    public string? SeriesNo { get; set; }
 
     public string? ArchiveFile { get; set; }
     public string? File { get; set; }
-    
+
     public string? Ext { get; set; }
-    public DateTime Date { get; set; }
+
+    /// <summary>Publication date from the INPX row. Null when absent or unparseable.</summary>
+    public DateOnly? Date { get; set; }
+
+    /// <summary>Year extracted from <see cref="Date"/>, for range filtering.</summary>
+    public int? Year => Date?.Year;
+
     public long Size { get; set; }
 
     public string? Lang { get; set; }
 
     public bool Deleted { get; set; }
-        
+
     public string? LibRate { get; set; }
 
     public string? Keywords { get; set; }

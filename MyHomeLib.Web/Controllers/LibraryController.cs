@@ -1,29 +1,40 @@
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Options;
 using MyHomeLib.Web.Models;
 using MyHomeLib.Web.Services;
 using MyHomeLib.Web.Services.Models;
 
 namespace MyHomeLib.Web.Controllers;
 
+/// <summary>
+/// Legacy endpoints kept for the not-yet-migrated SPA.
+/// </summary>
+/// <remarks>
+/// The magnet URI is now taken from <see cref="LibraryConfig"/> and any value sent by the
+/// client is ignored: on this branch the instance serves exactly one operator-configured
+/// library. That closes the open-relay hole the request-supplied magnet used to open.
+/// </remarks>
 [ApiController]
 [Route("api/library")]
 [EnableCors("Api")]
 public class LibraryController(
     DownloadManager downloadManager,
+    IOptions<LibraryConfig> libraryConfig,
     IStringLocalizer<LibraryController> localizer,
     ILogger<LibraryController> logger) : ControllerBase
 {
+    private readonly LibraryConfig _config = libraryConfig.Value;
+
     [HttpPost("inpx")]
-    public async Task<IActionResult> GetInpx(LibraryBooksRequest request, CancellationToken ct)
+    public async Task<IActionResult> GetInpx(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.MagnetUri))
-            return BadRequest(localizer["magnetUri is required."]);
+        if (!TryGetMagnet(out var magnetUri, out var failure)) return failure;
 
         return await ExecuteAsync(ct, async () =>
         {
-            var inpxFile = await downloadManager.GetInpxFileAsync(request.MagnetUri, ct);
+            var inpxFile = await downloadManager.GetInpxFileAsync(magnetUri, ct);
             return File(inpxFile.Data, "application/octet-stream", inpxFile.FileName);
         },
         ex => ex switch
@@ -37,22 +48,23 @@ public class LibraryController(
     [HttpPost("download")]
     public async Task<IActionResult> Download(LibraryDirectDownloadRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.MagnetUri)
-            || string.IsNullOrWhiteSpace(request.ArchiveFile)
+        if (string.IsNullOrWhiteSpace(request.ArchiveFile)
             || string.IsNullOrWhiteSpace(request.File)
             || string.IsNullOrWhiteSpace(request.Ext))
         {
-            return BadRequest(localizer["magnetUri, archiveFile, file and ext are required."]);
+            return BadRequest(localizer["archiveFile, file and ext are required."]);
         }
+
+        if (!TryGetMagnet(out var magnetUri, out var failure)) return failure;
 
         return await ExecuteAsync(ct, async () =>
         {
-            var hash = MagnetUriHelper.ParseInfoHash(request.MagnetUri);
+            var hash = MagnetUriHelper.ParseInfoHash(magnetUri);
             var ext = request.Ext.TrimStart('.');
             var fileName = $"{request.File}.{ext}";
 
             var response = await downloadManager.DownloadFile(
-                new DownloadRequest(hash, request.ArchiveFile, fileName) { MagnetUri = request.MagnetUri }, ct);
+                new DownloadRequest(hash, request.ArchiveFile, fileName) { MagnetUri = magnetUri }, ct);
 
             var contentType = string.IsNullOrWhiteSpace(response.ContentType)
                 ? "application/octet-stream"
@@ -77,6 +89,21 @@ public class LibraryController(
             InvalidOperationException { Message: var m } => BadRequest(string.IsNullOrWhiteSpace(m) ? localizer["Unable to process download request."] : m),
             _                                            => null
         });
+    }
+
+    private bool TryGetMagnet(out string magnetUri, out IActionResult failure)
+    {
+        magnetUri = _config.MagnetUri ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(magnetUri))
+        {
+            failure = null!;
+            return true;
+        }
+
+        failure = StatusCode(StatusCodes.Status503ServiceUnavailable,
+            localizer["This server has no library configured."]);
+        return false;
     }
 
     /// <summary>
@@ -115,4 +142,3 @@ public class LibraryController(
         return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
     }
 }
-

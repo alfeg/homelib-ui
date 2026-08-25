@@ -1,34 +1,19 @@
-﻿using System.IO.Compression;
-
 namespace MyHomeLib.Library;
 
+/// <summary>
+/// Collection-level metadata and counters, filled in while an INPX is being read.
+/// </summary>
 public class InpxLibrary
 {
-    public bool IsIndexing { get; set; }
-    public long BooksAdded { get; set; }
-    public long BooksRead { get; set; }
+    /// <summary>Contents of <c>collection.info</c>, when the archive carries one.</summary>
     public string? Description { get; set; }
-    public string? Version { get; set; }
-    public string? IndexFilePath { get; set; }
-    public string? LibraryFolder { get; set; }
-    
-    public string? IndexingMessage { get; set; }
 
-    public Stream OpenBook(IBookItem book)
-    {        
-        var pathToFile = Path.Combine(LibraryFolder!, book.ArchiveFile!);
-        using var file = File.OpenRead(pathToFile);
-       
-        using var zip = new ZipArchive(file);
-        
-        var entry = zip.GetEntry(book.File + "." + book.Ext)
-            ?? throw new FileNotFoundException($"Entry {book.File}.{book.Ext} not found in {book.ArchiveFile}");
-        
-        var ms = new MemoryStream();
-        using var fb2 = entry.Open();
-        fb2.CopyTo(ms);
-        ms.Seek(0, SeekOrigin.Begin);
-        return ms;
-    }
-    
+    /// <summary>Contents of <c>version.info</c>, when the archive carries one.</summary>
+    public string? Version { get; set; }
+
+    /// <summary>Rows seen, including deleted ones.</summary>
+    public long BooksRead { get; set; }
+
+    /// <summary>Rows actually yielded to the caller.</summary>
+    public long BooksAdded { get; set; }
 }

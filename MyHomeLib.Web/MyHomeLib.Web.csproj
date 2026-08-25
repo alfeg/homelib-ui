@@ -22,6 +22,15 @@
     <ProjectReference Include="..\MyHomeLib.Library\MyHomeLib.Library.csproj" />
   </ItemGroup>
 
+  <!-- Genre labels are shared with the SPA. Linked rather than copied so the codes have
+       one home in the repo; the Dockerfile must therefore also copy MyHomeLib.Ui/src/assets. -->
+  <ItemGroup>
+    <Content Include="$(SpaRoot)src\assets\genres.ru.json;$(SpaRoot)src\assets\genres.en.json"
+             Link="Resources\Genres\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <Target Name="BuildClientUi" BeforeTargets="Build;Publish" Condition="'$(BuildClientApp)' == 'true'">
     <Exec Command="npm ci" WorkingDirectory="$(SpaRoot)" Condition="Exists('$(SpaRoot)package-lock.json')" />
     <Exec Command="npm install" WorkingDirectory="$(SpaRoot)" Condition="!Exists('$(SpaRoot)package-lock.json')" />

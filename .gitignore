@@ -381,3 +381,10 @@ FodyWeavers.xsd
 
 docker-compose.prod.yml
 .env
+
+# Library index files (large, never commit)
+*.inpx
+*.inp
+
+# Local environment (magnet URI, keys)
+.env

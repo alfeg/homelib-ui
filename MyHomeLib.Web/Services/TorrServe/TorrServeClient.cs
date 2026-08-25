@@ -14,6 +14,9 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
 {
     private readonly string _baseUrl = http.BaseAddress!.ToString().TrimEnd('/');
 
+    /// <summary>Range-request granularity when reading a book out of a torrent archive.</summary>
+    private const int ArchiveReadBufferSize = 512 * 1024;
+
     // ── Public API ───────────────────────────────────────────────────────────
 
     /// <summary>Searches for files in a torrent matching a wildcard pattern.</summary>
@@ -51,7 +54,12 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
                    ?? throw new FileNotFoundException($"Archive {archive} not found in torrent {hash}");
 
         var streamUrl = GetStreamUrl(hash, file.Id);
-        await using var archiveStream = new HttpRangeStream(http, streamUrl, file.Length);
+        await using var rangeStream = new HttpRangeStream(http, streamUrl, file.Length);
+
+        // ZipArchive reads the central directory in many small chunks, and every unbuffered
+        // Read here becomes its own HTTP Range request to TorrServe — thousands of round
+        // trips before the first byte of the book. Buffering collapses that into a handful.
+        await using var archiveStream = new BufferedStream(rangeStream, ArchiveReadBufferSize);
 
         var bookStream = new MemoryStream();
         if (book == null)

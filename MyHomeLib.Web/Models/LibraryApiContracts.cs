@@ -1,9 +1,10 @@
 namespace MyHomeLib.Web.Models;
 
-public sealed record LibraryBooksRequest(string MagnetUri);
-
+/// <remarks>
+/// No MagnetUri: the library is fixed by <see cref="LibraryConfig"/>. Clients that still
+/// send one (the unmigrated SPA) simply have it ignored during binding.
+/// </remarks>
 public sealed record LibraryDirectDownloadRequest(
-    string MagnetUri,
     string ArchiveFile,
     string File,
     string Ext,

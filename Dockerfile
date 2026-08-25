@@ -22,6 +22,9 @@ RUN dotnet restore MyHomeLib.Web/MyHomeLib.Web.csproj
 COPY MyHomeLib.Library/ MyHomeLib.Library/
 COPY MyHomeLib.Web/      MyHomeLib.Web/
 
+# Genre label JSON lives with the SPA and is linked into the Web project by its csproj.
+COPY MyHomeLib.Ui/src/assets/ MyHomeLib.Ui/src/assets/
+
 RUN dotnet build MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --no-restore -p:BuildClientApp=false
 
 COPY --from=ui-build /src/MyHomeLib.Ui/dist/ MyHomeLib.Web/wwwroot/
