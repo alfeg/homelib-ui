@@ -388,3 +388,6 @@ docker-compose.prod.yml
 
 # Local environment (magnet URI, keys)
 .env
+
+# SPA build output copied here by the BuildClientUi target
+MyHomeLib.Web/wwwroot/

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue"
 
+import { getApiBase } from "../../services/endpointStore"
 import { setLocale, useI18nState } from "../../services/i18n"
 import type { LibraryMetadata } from "../../types/library"
 
@@ -26,11 +27,13 @@ const props = defineProps<{
 }>()
 
 defineEmits<{
-    (e: "change-library"): void
     (e: "reset"): void
     (e: "theme-toggle", value: boolean): void
 }>()
 const { t, locale } = useI18nState()
+
+/** Server-rendered pages sit next to the API, which is elsewhere in a standalone build. */
+const liteHref = `${getApiBase()}/m`
 
 const slowLoadingMessage = ref<string | null>(null)
 
@@ -358,15 +361,14 @@ function lastDescriptionLine() {
                     tabindex="0"
                 >
                     <li>
-                        <button
-                            class="text-left"
-                            data-test="library-controls-change-library-btn"
-                            :disabled="reindexing"
-                            type="button"
-                            @click="$emit('change-library')"
+                        <!-- The library itself is fixed by the server, so the useful escape
+                             from here is the server-rendered pages, not a library picker. -->
+                        <a
+                            data-test="library-controls-lite-link"
+                            :href="liteHref"
                         >
-                            {{ t("buttons.changeLibrary") }}
-                        </button>
+                            {{ t("gate.liteLink") }}
+                        </a>
                     </li>
                     <li>
                         <button

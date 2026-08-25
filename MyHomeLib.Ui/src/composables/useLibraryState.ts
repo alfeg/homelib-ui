@@ -6,9 +6,7 @@ import { computed, reactive, ref, watch } from "vue"
 import { apiClient } from "../services/apiClient"
 import { loadGenreLabels } from "../services/genreLabelsService"
 import { getCurrentLocale, localeRef, translate } from "../services/i18n"
-import { parseHashFromMagnet, magnetStore } from "../services/magnetService"
 import { createSearchWorkerClient } from "../services/searchIndexWorkerClient"
-import { convertTorrentFileToMagnet } from "../services/torrentMagnetService"
 
 const RESULTS_PAGE_SIZE = 30
 const NO_GENRE_CODE = "__no_genre__"
@@ -465,63 +463,34 @@ export const useLibraryState = createGlobalState(() => {
         await fetchAndBuild()
     }
 
-    async function submitMagnet(uri) {
-        error.value = ""
-        const clean = uri.trim()
-        if (!clean) {
-            error.value = t("error.magnetRequired")
-            return
+    /**
+     * The server decides which library it serves (Library:MagnetUri), so the SPA no longer
+     * asks for a magnet URI. Identity for the local cache comes from /api/status instead:
+     * the collection version changes whenever the collection does, which is exactly when the
+     * browser-side index needs rebuilding.
+     */
+    async function resolveLibraryKey() {
+        const status = await apiClient.status()
+
+        if (status.collectionTitle) {
+            metadata.value = { ...(metadata.value ?? {}), title: status.collectionTitle }
         }
 
-        let hash = ""
-        try {
-            hash = parseHashFromMagnet(clean)
-        } catch (err) {
-            error.value = err instanceof Error ? err.message : t("error.invalidMagnet")
-            return
-        }
-
-        magnetUri.value = clean
-        magnetHash.value = hash
-        magnetStore.set(clean)
-
-        try {
-            await loadLibraryForCurrentMagnet()
-        } catch (err) {
-            error.value = err instanceof Error ? err.message : t("error.inpxLoadFailed")
-        }
-    }
-
-    async function submitTorrentFile(file) {
-        error.value = ""
-
-        if (!file) {
-            error.value = t("error.selectTorrent")
-            return
-        }
-
-        try {
-            const magnetFromFile = await convertTorrentFileToMagnet(file)
-            await submitMagnet(magnetFromFile)
-        } catch (err) {
-            error.value = err instanceof Error ? err.message : t("error.parseTorrent")
-        }
+        // Falls back to a fixed key while the server is still indexing and has no version
+        // to report yet; the worker also validates its own dataset signature on restore.
+        return status.collectionVersion?.trim() || "server-library"
     }
 
     async function bootstrap() {
         await ensureGenreLabelsLoaded()
 
-        const stored = magnetStore.get()
-        if (!stored) return
-
-        magnetUri.value = stored
-
         try {
-            magnetHash.value = parseHashFromMagnet(stored)
-        } catch {
-            magnetStore.clear()
-            magnetUri.value = ""
-            magnetHash.value = ""
+            magnetHash.value = await resolveLibraryKey()
+            // Kept non-empty so the rest of the state machine treats the library as opened;
+            // the value itself is never sent anywhere that reads it as a magnet.
+            magnetUri.value = "server"
+        } catch (err) {
+            error.value = err instanceof Error ? err.message : t("error.savedLibraryFailed")
             resetProgress()
             return
         }
@@ -554,9 +523,8 @@ export const useLibraryState = createGlobalState(() => {
         }
     }
 
+    /** Drops every browser-side cache. The library itself reopens from the server. */
     async function resetAll() {
-        magnetStore.clear()
-
         await searchWorkerClient.clearAllPersisted()
 
         magnetUri.value = ""
@@ -579,27 +547,6 @@ export const useLibraryState = createGlobalState(() => {
         resetProgress()
     }
 
-    function openLibraryGate() {
-        magnetStore.clear()
-        magnetUri.value = ""
-        magnetHash.value = ""
-        metadata.value = null
-        totalBooks.value = 0
-        filteredBooks.value = []
-        totalFilteredBooks.value = 0
-        selectedGenres.value = []
-        genreFacets.value = []
-        searchTerm.value = ""
-        currentPage.value = 1
-        selectedYearFrom.value = null
-        selectedYearTo.value = null
-        availableYearRange.value = null
-        error.value = ""
-        hasCache.value = false
-        lastUpdatedAt.value = ""
-        workerReady.value = false
-        resetProgress()
-    }
 
     function goToPage(page) {
         const nextPageValue = Math.min(Math.max(page, 1), totalPages.value)
@@ -667,11 +614,8 @@ export const useLibraryState = createGlobalState(() => {
         totalPages,
         visibleRange,
         pageSize: RESULTS_PAGE_SIZE,
-        submitMagnet,
-        submitTorrentFile,
         bootstrap,
         reindexCurrent,
-        openLibraryGate,
         resetAll,
         downloadBook,
         goToPage,

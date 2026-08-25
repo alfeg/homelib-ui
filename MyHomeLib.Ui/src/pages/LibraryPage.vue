@@ -7,19 +7,16 @@ import SearchBar from "../components/molecules/SearchBar.vue"
 import BooksTable from "../components/organisms/BooksTable.vue"
 import GenreSidebar from "../components/organisms/GenreSidebar.vue"
 import LibraryControls from "../components/organisms/LibraryControls.vue"
-import MagnetGate from "../components/organisms/MagnetGate.vue"
+import LibraryLoading from "../components/organisms/LibraryLoading.vue"
 import { useLibraryState } from "../composables/useLibraryState"
 
 const state = useLibraryState()
 const THEME_STORAGE_KEY = "mhl-ui-theme"
 const selectedTheme = useLocalStorage<string>(THEME_STORAGE_KEY, "light")
 const {
-    isMagnetSet,
     isReady,
     isLoading,
     error,
-    submitMagnet,
-    submitTorrentFile,
     magnetHash,
     magnetUri,
     metadata,
@@ -28,7 +25,6 @@ const {
     hasCache,
     lastUpdatedAt,
     isReindexing,
-    openLibraryGate,
     resetAll,
     genreFacets,
     selectedGenres,
@@ -77,16 +73,15 @@ onMounted(() => {
 </script>
 
 <template>
-    <MagnetGate
-        v-if="!isMagnetSet || (!isReady && !isReindexing && indexProgress.phase !== 'loading-cache')"
-        data-test="magnet-gate"
+    <LibraryLoading
+        v-if="!isReady && !isReindexing && indexProgress.phase !== 'loading-cache'"
+        data-test="library-loading"
         :error="error"
         :loading="isLoading"
-        :progress="isMagnetSet ? indexProgress : undefined"
+        :progress="indexProgress"
         :progressLabel="progressLabel"
-        @dismiss="resetAll"
-        @submit="submitMagnet"
-        @submitTorrent="submitTorrentFile"
+        :title="metadata?.title"
+        @retry="bootstrap"
     />
 
     <section
@@ -104,7 +99,6 @@ onMounted(() => {
             :progress="indexProgress"
             :reindexing="isReindexing"
             :theme="selectedTheme"
-            @changeLibrary="openLibraryGate"
             @reset="resetAll"
             @themeToggle="(enabled) => onThemeChange(enabled ? 'dark' : 'light')"
         />

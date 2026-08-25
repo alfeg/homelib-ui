@@ -99,10 +99,14 @@ app.UseRequestLocalization(options =>
 });
 
 // The SPA is only present when MyHomeLib.Ui has actually been built into wwwroot. The
-// repo carries a placeholder index.html referencing hashed bundles that do not exist, so
-// serving it unconditionally produces a blank page and two 404s rather than an app.
-var spaAssetsPath = Path.Combine(app.Environment.WebRootPath ?? "wwwroot", "assets");
-var hasSpaBundle = Directory.Exists(spaAssetsPath) && Directory.EnumerateFiles(spaAssetsPath).Any();
+// build inlines everything into a single index.html (vite-plugin-singlefile), so that file
+// existing is the whole test — there is no assets directory to look for, and the repo
+// carries no placeholder any more.
+var spaIndexPath = Path.Combine(app.Environment.WebRootPath ?? "wwwroot", "index.html");
+var hasSpaBundle = File.Exists(spaIndexPath);
+
+// Ahead of static files, so an e-reader asking for "/" never gets handed the SPA.
+if (hasSpaBundle) app.UseEinkRedirect();
 
 if (!app.Environment.IsDevelopment() && hasSpaBundle)
 {
@@ -128,7 +132,7 @@ else
     // No SPA: send the root at the server-rendered pages, which always work.
     app.MapGet("/", () => Results.Redirect("/m"));
     app.Logger.LogInformation(
-        "No SPA bundle in {Path} — serving the thin UI at /m and the OPDS catalog at /opds", spaAssetsPath);
+        "No SPA bundle at {Path} — serving the thin UI at /m and the OPDS catalog at /opds", spaIndexPath);
 }
 
 // First Ctrl+C → graceful. Second → force exit.

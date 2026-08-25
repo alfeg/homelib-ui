@@ -80,6 +80,28 @@ function parseDownloadName(contentDisposition: string | null) {
 }
 
 export const apiClient = {
+    /**
+     * Identity and indexing state of the library this server serves. The SPA no longer asks
+     * the user for a magnet URI, so the collection identity has to come from the server.
+     */
+    async status(): Promise<{
+        collectionTitle: string | null
+        collectionVersion: string | null
+        totalBooks: number
+        ready: boolean
+        phase: string
+    }> {
+        const response = await fetch(`${getApiBase()}/api/status`, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { "Accept-Language": getCurrentLocale() },
+        })
+
+        if (!response.ok) throw new Error(`Server status request failed with ${response.status}`)
+
+        return response.json()
+    },
+
     async fetchInpx(
         magnetUri: string,
         onProgress?: (progress: { downloadedBytes: number; totalBytes: number | null; percent: number | null }) => void,

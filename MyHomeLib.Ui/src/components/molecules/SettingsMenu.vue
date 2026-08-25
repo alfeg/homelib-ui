@@ -1,13 +1,13 @@
 <script setup lang="ts">
 defineProps<{
     configurationLabel: string
-    changeLibraryLabel: string
+    liteLinkLabel: string
+    liteHref: string
     fullResetLabel: string
     reindexing: boolean
 }>()
 
 const emit = defineEmits<{
-    (e: "change-library"): void
     (e: "reset"): void
 }>()
 </script>
@@ -39,15 +39,12 @@ const emit = defineEmits<{
             tabindex="0"
         >
             <li>
-                <button
-                    class="text-left"
-                    data-test="library-controls-change-library-btn"
-                    :disabled="reindexing"
-                    type="button"
-                    @click="emit('change-library')"
+                <a
+                    data-test="library-controls-lite-link"
+                    :href="liteHref"
                 >
-                    {{ changeLibraryLabel }}
-                </button>
+                    {{ liteLinkLabel }}
+                </a>
             </li>
             <li>
                 <button
