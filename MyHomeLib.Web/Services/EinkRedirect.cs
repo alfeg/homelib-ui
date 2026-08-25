@@ -44,15 +44,29 @@ public static class EinkRedirect
 
     public static IApplicationBuilder UseEinkRedirect(this IApplicationBuilder app, string target = "/m")
     {
+        var logger = app.ApplicationServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("MyHomeLib.Web.EinkRedirect");
+
         return app.Use(async (context, next) =>
         {
             var request = context.Request;
 
             var isRoot = request.Path == "/" || request.Path == "";
             var optedOut = request.Query.ContainsKey(OptOutQuery);
+            var userAgent = request.Headers.UserAgent.ToString();
+            var isReader = IsEinkReader(userAgent);
 
-            if (isRoot && HttpMethods.IsGet(request.Method) && !optedOut
-                && IsEinkReader(request.Headers.UserAgent.ToString()))
+            // Logged at the root only, and at Debug: matching a device is guesswork based on
+            // a user-agent substring, so when a reader does not get redirected the first
+            // question is always what it actually sent.
+            if (isRoot)
+            {
+                logger.LogDebug("[UA] reader={IsReader} optedOut={OptedOut} ua={UserAgent}",
+                    isReader, optedOut, string.IsNullOrEmpty(userAgent) ? "(none)" : userAgent);
+            }
+
+            if (isRoot && HttpMethods.IsGet(request.Method) && !optedOut && isReader)
             {
                 context.Response.Headers.Vary = "User-Agent";
                 context.Response.Redirect(target, permanent: false);
