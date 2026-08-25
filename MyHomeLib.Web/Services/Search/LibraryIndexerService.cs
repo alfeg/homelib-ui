@@ -61,7 +61,7 @@ public class LibraryIndexerService(
             SortFacetValuesBy = new Dictionary<string, string> { ["*"] = "count" },
         },
         // Default maxTotalHits (1000) would make deep OPDS paging hit an invisible wall.
-        Pagination = new MeiliPaginationSettings { MaxTotalHits = 100_000 },
+        Pagination = new MeiliPaginationSettings { MaxTotalHits = LibrarySearchService.MaxReachableHits },
     };
 
     protected override async Task ExecuteAsync(CancellationToken ct)

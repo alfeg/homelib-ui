@@ -44,10 +44,13 @@
         /* e-ink has no hover, so pressed state is an inversion */
         a:active { background: #000; color: #fff }
 
-        .hd { padding: 11px 12px 9px; border-bottom: 3px double #000 }
+        .hd { padding: 11px 12px 6px; border-bottom: 3px double #000 }
         .hd h1 { font-size: 21px; margin: 0; font-weight: bold }
-        .hd .c { font-size: 15px; color: #333; margin-top: 4px }
-        .hd .c a { text-decoration: underline }
+        .hd .c { font-size: 17px; color: #333; margin-top: 2px }
+
+        /* The crumbs are the most-used control on the page and were also the smallest
+           touch target: inline text with no height of its own. */
+        .hd .c a { text-decoration: underline; display: inline-block; padding: 7px 0 }
 
         .bd { padding: 10px 12px 20px }
 
@@ -129,9 +132,9 @@
         .f td { padding: 8px 0; font-size: 16px; vertical-align: top }
 
         /* Interface language, kept small and out of the way in the header */
-        .lang { float: right; font-size: 15px; color: #333 }
-        .lang a { text-decoration: underline; margin-left: 8px }
-        .lang b { margin-left: 8px }
+        .lang { float: right; font-size: 17px; color: #333 }
+        .lang a { text-decoration: underline; margin-left: 10px; display: inline-block; padding: 7px 0 }
+        .lang b { margin-left: 10px }
     </style>
 </head>
 <body>

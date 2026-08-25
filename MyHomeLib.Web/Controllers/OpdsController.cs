@@ -26,6 +26,9 @@ public class OpdsController(
 
     private string CollectionTitle => state.CollectionTitle ?? _config.Title;
 
+    /// <summary>Genres kept out of the catalog — see <see cref="LibraryConfig.BlockedGenres"/>.</summary>
+    private string[] Blocked => _config.BlockedGenres;
+
     // ── Root ─────────────────────────────────────────────────────────────────
 
     [HttpGet("")]
@@ -86,7 +89,7 @@ public class OpdsController(
         if (!state.IsReady) return NotReadyFeed("/opds/search");
 
         var found = await search.SearchWithEntitiesAsync(
-            new BookQuery(Q: q, Page: page, PageSize: PageSize), ct);
+            new BookQuery(Q: q, ExcludedGenres: Blocked, Page: page, PageSize: PageSize), ct);
 
         // Matched authors and series lead the first page as sub-catalogs, so a reader can
         // step into the shelf rather than scrolling every loose title.
@@ -115,7 +118,7 @@ public class OpdsController(
     {
         if (!state.IsReady) return NotReadyFeed("/opds/all");
 
-        var result = await search.SearchAsync(new BookQuery(Page: page, PageSize: PageSize), ct);
+        var result = await search.SearchAsync(new BookQuery(ExcludedGenres: Blocked, Page: page, PageSize: PageSize), ct);
         return BookFeed("urn:homelib:feed:all", "All books", "/opds/all", result);
     }
 
@@ -125,7 +128,7 @@ public class OpdsController(
         if (!state.IsReady) return NotReadyFeed("/opds/new");
 
         var result = await search.SearchAsync(
-            new BookQuery(Page: page, PageSize: PageSize, NewestFirst: true), ct);
+            new BookQuery(ExcludedGenres: Blocked, Page: page, PageSize: PageSize, NewestFirst: true), ct);
 
         return BookFeed("urn:homelib:feed:new", "Recently added", "/opds/new", result);
     }
@@ -134,9 +137,10 @@ public class OpdsController(
     public async Task<IActionResult> Genre(string code, [FromQuery] int page = 1, CancellationToken ct = default)
     {
         if (!state.IsReady) return NotReadyFeed($"/opds/genre/{code}");
+        if (Blocked.Contains(code, StringComparer.OrdinalIgnoreCase)) return NotFound();
 
         var result = await search.SearchAsync(
-            new BookQuery(Genres: [code], Page: page, PageSize: PageSize), ct);
+            new BookQuery(Genres: [code], ExcludedGenres: Blocked, Page: page, PageSize: PageSize), ct);
 
         return BookFeed(
             $"urn:homelib:feed:genre:{code}",
@@ -152,7 +156,7 @@ public class OpdsController(
         if (!state.IsReady) return NotReadyFeed($"/opds/lang/{code}");
 
         var result = await search.SearchAsync(
-            new BookQuery(Lang: code, Page: page, PageSize: PageSize), ct);
+            new BookQuery(Lang: code, ExcludedGenres: Blocked, Page: page, PageSize: PageSize), ct);
 
         return BookFeed(
             $"urn:homelib:feed:lang:{code}",
@@ -169,7 +173,7 @@ public class OpdsController(
         if (!state.IsReady) return NotReadyFeed("/opds/author");
         if (string.IsNullOrWhiteSpace(name)) return NotFound();
 
-        var author = await search.AuthorAsync(name, page, PageSize, ct);
+        var author = await search.AuthorAsync(name, page, PageSize, ct, Blocked);
         var basePath = $"/opds/author?name={Uri.EscapeDataString(name)}";
 
         // Series appear as navigation entries ahead of the books, so a reader can jump
@@ -237,7 +241,7 @@ public class OpdsController(
     {
         if (!state.IsReady) return NotReadyFeed("/opds/genres");
 
-        var counts = await search.GenreCountsAsync(ct);
+        var counts = await search.GenreCountsAsync(ct, Blocked);
         var categories = genreLabels.Categorise(counts);
 
         if (string.IsNullOrWhiteSpace(category))
@@ -289,7 +293,7 @@ public class OpdsController(
     {
         if (!state.IsReady) return NotReadyFeed("/opds/langs");
 
-        var counts = await search.LangCountsAsync(ct);
+        var counts = await search.LangCountsAsync(ct, Blocked);
 
         var entries = counts
             .Where(c => c.Value > 0 && !string.IsNullOrWhiteSpace(c.Key))

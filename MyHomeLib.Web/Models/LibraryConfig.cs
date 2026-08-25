@@ -30,6 +30,18 @@ public class LibraryConfig
     /// </summary>
     public bool IncludeDeleted { get; set; } = true;
 
+    /// <summary>
+    /// Genre codes to keep out of the reader-facing surfaces: the /m pages and the OPDS
+    /// catalog. Intended for a device a child uses — the codes in this collection are
+    /// love_erotica, love_hard and home_sex.
+    /// </summary>
+    /// <remarks>
+    /// This is a filter, not a lock. The JSON API under /api is deliberately left alone so
+    /// the SPA still works, which means anyone who can type a URL can still reach a blocked
+    /// book. It removes the material from browsing, not from the server.
+    /// </remarks>
+    public string[] BlockedGenres { get; set; } = [];
+
     /// <summary>Documents pushed to Meilisearch per request.</summary>
     public int IndexBatchSize { get; set; } = 10_000;
 }

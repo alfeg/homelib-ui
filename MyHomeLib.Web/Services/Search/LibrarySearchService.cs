@@ -12,6 +12,7 @@ public record BookQuery(
     int? YearTo = null,
     string? Author = null,
     string? Series = null,
+    IReadOnlyList<string>? ExcludedGenres = null,
     int Page = 1,
     int PageSize = 20,
     bool NewestFirst = false,
@@ -73,6 +74,13 @@ public class LibrarySearchService(MeiliClient meili, IndexState state)
 
     /// <summary>Above this many books, an author's series year spans are not computed.</summary>
     private const int SeriesSummaryLimit = 1000;
+
+    /// <summary>
+    /// Meilisearch stops counting at its maxTotalHits, so a larger result set reports exactly
+    /// this number rather than its real size. Callers show it as "100 000+" instead of
+    /// stating a total that is not true. Must match the indexer's pagination setting.
+    /// </summary>
+    public const int MaxReachableHits = 100_000;
 
     public async Task<BookSearchResult> SearchAsync(BookQuery query, CancellationToken ct = default)
     {
@@ -136,7 +144,8 @@ public class LibrarySearchService(MeiliClient meili, IndexState state)
         meili.GetDocumentAsync(meili.IndexUid, uid, ct);
 
     /// <summary>Genre codes with counts across the whole collection.</summary>
-    public async Task<IReadOnlyDictionary<string, int>> GenreCountsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, int>> GenreCountsAsync(
+        CancellationToken ct = default, IReadOnlyList<string>? excludedGenres = null)
     {
         var response = await meili.SearchAsync(meili.IndexUid, new MeiliSearchRequest
         {
@@ -144,12 +153,21 @@ public class LibrarySearchService(MeiliClient meili, IndexState state)
             Page = 1,
             HitsPerPage = 1,
             Facets = ["genres"],
+            Filter = BuildFilter(new BookQuery(ExcludedGenres: excludedGenres)),
         }, ct);
 
-        return response.FacetDistribution?.GetValueOrDefault("genres") ?? new Dictionary<string, int>();
+        var counts = response.FacetDistribution?.GetValueOrDefault("genres") ?? new Dictionary<string, int>();
+
+        // A book can carry several genres, so a blocked one still shows up in the facet of a
+        // book kept for its other genres. Drop those rows outright.
+        if (excludedGenres is { Count: > 0 })
+            counts = counts.Where(c => !excludedGenres.Contains(c.Key)).ToDictionary(c => c.Key, c => c.Value);
+
+        return counts;
     }
 
-    public async Task<IReadOnlyDictionary<string, int>> LangCountsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, int>> LangCountsAsync(
+        CancellationToken ct = default, IReadOnlyList<string>? excludedGenres = null)
     {
         var response = await meili.SearchAsync(meili.IndexUid, new MeiliSearchRequest
         {
@@ -157,6 +175,7 @@ public class LibrarySearchService(MeiliClient meili, IndexState state)
             Page = 1,
             HitsPerPage = 1,
             Facets = ["lang"],
+            Filter = BuildFilter(new BookQuery(ExcludedGenres: excludedGenres)),
         }, ct);
 
         return response.FacetDistribution?.GetValueOrDefault("lang") ?? new Dictionary<string, int>();
@@ -166,10 +185,12 @@ public class LibrarySearchService(MeiliClient meili, IndexState state)
     /// Everything one author has: their series with book counts, plus the books that belong
     /// to no series. One search serves both — the series facet comes back with the page.
     /// </summary>
-    public async Task<AuthorPage> AuthorAsync(string author, int page, int pageSize, CancellationToken ct = default)
+    public async Task<AuthorPage> AuthorAsync(string author, int page, int pageSize,
+        CancellationToken ct = default, IReadOnlyList<string>? excludedGenres = null)
     {
         var result = await SearchAsync(new BookQuery(
             Author: author,
+            ExcludedGenres: excludedGenres,
             Page: page,
             PageSize: pageSize,
             GroupBySeries: true,
@@ -252,6 +273,14 @@ public class LibrarySearchService(MeiliClient meili, IndexState state)
 
         if (!string.IsNullOrWhiteSpace(query.Series))
             filters.Add($"series = {Quote(query.Series)}");
+
+        // Excluded genres are removed from every filtered surface, including the facets, so
+        // a blocked genre never appears as a browsable row either.
+        if (query.ExcludedGenres is { Count: > 0 })
+        {
+            foreach (var blocked in query.ExcludedGenres.Where(g => !string.IsNullOrWhiteSpace(g)))
+                filters.Add($"NOT genres = {Quote(blocked)}");
+        }
 
         if (query.YearFrom is { } from) filters.Add($"year >= {from}");
         if (query.YearTo is { } to) filters.Add($"year <= {to}");

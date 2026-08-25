@@ -45,6 +45,21 @@ public class ThinController(
 
     private string CollectionTitle => state.CollectionTitle ?? _config.Title;
 
+    /// <summary>Genres kept off these pages entirely — see <see cref="LibraryConfig.BlockedGenres"/>.</summary>
+    private string[] Blocked => _config.BlockedGenres;
+
+    /// <summary>True when the code is one this instance refuses to show here.</summary>
+    private bool IsBlocked(string? code) =>
+        code is not null && Blocked.Contains(code, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Result counts stop at the engine's reachable-hit limit, so anything at the limit is
+    /// shown as "N+" rather than asserting a total that is not the real one.
+    /// </summary>
+    private string Count(int total) => total >= LibrarySearchService.MaxReachableHits
+        ? total.ToString("N0") + "+"
+        : total.ToString("N0");
+
     [HttpGet("")]
     public IActionResult Index()
     {
@@ -70,29 +85,70 @@ public class ThinController(
     public async Task<IActionResult> Search(
         [FromQuery] string? q,
         [FromQuery] string? genre,
+        [FromQuery] string? category,
         [FromQuery] string? lang,
         [FromQuery] int page = 1,
         CancellationToken ct = default)
     {
         if (!state.IsReady) return NotReadyPage();
 
+        // A category is a group of genre codes, so searching "inside Фантастика" means
+        // filtering on all of them. Without this the search box on a category page looked
+        // like it searched that category and quietly searched everything instead.
+        IReadOnlyList<string>? genres = null;
+        var categoryLabel = "";
+
+        if (!string.IsNullOrWhiteSpace(genre))
+        {
+            if (IsBlocked(genre)) return NotFound();
+            genres = [genre];
+        }
+        else if (!string.IsNullOrWhiteSpace(category))
+        {
+            var picked = genreLabels
+                .Categorise(await search.GenreCountsAsync(ct, Blocked))
+                .FirstOrDefault(c => string.Equals(c.Name, category, StringComparison.OrdinalIgnoreCase));
+
+            if (picked is not null)
+            {
+                genres = [.. picked.Genres.Select(g => g.Code)];
+                categoryLabel = picked.Name;
+            }
+        }
+
         var found = await search.SearchWithEntitiesAsync(new BookQuery(
             Q: q,
-            Genres: string.IsNullOrWhiteSpace(genre) ? null : [genre],
+            Genres: genres,
             Lang: string.IsNullOrWhiteSpace(lang) ? null : lang,
+            ExcludedGenres: Blocked,
             Page: page,
             PageSize: PageSize), ct);
 
-        var heading = !string.IsNullOrWhiteSpace(genre) ? genreLabels.Label(genre)
-                    : !string.IsNullOrWhiteSpace(q) ? $"“{q}”"
+        var heading = !string.IsNullOrWhiteSpace(q) ? $"“{q}”"
+                    : !string.IsNullOrWhiteSpace(genre) ? genreLabels.Label(genre)
+                    : categoryLabel.Length > 0 ? categoryLabel
                     : !string.IsNullOrWhiteSpace(lang) ? LanguageNames.Label(lang)
                     : t["All books"];
 
-        var query = BuildQuery(("q", q), ("genre", genre), ("lang", lang));
+        var query = BuildQuery(("q", q), ("genre", genre), ("category", category), ("lang", lang));
 
-        // Filters ride along with a refinement, so searching inside a language stays inside it.
+        // Crumbs describe how this page was reached, not a fixed menu. Drilling from a
+        // category into one of its genres previously left no way back to the category.
+        var parentCategory = !string.IsNullOrWhiteSpace(genre)
+            ? genreLabels.Category(genre)
+            : categoryLabel;
+
+        Crumb[] crumbs =
+            !string.IsNullOrWhiteSpace(parentCategory) && !string.Equals(parentCategory, heading)
+                ? [Home, GenresCrumb, new Crumb($"/m/genres?category={Uri.EscapeDataString(parentCategory)}", parentCategory)]
+            : !string.IsNullOrWhiteSpace(genre) || !string.IsNullOrWhiteSpace(category) ? [Home, GenresCrumb]
+            : !string.IsNullOrWhiteSpace(lang) ? [Home, new Crumb("/m/langs", t["By language"])]
+            : MainNav;
+
+        // Filters ride along with a refinement, so searching inside a scope stays inside it.
         var carried = new List<(string, string)>();
         if (!string.IsNullOrWhiteSpace(genre)) carried.Add(("genre", genre));
+        else if (!string.IsNullOrWhiteSpace(category)) carried.Add(("category", category));
         if (!string.IsNullOrWhiteSpace(lang)) carried.Add(("lang", lang));
         var showCards = found.Books.Page == 1;
 
@@ -100,8 +156,8 @@ public class ThinController(
         {
             Title = $"{heading} — {CollectionTitle}",
             Heading = heading,
-            Subtitle = t["{0} found", found.Books.Total.ToString("N0")],
-            Crumbs = MainNav,
+            Subtitle = t["{0} found", Count(found.Books.Total)],
+            Crumbs = crumbs,
             SearchQuery = q,
             SearchHidden = carried,
             Result = found.Books,
@@ -119,7 +175,7 @@ public class ThinController(
 
     [HttpGet("all")]
     public Task<IActionResult> All([FromQuery] int page = 1, CancellationToken ct = default) =>
-        Search(null, null, null, page, ct);
+        Search(null, null, null, null, page, ct);
 
     /// <summary>Languages present in the collection, most common first.</summary>
     [HttpGet("langs")]
@@ -127,7 +183,7 @@ public class ThinController(
     {
         if (!state.IsReady) return NotReadyPage();
 
-        var counts = await search.LangCountsAsync(ct);
+        var counts = await search.LangCountsAsync(ct, Blocked);
 
         return View("Rows", new RowsModel
         {
@@ -155,13 +211,13 @@ public class ThinController(
         if (!state.IsReady) return NotReadyPage();
 
         var result = await search.SearchAsync(
-            new BookQuery(Page: page, PageSize: PageSize, NewestFirst: true), ct);
+            new BookQuery(Page: page, PageSize: PageSize, NewestFirst: true, ExcludedGenres: Blocked), ct);
 
         return View("Results", new ResultsModel
         {
             Title = $"{t["Recently added"]} — {CollectionTitle}",
             Heading = t["Recently added"],
-            Subtitle = t["{0} found", result.Total.ToString("N0")],
+            Subtitle = t["{0} found", Count(result.Total)],
             Crumbs = MainNav,
             Result = result,
             Books = [.. result.Books.Select(BookRow)],
@@ -180,7 +236,7 @@ public class ThinController(
     {
         if (!state.IsReady) return NotReadyPage();
 
-        var categories = genreLabels.Categorise(await search.GenreCountsAsync(ct));
+        var categories = genreLabels.Categorise(await search.GenreCountsAsync(ct, Blocked));
 
         if (string.IsNullOrWhiteSpace(category))
         {
@@ -208,7 +264,8 @@ public class ThinController(
             Title = $"{picked.Name} — {CollectionTitle}",
             Heading = picked.Name,
             Subtitle = t["{0} books", picked.Count.ToString("N0")],
-            Crumbs = [Home, GenresCrumb, RecentCrumb],
+            Crumbs = [Home, GenresCrumb],
+            SearchHidden = [("category", picked.Name)],
             Rows =
             [
                 .. picked.Genres.Select(g => new RowItem(
@@ -229,7 +286,7 @@ public class ThinController(
         if (!state.IsReady) return NotReadyPage();
         if (string.IsNullOrWhiteSpace(name)) return NotFound();
 
-        var author = await search.AuthorAsync(name, page, PageSize, ct);
+        var author = await search.AuthorAsync(name, page, PageSize, ct, Blocked);
         var query = BuildQuery(("name", name));
 
         return View(new AuthorModel
@@ -269,6 +326,7 @@ public class ThinController(
         var result = await search.SearchAsync(new BookQuery(
             Series: name,
             Author: string.IsNullOrWhiteSpace(author) ? null : author,
+            ExcludedGenres: Blocked,
             Page: page,
             PageSize: PageSize,
             SeriesOrder: true), ct);
@@ -291,7 +349,7 @@ public class ThinController(
         {
             Title = $"{name} — {CollectionTitle}",
             Heading = name,
-            Subtitle = t["{0} books", result.Total.ToString("N0")],
+            Subtitle = t["{0} books", Count(result.Total)],
             Crumbs = string.IsNullOrWhiteSpace(author)
                 ? MainNav
                 : [Home, GenresCrumb, new Crumb($"/m/author?name={Uri.EscapeDataString(author)}", author)],
@@ -317,6 +375,7 @@ public class ThinController(
 
         var book = await search.GetBookAsync(uid, ct);
         if (book is null) return NotFound();
+        if (book.Genres.Any(IsBlocked)) return NotFound();
 
         return View(new BookModel
         {
