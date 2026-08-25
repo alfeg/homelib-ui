@@ -44,37 +44,25 @@ public static class EinkRedirect
 
     public static IApplicationBuilder UseEinkRedirect(this IApplicationBuilder app, string target = "/m")
     {
-        var logger = app.ApplicationServices
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger("MyHomeLib.Web.EinkRedirect");
-
         return app.Use(async (context, next) =>
         {
             var request = context.Request;
 
-            var isRoot = request.Path == "/" || request.Path == "";
-            var optedOut = request.Query.ContainsKey(OptOutQuery);
-            var userAgent = request.Headers.UserAgent.ToString();
-            var isReader = IsEinkReader(userAgent);
-
-            // Logged at the root only, and at Debug: matching a device is guesswork based on
-            // a user-agent substring, so when a reader does not get redirected the first
-            // question is always what it actually sent.
-            if (isRoot)
+            // Only the root is ever redirected, so nothing below scans the user agent on the
+            // hot paths — book downloads and API calls skip this entirely.
+            if (request.Path == "/" || request.Path == "")
             {
-                logger.LogDebug("[UA] reader={IsReader} optedOut={OptedOut} ua={UserAgent}",
-                    isReader, optedOut, string.IsNullOrEmpty(userAgent) ? "(none)" : userAgent);
-            }
-
-            if (isRoot && HttpMethods.IsGet(request.Method) && !optedOut && isReader)
-            {
+                // Any cached copy of the root must remember which agent it was built for.
                 context.Response.Headers.Vary = "User-Agent";
-                context.Response.Redirect(target, permanent: false);
-                return;
-            }
 
-            // Any cached copy of the root must remember which agent it was built for.
-            if (isRoot) context.Response.Headers.Vary = "User-Agent";
+                if (HttpMethods.IsGet(request.Method)
+                    && !request.Query.ContainsKey(OptOutQuery)
+                    && IsEinkReader(request.Headers.UserAgent.ToString()))
+                {
+                    context.Response.Redirect(target, permanent: false);
+                    return;
+                }
+            }
 
             await next();
         });
