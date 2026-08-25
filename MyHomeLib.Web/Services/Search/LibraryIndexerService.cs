@@ -24,6 +24,11 @@ public class LibraryIndexerService(
     /// </summary>
     private const int DocumentSchemaVersion = 3;
 
+    /// <summary>Attempts allowed when the downloaded INPX turns out not to be readable.</summary>
+    private const int InpxAcquireAttempts = 3;
+
+    private static readonly TimeSpan InpxRetryDelay = TimeSpan.FromSeconds(5);
+
     private static readonly MeiliIndexSettings BookIndexSettings = new()
     {
         // Order matters: Meilisearch ranks matches by the position of the attribute in this list.
@@ -67,17 +72,51 @@ public class LibraryIndexerService(
         if (!await meili.WaitUntilHealthyAsync(TimeSpan.FromMinutes(5), ct))
             throw new InvalidOperationException("Meilisearch did not become healthy within 5 minutes.");
 
-        var inpx = await AcquireInpxAsync(ct);
+        // Acquiring and parsing are one retried step. A cold torrent can serve a file that
+        // is the right size and shape but wrong content, and the damage only shows up when
+        // something deep inside fails to inflate — reported as "unsupported compression
+        // method" or "a local file header is corrupt", neither of which sounds like a
+        // partial download. Parsing is the only honest proof the bytes are intact, and it
+        // has to happen anyway to fingerprint the collection, so it costs nothing extra.
+        byte[] inpx;
+        InpxLibrary metadata;
+        InpxSignatureResult fingerprint;
 
-        state.Set(IndexPhase.Parsing, "Reading the collection");
-        using var metadataStream = new MemoryStream(inpx, writable: false);
-        var metadata = InpxReader.ReadMetadata(metadataStream);
+        for (var attempt = 1; ; attempt++)
+        {
+            inpx = await AcquireInpxAsync(ct);
+
+            state.Set(IndexPhase.Parsing, "Reading the collection");
+            try
+            {
+                using var metadataStream = new MemoryStream(inpx, writable: false);
+                metadata = InpxReader.ReadMetadata(metadataStream);
+
+                // Content fingerprint, not a byte-length one: the same collection reached
+                // through a different magnet or re-zipped elsewhere must not force a rebuild.
+                using var signatureStream = new MemoryStream(inpx, writable: false);
+                fingerprint = InpxSignature.Compute(signatureStream);
+                break;
+            }
+            catch (InvalidDataException ex)
+            {
+                // A local file is whatever it is; fetching it again will not change anything.
+                if (attempt >= InpxAcquireAttempts || !string.IsNullOrWhiteSpace(_config.InpxPath))
+                {
+                    throw new InvalidDataException(
+                        $"The collection index could not be read: {ex.Message} " +
+                        "This usually means an incomplete download rather than a damaged collection.", ex);
+                }
+
+                logger.LogWarning("[Index] collection index unreadable on attempt {Attempt} ({Message}); fetching again",
+                    attempt, ex.Message);
+
+                state.Set(IndexPhase.Downloading, "Collection index was incomplete — fetching it again");
+                await Task.Delay(InpxRetryDelay, ct);
+            }
+        }
+
         var collectionTitle = FirstLine(metadata.Description) ?? _config.Title;
-
-        // Content fingerprint, not a byte-length one: the same collection reached through a
-        // different magnet or re-zipped elsewhere must not force a rebuild.
-        using var signatureStream = new MemoryStream(inpx, writable: false);
-        var fingerprint = InpxSignature.Compute(signatureStream);
         var signature = fingerprint.Value;
         logger.LogInformation("[Index] collection fingerprint {Signature} ({Count:N0} books)",
             signature, fingerprint.BookCount);

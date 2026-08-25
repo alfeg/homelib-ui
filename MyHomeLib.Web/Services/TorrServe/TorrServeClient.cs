@@ -96,6 +96,17 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
         if (book == null)
         {
             await archiveStream.CopyToAsync(bookStream, ct);
+
+            // A cold torrent can serve a short range without failing the HTTP request, and a
+            // truncated file is not detectable later: the bytes look like a valid archive
+            // until something deep inside fails to inflate. TorrServe told us the length, so
+            // check it here where a retry is still cheap and the error is still honest.
+            if (bookStream.Length != file.Length)
+            {
+                throw new InvalidDataException(
+                    $"{request.Name}: expected {file.Length} bytes from TorrServe but received {bookStream.Length}.");
+            }
+
             logger.LogInformation("[TorrServe] [{Library}] {Name} done in {Elapsed}ms", request.Library, request.Name, sw.ElapsedMilliseconds);
             return new DownloadResponse(bookStream.ToArray(), string.Empty, string.Empty);
         }
