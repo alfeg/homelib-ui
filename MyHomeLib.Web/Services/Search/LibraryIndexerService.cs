@@ -38,7 +38,7 @@ public class LibraryIndexerService(
     /// Bump whenever <see cref="BookDocument"/> gains, loses or changes a field, so existing
     /// documents get rewritten even though the collection's content is unchanged.
     /// </summary>
-    private const int DocumentSchemaVersion = 3;
+    private const int DocumentSchemaVersion = 4;
 
     /// <summary>Attempts allowed when the downloaded INPX turns out not to be readable.</summary>
     private const int InpxAcquireAttempts = 5;
@@ -51,7 +51,7 @@ public class LibraryIndexerService(
         // These are the ё-folded copies; the display fields are deliberately not searchable,
         // which also keeps the index from building word structures for the same text twice.
         SearchableAttributes = ["titleSearch", "authorsSearch", "seriesSearch"],
-        FilterableAttributes = ["genres", "lang", "year", "ext", "authorList", "archive", "series"],
+        FilterableAttributes = ["genres", "lang", "year", "ext", "authorList", "archive", "series", "deleted"],
         SortableAttributes = ["year", "id", "title", "seriesIndex", "series"],
         DisplayedAttributes = ["*"],
         // A real collection carries ~278 genre codes; the default cap of 100 would truncate the sidebar.
@@ -119,7 +119,8 @@ public class LibraryIndexerService(
                 // Content fingerprint, not a byte-length one: the same collection reached
                 // through a different magnet or re-zipped elsewhere must not force a rebuild.
                 using var signatureStream = new MemoryStream(inpx, writable: false);
-                fingerprint = InpxSignature.Compute(signatureStream);
+                // Fingerprint the same set that will be indexed, or the counts disagree.
+                fingerprint = InpxSignature.Compute(signatureStream, _config.IncludeDeleted);
                 break;
             }
             catch (InvalidDataException ex)
@@ -302,7 +303,7 @@ public class LibraryIndexerService(
         var batch = new List<BookDocument>(_config.IndexBatchSize);
         long indexed = 0;
 
-        foreach (var book in InpxReader.ReadLibrary(stream, library, includeDeleted: false, progress: progress))
+        foreach (var book in InpxReader.ReadLibrary(stream, library, _config.IncludeDeleted, progress))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -318,7 +319,7 @@ public class LibraryIndexerService(
 
         if (batch.Count > 0) indexed += await FlushAsync(batch, ct);
 
-        logger.LogInformation("[Index] {Read:N0} rows read, {Pushed:N0} pushed ({Skipped:N0} deleted rows skipped)",
+        logger.LogInformation("[Index] {Read:N0} rows read, {Pushed:N0} pushed ({Skipped:N0} skipped as deleted)",
             library.BooksRead, indexed, library.BooksRead - library.BooksAdded);
 
         return indexed;

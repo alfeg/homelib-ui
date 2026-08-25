@@ -22,6 +22,14 @@ public class LibraryConfig
     /// <summary>Re-index on startup even when the stored signature matches.</summary>
     public bool ForceReindex { get; set; }
 
+    /// <summary>
+    /// Whether to index books the INPX flags as deleted. True by default, because in a local
+    /// collection the flag means "withdrawn from the website", not "absent from the torrent":
+    /// sampling 1,044 such rows across four archives found the file present every time.
+    /// Excluding them hid 113,350 downloadable books out of 702,461.
+    /// </summary>
+    public bool IncludeDeleted { get; set; } = true;
+
     /// <summary>Documents pushed to Meilisearch per request.</summary>
     public int IndexBatchSize { get; set; } = 10_000;
 }

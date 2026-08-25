@@ -91,6 +91,13 @@ public class BookDocument
     [JsonPropertyName("size")]
     public long Size { get; set; }
 
+    /// <summary>
+    /// The INPX deleted flag, kept rather than acted on. It means the book was withdrawn
+    /// from the Flibusta website; the file is still in the torrent and downloads normally.
+    /// </summary>
+    [JsonPropertyName("deleted")]
+    public bool Deleted { get; set; }
+
     public static BookDocument From(BookItem book) => new()
     {
         Uid = BookUid.For(book),
@@ -112,6 +119,7 @@ public class BookDocument
         Archive = book.ArchiveFile ?? "",
         File = book.File ?? "",
         Size = book.Size,
+        Deleted = book.Deleted,
     };
 
     /// <summary>Leading integer of the INPX seriesNo field; null when absent or zero.</summary>
