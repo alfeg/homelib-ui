@@ -1,0 +1,8 @@
+@model IReadOnlyList<RowItem>
+@*  One tappable row per item: the whole row is the link, so the touch target fills the
+    width — an inline link is a 17px-tall target on a reader.  *@
+@if (Model.Count > 0)
+{<ul>@foreach (var row in Model)
+    {<li><a href="@row.Href">@if (row.Trailing is not null)
+        {<span class="ch">@row.Trailing</span>}<span class="ti">@row.Title</span>@if (!string.IsNullOrWhiteSpace(row.Meta))
+        {<span class="m">@row.Meta</span>}</a></li>}</ul>}

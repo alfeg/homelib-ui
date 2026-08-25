@@ -1,0 +1,50 @@
+@model ThinPageModel
+@*
+    Minimal document for e-ink readers: no JavaScript, no external requests, no web fonts.
+    The stylesheet is inlined because a second request costs more than its bytes, and a
+    stylesheet that fails to load on a flaky reader leaves an unusable page. Greys are
+    limited to one value — e-ink dithers intermediate tones into noise.
+*@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+@if (Model.AutoRefreshSeconds > 0)
+{<meta http-equiv="refresh" content="@Model.AutoRefreshSeconds">}
+<title>@Model.Title</title>
+<style>*{box-sizing:border-box}
+body{font:16px/1.4 "PT Sans",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;background:#fff}
+a{color:#000;text-decoration:none}
+a:active{background:#000;color:#fff}
+.hd{padding:11px 12px 9px;border-bottom:3px double #000}
+.hd h1{font-size:19px;margin:0;font-weight:bold}
+.hd .c{font-size:13px;color:#666;margin-top:3px}
+.hd .c a{text-decoration:underline}
+.bd{padding:10px 12px 20px}
+ul{list-style:none;margin:0;padding:0}
+li{border-bottom:1px solid #c8c8c8}
+li a{display:block;padding:10px 0;min-height:34px}
+.ti{font-size:17px}
+.m{display:block;color:#666;font-size:13px;margin-top:3px}
+.cap{text-transform:uppercase;letter-spacing:.08em;font-size:12px;color:#666;margin:16px 0 4px}
+form{margin:0 0 6px}
+input[type=text]{width:100%;font-size:16px;font-family:inherit;padding:10px;border:1px solid #000}
+button{font-size:16px;font-family:inherit;padding:10px 22px;border:1px solid #000;background:#fff}
+.pg{text-align:center;padding:16px 0 4px;font-size:14px;color:#666}
+.pg a{display:inline-block;min-width:66px;padding:10px 14px;border:1px solid #000;margin:0 6px;color:#000}
+.ch{float:right;color:#666}
+.d{display:block;text-align:center;padding:13px;border:2px solid #000;margin:0 0 10px;font-size:17px;font-weight:bold}
+.bar{border:1px solid #000;height:22px;margin:10px 0 6px}
+.bar i{display:block;height:20px;background:#000}
+.big{font-size:28px;font-weight:bold;margin:4px 0}
+.f{width:100%;border-collapse:collapse}
+.f th{text-align:left;font-weight:normal;color:#666;font-size:14px;padding:7px 10px 7px 0;width:45%;vertical-align:top}
+.f td{padding:7px 0;font-size:15px;vertical-align:top}
+.f tr{border-bottom:1px solid #c8c8c8}</style>
+</head><body><div class="hd"><h1>@Model.Heading</h1>@{
+    var parts = Model.Crumbs.Count + (string.IsNullOrWhiteSpace(Model.Subtitle) ? 0 : 1);
+}@if (parts > 0)
+{<div class="c">@for (var i = 0; i < Model.Crumbs.Count; i++)
+    {@if (i > 0)
+     {<text> · </text>}<a href="@Model.Crumbs[i].Href">@Model.Crumbs[i].Text</a>}@if (!string.IsNullOrWhiteSpace(Model.Subtitle))
+    {@if (Model.Crumbs.Count > 0)
+     {<text> · </text>}@Model.Subtitle}</div>}</div><div class="bd">@RenderBody()</div></body></html>

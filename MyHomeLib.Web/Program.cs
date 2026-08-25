@@ -1,4 +1,7 @@
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
+using Microsoft.Extensions.WebEncoders;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Web;
 using MyHomeLib.Web.Models;
@@ -8,7 +11,15 @@ using MyHomeLib.Web.Services.TorrServe;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
+
+// Razor's default HtmlEncoder escapes every non-ASCII character to a numeric entity, which
+// for a Cyrillic collection roughly doubles each page — a search page measured 12KB before
+// and 24KB after. These pages target readers with a few kilobytes of budget, and they
+// declare charset=utf-8, so allow the characters through as themselves. HTML-significant
+// characters (< > & ") are still escaped.
+builder.Services.Configure<WebEncoderOptions>(options =>
+    options.TextEncoderSettings = new TextEncoderSettings(UnicodeRanges.All));
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 

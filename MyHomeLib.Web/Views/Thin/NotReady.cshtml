@@ -1,0 +1,13 @@
+@model NotReadyModel
+@*  First boot takes minutes, so the wait is made legible: a progress bar and a meta
+    refresh in the layout. The reader's browser does the polling; no script is served.  *@
+@if (Model.Failed)
+{<p class="m">@Model.Status.Error</p>
+ <p class="m">Check the server log. The page will not refresh by itself.</p>
+ <a href="/m" class="d">Try again</a>}
+else
+{<div class="big">@Model.Status.Percent%</div>
+ <div class="bar"><i style="width:@(Model.Status.Percent)%"></i></div>
+ <p class="m">@Model.Status.Message</p>
+ <div class="cap">Status</div>
+ <table class="f"><tr><th>Phase</th><td>@Model.Status.Phase</td></tr><tr><th>Refreshing</th><td>every @Model.RefreshSeconds s</td></tr></table>}
