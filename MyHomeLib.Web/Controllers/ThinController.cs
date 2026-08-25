@@ -56,6 +56,7 @@ public class ThinController(
             Sections =
             [
                 new RowItem("/m/genres", "By genre", null, "›"),
+                new RowItem("/m/langs", "By language", null, "›"),
                 new RowItem("/m/new", "Recently added", null, "›"),
                 new RowItem("/m/all", "All books", $"{state.TotalBooks:N0} titles", "›"),
             ],
@@ -66,6 +67,7 @@ public class ThinController(
     public async Task<IActionResult> Search(
         [FromQuery] string? q,
         [FromQuery] string? genre,
+        [FromQuery] string? lang,
         [FromQuery] int page = 1,
         CancellationToken ct = default)
     {
@@ -74,14 +76,21 @@ public class ThinController(
         var found = await search.SearchWithEntitiesAsync(new BookQuery(
             Q: q,
             Genres: string.IsNullOrWhiteSpace(genre) ? null : [genre],
+            Lang: string.IsNullOrWhiteSpace(lang) ? null : lang,
             Page: page,
             PageSize: PageSize), ct);
 
-        var heading = string.IsNullOrWhiteSpace(genre)
-            ? string.IsNullOrWhiteSpace(q) ? "All books" : $"“{q}”"
-            : genreLabels.Label(genre);
+        var heading = !string.IsNullOrWhiteSpace(genre) ? genreLabels.Label(genre)
+                    : !string.IsNullOrWhiteSpace(q) ? $"“{q}”"
+                    : !string.IsNullOrWhiteSpace(lang) ? LanguageNames.Label(lang)
+                    : "All books";
 
-        var query = BuildQuery(("q", q), ("genre", genre));
+        var query = BuildQuery(("q", q), ("genre", genre), ("lang", lang));
+
+        // Filters ride along with a refinement, so searching inside a language stays inside it.
+        var carried = new List<(string, string)>();
+        if (!string.IsNullOrWhiteSpace(genre)) carried.Add(("genre", genre));
+        if (!string.IsNullOrWhiteSpace(lang)) carried.Add(("lang", lang));
         var showCards = found.Books.Page == 1;
 
         return View("Results", new ResultsModel
@@ -91,12 +100,12 @@ public class ThinController(
             Subtitle = $"{found.Books.Total:N0} found",
             Crumbs = MainNav,
             SearchQuery = q,
-            SearchHidden = string.IsNullOrWhiteSpace(genre) ? [] : [("genre", genre)],
+            SearchHidden = carried,
             Result = found.Books,
             Books = [.. found.Books.Books.Select(BookRow)],
             SearchAction = "/m/search",
             Query = q,
-            HiddenFields = string.IsNullOrWhiteSpace(genre) ? [] : [("genre", genre)],
+            HiddenFields = carried,
             AuthorCards = showCards ? [.. found.Authors.Select(AuthorCard)] : [],
             SeriesCards = showCards ? [.. found.Series.Select(SeriesCard)] : [],
             PreviousHref = Paged("/m/search", query, found.Books.Page - 1, found.Books.HasPreviousPage),
@@ -107,7 +116,35 @@ public class ThinController(
 
     [HttpGet("all")]
     public Task<IActionResult> All([FromQuery] int page = 1, CancellationToken ct = default) =>
-        Search(null, null, page, ct);
+        Search(null, null, null, page, ct);
+
+    /// <summary>Languages present in the collection, most common first.</summary>
+    [HttpGet("langs")]
+    public async Task<IActionResult> Languages(CancellationToken ct)
+    {
+        if (!state.IsReady) return NotReadyPage();
+
+        var counts = await search.LangCountsAsync(ct);
+
+        return View("Rows", new RowsModel
+        {
+            Title = $"Languages — {CollectionTitle}",
+            Heading = "By language",
+            Subtitle = $"{counts.Count(c => c.Value > 0)} languages",
+            Crumbs = MainNav,
+            Rows =
+            [
+                .. counts
+                    .Where(c => c.Value > 0 && !string.IsNullOrWhiteSpace(c.Key))
+                    .OrderByDescending(c => c.Value)
+                    .Select(c => new RowItem(
+                        $"/m/search?lang={Uri.EscapeDataString(c.Key)}",
+                        LanguageNames.LabelWithCode(c.Key),
+                        $"{c.Value:N0} books",
+                        "›")),
+            ],
+        });
+    }
 
     [HttpGet("new")]
     public async Task<IActionResult> New([FromQuery] int page = 1, CancellationToken ct = default)
@@ -305,7 +342,7 @@ public class ThinController(
             [
                 ("Format", $".{book.Ext}"),
                 ("Size", book.Size > 0 ? $"{book.Size / 1024:N0} KB" : "—"),
-                ("Language", string.IsNullOrWhiteSpace(book.Lang) ? "—" : book.Lang),
+                ("Language", LanguageNames.LabelWithCode(book.Lang)),
                 // Labelled "added" deliberately: the INPX date records when the book entered
                 // the collection, not when it was written or published.
                 ("Added to library", book.Added ?? book.Year?.ToString() ?? "—"),
