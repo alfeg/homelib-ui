@@ -1,7 +1,12 @@
 @model AuthorModel
+
 @if (Model.Series.Count > 0)
-{<div class="cap">Series (@Model.Series.Count)</div>
- @await Html.PartialAsync("_Rows", Model.Series)}
+{
+    <div class="cap">Series (@Model.Series.Count)</div>
+    @await Html.PartialAsync("_Rows", Model.Series)
+}
+
 <div class="cap">Books</div>
+
 @await Html.PartialAsync("_Rows", Model.Books)
 @await Html.PartialAsync("_Pager", (Model.PreviousHref, Model.NextHref, Model.PagerCaption))

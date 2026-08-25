@@ -1,7 +1,21 @@
 @model (string? Previous, string? Next, string Caption)
-@*  A single-page result has nowhere to page to, so the control is omitted entirely rather
-    than rendering a "1 / 1" that does nothing but cost bytes on an e-ink screen.  *@
+@*
+    A single-page result has nowhere to page to, so the control is omitted rather than
+    rendering a "1 / 1" that does nothing.
+*@
 @if (Model.Previous is not null || Model.Next is not null)
-{<div class="pg">@if (Model.Previous is not null)
-{<a href="@Model.Previous">‹</a>}@Model.Caption@if (Model.Next is not null)
-{<a href="@Model.Next">›</a>}</div>}
+{
+    <div class="pg">
+        @if (Model.Previous is not null)
+        {
+            <a href="@Model.Previous">&lsaquo;</a>
+        }
+
+        @Model.Caption
+
+        @if (Model.Next is not null)
+        {
+            <a href="@Model.Next">&rsaquo;</a>
+        }
+    </div>
+}

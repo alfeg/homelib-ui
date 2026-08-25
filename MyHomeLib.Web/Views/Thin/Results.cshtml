@@ -1,20 +1,36 @@
 @model ResultsModel
+
 @if (Model.SearchAction is not null)
-{@await Html.PartialAsync("_SearchForm", (Model.SearchAction, Model.Query, Model.HiddenFields))}
+{
+    @await Html.PartialAsync("_SearchForm", (Model.SearchAction, Model.Query, Model.HiddenFields))
+}
+
 @if (Model.Result.Total == 0)
-{<p class="m">Nothing found.</p>}
+{
+    <p class="m">Nothing found.</p>
+}
 else
 {
-    @*  A query naming an author or series offers the entity before the books: someone
-        typing a surname usually wants that shelf, not page 1 of 241 loose titles.  *@
+    @*
+        A query naming an author or a series offers the entity before the books: someone
+        typing a surname usually wants that shelf, not page 1 of 241 loose titles.
+    *@
     if (Model.AuthorCards.Count > 0)
-    {<div class="cap">@(Model.AuthorCards.Count == 1 ? "Author" : "Authors")</div>
-     @await Html.PartialAsync("_Rows", Model.AuthorCards)}
+    {
+        <div class="cap">@(Model.AuthorCards.Count == 1 ? "Author" : "Authors")</div>
+        @await Html.PartialAsync("_Rows", Model.AuthorCards)
+    }
+
     if (Model.SeriesCards.Count > 0)
-    {<div class="cap">@(Model.SeriesCards.Count == 1 ? "Series" : "Series matches")</div>
-     @await Html.PartialAsync("_Rows", Model.SeriesCards)}
+    {
+        <div class="cap">@(Model.SeriesCards.Count == 1 ? "Series" : "Series matches")</div>
+        @await Html.PartialAsync("_Rows", Model.SeriesCards)
+    }
+
     if (Model.HasCards)
-    {<div class="cap">Books</div>}
+    {
+        <div class="cap">Books</div>
+    }
 
     @await Html.PartialAsync("_Rows", Model.Books)
     @await Html.PartialAsync("_Pager", (Model.PreviousHref, Model.NextHref, Model.PagerCaption))

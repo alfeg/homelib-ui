@@ -1,16 +1,36 @@
 @model BookModel
+
 @if (Model.SeriesRows.Count > 0)
-{<div class="cap">Series</div>
- @await Html.PartialAsync("_Rows", Model.SeriesRows)}
+{
+    <div class="cap">Series</div>
+    @await Html.PartialAsync("_Rows", Model.SeriesRows)
+}
+
 @if (Model.AuthorRows.Count > 0)
-{<div class="cap">@(Model.AuthorRows.Count == 1 ? "Author" : "Authors")</div>
- @await Html.PartialAsync("_Rows", Model.AuthorRows)}
+{
+    <div class="cap">@(Model.AuthorRows.Count == 1 ? "Author" : "Authors")</div>
+    @await Html.PartialAsync("_Rows", Model.AuthorRows)
+}
+
 @if (Model.GenreRows.Count > 0)
-{<div class="cap">@(Model.GenreRows.Count == 1 ? "Genre" : "Genres")</div>
- @await Html.PartialAsync("_Rows", Model.GenreRows)}
+{
+    <div class="cap">@(Model.GenreRows.Count == 1 ? "Genre" : "Genres")</div>
+    @await Html.PartialAsync("_Rows", Model.GenreRows)
+}
+
 <div class="cap">Details</div>
-<table class="f">@foreach (var fact in Model.Facts)
-{<tr><th>@fact.Label</th><td>@fact.Value</td></tr>}</table>
+
+<table class="f">
+    @foreach (var fact in Model.Facts)
+    {
+        <tr>
+            <th>@fact.Label</th>
+            <td>@fact.Value</td>
+        </tr>
+    }
+</table>
+
 <div class="cap">Download</div>
+
 <a href="/download/@Model.Book.Uid" class="d">.@Model.Book.Ext</a>
 <a href="/download/@(Model.Book.Uid).zip" class="d">.@(Model.Book.Ext).zip</a>

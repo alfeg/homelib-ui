@@ -1,5 +1,10 @@
 @model (string Action, string? Query, IReadOnlyList<(string Name, string Value)> Hidden)
-<form action="@Model.Action" method="get">@foreach (var field in Model.Hidden)
-{<input type="hidden" name="@field.Name" value="@field.Value">}
-<input type="text" name="q" value="@Model.Query" placeholder="Author, title or series">
-<button type="submit">Search</button></form>
+<form action="@Model.Action" method="get">
+    @foreach (var field in Model.Hidden)
+    {
+        <input type="hidden" name="@field.Name" value="@field.Value">
+    }
+
+    <input type="text" name="q" value="@Model.Query" placeholder="Author, title or series">
+    <button type="submit">Search</button>
+</form>

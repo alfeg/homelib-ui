@@ -1,5 +1,9 @@
 @model RowsModel
+
 @if (Model.Caption is not null)
-{<div class="cap">@Model.Caption</div>}
+{
+    <div class="cap">@Model.Caption</div>
+}
+
 @await Html.PartialAsync("_Rows", Model.Rows)
 @await Html.PartialAsync("_Pager", (Model.PreviousHref, Model.NextHref, Model.PagerCaption))

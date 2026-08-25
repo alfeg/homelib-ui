@@ -1,7 +1,9 @@
+using System.IO.Compression;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Microsoft.Extensions.WebEncoders;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
 using MyHomeLib.Web;
 using MyHomeLib.Web.Models;
@@ -12,6 +14,24 @@ using MyHomeLib.Web.Services.TorrServe;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+
+// Compress the text responses. This is what lets the views be written for humans rather
+// than squeezed for bytes: indentation and comments cost almost nothing once gzipped, and
+// the reader spends less time on the wire than it would parsing a hand-minified page.
+// Nothing here is secret or authenticated, so the usual BREACH concern does not apply.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes =
+    [
+        .. ResponseCompressionDefaults.MimeTypes,
+        // OPDS feeds are Atom, which the defaults do not cover.
+        "application/atom+xml",
+        "application/opensearchdescription+xml",
+    ];
+});
 
 // Razor's default HtmlEncoder escapes every non-ASCII character to a numeric entity, which
 // for a Cyrillic collection roughly doubles each page — a search page measured 12KB before
@@ -63,6 +83,8 @@ var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/error");
+
+app.UseResponseCompression();
 
 app.UseCors();
 

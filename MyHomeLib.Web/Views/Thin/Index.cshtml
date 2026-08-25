@@ -1,5 +1,9 @@
 @model IndexModel
+
 @await Html.PartialAsync("_SearchForm", ("/m/search", (string?)null, (IReadOnlyList<(string, string)>)[]))
+
 <div class="cap">Browse</div>
+
 @await Html.PartialAsync("_Rows", Model.Sections)
+
 <p class="m">OPDS catalog at /opds</p>
