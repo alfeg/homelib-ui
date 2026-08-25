@@ -9,8 +9,12 @@
     Minimal document for e-ink readers: no JavaScript, no external requests, no web fonts.
 
     The stylesheet is inlined because a second request costs a reader more than these bytes
-    do, and a stylesheet that fails to load leaves an unusable page. Greys are limited to a
-    single value: e-ink dithers intermediate tones into visible noise.
+    do, and a stylesheet that fails to load leaves an unusable page.
+
+    Sizes and greys are set for e-ink, not for the LCD they were first written on. A screen
+    that renders in a handful of grey levels turns mid-grey small text into mush: #666 at
+    12-13px was legible on a monitor and barely readable on the device. Secondary text is
+    now #333 and nothing drops below 14px.
 
     Markup here is written for humans. Response compression handles the whitespace.
 *@
@@ -28,7 +32,7 @@
         * { box-sizing: border-box }
 
         body {
-            font: 16px/1.4 "PT Sans", Tahoma, Arial, sans-serif;
+            font: 17px/1.45 "PT Sans", Tahoma, Arial, sans-serif;
             margin: 0;
             padding: 0;
             color: #000;
@@ -41,27 +45,27 @@
         a:active { background: #000; color: #fff }
 
         .hd { padding: 11px 12px 9px; border-bottom: 3px double #000 }
-        .hd h1 { font-size: 19px; margin: 0; font-weight: bold }
-        .hd .c { font-size: 13px; color: #666; margin-top: 3px }
+        .hd h1 { font-size: 21px; margin: 0; font-weight: bold }
+        .hd .c { font-size: 15px; color: #333; margin-top: 4px }
         .hd .c a { text-decoration: underline }
 
         .bd { padding: 10px 12px 20px }
 
         ul { list-style: none; margin: 0; padding: 0 }
-        li { border-bottom: 1px solid #c8c8c8 }
+        li { border-bottom: 1px solid #999 }
 
         /* Row-wide tap targets: an inline link is a 17px-tall target on a reader */
         li a { display: block; padding: 10px 0; min-height: 34px }
 
-        .ti { font-size: 17px }
-        .m { display: block; color: #666; font-size: 13px; margin-top: 3px }
-        .ch { float: right; color: #666 }
+        .ti { font-size: 18px }
+        .m { display: block; color: #333; font-size: 15px; margin-top: 4px }
+        .ch { float: right; color: #333 }
 
         .cap {
             text-transform: uppercase;
             letter-spacing: .08em;
-            font-size: 12px;
-            color: #666;
+            font-size: 14px;
+            color: #333;
             margin: 16px 0 4px;
         }
 
@@ -69,7 +73,7 @@
 
         input[type=text] {
             width: 100%;
-            font-size: 16px;
+            font-size: 17px;
             font-family: inherit;
             padding: 10px;
             border: 1px solid #000;
@@ -77,14 +81,14 @@
         }
 
         button {
-            font-size: 16px;
+            font-size: 17px;
             font-family: inherit;
             padding: 10px 22px;
             border: 1px solid #000;
             background: #fff;
         }
 
-        .pg { text-align: center; padding: 16px 0 4px; font-size: 14px; color: #666 }
+        .pg { text-align: center; padding: 16px 0 4px; font-size: 16px; color: #333 }
 
         .pg a {
             display: inline-block;
@@ -110,22 +114,22 @@
         .big { font-size: 28px; font-weight: bold; margin: 4px 0 }
 
         .f { width: 100%; border-collapse: collapse }
-        .f tr { border-bottom: 1px solid #c8c8c8 }
+        .f tr { border-bottom: 1px solid #999 }
 
         .f th {
             text-align: left;
             font-weight: normal;
-            color: #666;
-            font-size: 14px;
+            color: #333;
+            font-size: 16px;
             padding: 7px 10px 7px 0;
             width: 45%;
             vertical-align: top;
         }
 
-        .f td { padding: 7px 0; font-size: 15px; vertical-align: top }
+        .f td { padding: 8px 0; font-size: 16px; vertical-align: top }
 
         /* Interface language, kept small and out of the way in the header */
-        .lang { float: right; font-size: 13px; color: #666 }
+        .lang { float: right; font-size: 15px; color: #333 }
         .lang a { text-decoration: underline; margin-left: 8px }
         .lang b { margin-left: 8px }
     </style>
