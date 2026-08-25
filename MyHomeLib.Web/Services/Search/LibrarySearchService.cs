@@ -80,7 +80,9 @@ public class LibrarySearchService(MeiliClient meili, IndexState state)
 
         var request = new MeiliSearchRequest
         {
-            Q = query.Q,
+            // Folded to match the folded searchable fields: "мёд" and "мед" must find the
+            // same books, and short words get no typo tolerance to paper over the difference.
+            Q = RussianText.Fold(query.Q),
             Page = query.Page,
             HitsPerPage = query.PageSize,
             Filter = BuildFilter(query),

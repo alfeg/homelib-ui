@@ -17,6 +17,11 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
     /// <summary>Range-request granularity when reading a book out of a torrent archive.</summary>
     private const int ArchiveReadBufferSize = 512 * 1024;
 
+    /// <summary>Attempts allowed when the archive is not yet readable. See DownloadFile.</summary>
+    private const int ArchiveReadAttempts = 3;
+
+    private static readonly TimeSpan ArchiveRetryDelay = TimeSpan.FromSeconds(3);
+
     // ── Public API ───────────────────────────────────────────────────────────
 
     /// <summary>Searches for files in a torrent matching a wildcard pattern.</summary>
@@ -36,7 +41,33 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
     }
 
     /// <summary>Downloads a book entry from a ZIP archive inside the torrent.</summary>
+    /// <remarks>
+    /// Retried because a cold archive fails in a specific, recoverable way: TorrServe has not
+    /// yet fetched the pieces covering the ZIP central directory, serves short data for the
+    /// range, and ZipArchive rejects it with "End of Central Directory record could not be
+    /// found". Asking again a moment later succeeds, because the first attempt is what makes
+    /// TorrServe go and get those pieces. Observed on 3 of 65 books against a cold torrent.
+    /// </remarks>
     public async Task<DownloadResponse> DownloadFile(DownloadRequest request, CancellationToken ct = default)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await DownloadOnceAsync(request, ct);
+            }
+            catch (InvalidDataException ex) when (attempt < ArchiveReadAttempts && !ct.IsCancellationRequested)
+            {
+                logger.LogWarning(
+                    "[TorrServe] [{Library}] {Name} archive not readable yet on attempt {Attempt}: {Message}",
+                    request.Library, request.Name, attempt, ex.Message);
+
+                await Task.Delay(ArchiveRetryDelay, ct);
+            }
+        }
+    }
+
+    private async Task<DownloadResponse> DownloadOnceAsync(DownloadRequest request, CancellationToken ct)
     {
         var hash    = request.Library;
         var archive = request.Archive;
@@ -73,7 +104,9 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
         {
             var entry = zip.GetEntry(book)
                         ?? throw new FileNotFoundException($"Entry {book} not found in {archive}");
-            await entry.Open().CopyToAsync(bookStream, ct);
+
+            await using var entryStream = entry.Open();
+            await entryStream.CopyToAsync(bookStream, ct);
         }
 
         bookStream.Seek(0, SeekOrigin.Begin);

@@ -42,6 +42,20 @@ public class BookDocument
     [JsonPropertyName("seriesIndex")]
     public int? SeriesIndex { get; set; }
 
+    /// <summary>
+    /// Folded copies of the text Meilisearch searches. Held separately from the display
+    /// fields so a title still renders with its ё while queries match either spelling —
+    /// see <see cref="RussianText"/>.
+    /// </summary>
+    [JsonPropertyName("titleSearch")]
+    public string TitleSearch { get; set; } = "";
+
+    [JsonPropertyName("authorsSearch")]
+    public string AuthorsSearch { get; set; } = "";
+
+    [JsonPropertyName("seriesSearch")]
+    public string SeriesSearch { get; set; } = "";
+
     [JsonPropertyName("genres")]
     public string[] Genres { get; set; } = [];
 
@@ -85,6 +99,9 @@ public class BookDocument
         Authors = book.DisplayAuthors(),
         AuthorList = [.. book.ParsedAuthors()],
         Series = book.Series ?? "",
+        TitleSearch = RussianText.Fold(book.Title),
+        AuthorsSearch = RussianText.Fold(book.DisplayAuthors()),
+        SeriesSearch = RussianText.Fold(book.Series),
         SeriesNo = book.SeriesNo ?? "",
         SeriesIndex = ParseSeriesIndex(book.SeriesNo),
         Genres = [.. book.ParsedGenreCodes()],

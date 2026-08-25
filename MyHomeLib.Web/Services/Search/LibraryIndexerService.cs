@@ -22,12 +22,14 @@ public class LibraryIndexerService(
     /// Bump whenever <see cref="BookDocument"/> gains, loses or changes a field, so existing
     /// documents get rewritten even though the collection's content is unchanged.
     /// </summary>
-    private const int DocumentSchemaVersion = 2;
+    private const int DocumentSchemaVersion = 3;
 
     private static readonly MeiliIndexSettings BookIndexSettings = new()
     {
         // Order matters: Meilisearch ranks matches by the position of the attribute in this list.
-        SearchableAttributes = ["title", "authors", "series"],
+        // These are the ё-folded copies; the display fields are deliberately not searchable,
+        // which also keeps the index from building word structures for the same text twice.
+        SearchableAttributes = ["titleSearch", "authorsSearch", "seriesSearch"],
         FilterableAttributes = ["genres", "lang", "year", "ext", "authorList", "archive", "series"],
         SortableAttributes = ["year", "id", "title", "seriesIndex", "series"],
         DisplayedAttributes = ["*"],
