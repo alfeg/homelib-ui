@@ -14,9 +14,22 @@
 
 MyHomeLib **не скачивает весь торрент**. Вместо этого:
 
-1. **При первом запуске** — скачивает только INPX-файл (~35 МБ) через [TorrServe](https://github.com/YouROK/TorrServer), парсит его на клиенте (Web Worker) и строит полнотекстовый поисковый индекс [MiniSearch](https://lucaong.github.io/minisearch/) прямо в браузере. Индекс сохраняется в IndexedDB — следующие открытия страницы работают мгновенно.
-2. **При поиске** — запрос к MiniSearch-индексу в Web Worker (AND по всем токенам, prefix-matching, BM25-ранжирование). Результаты выдаются в реальном времени без запросов к серверу.
-3. **При скачивании** — сервер через TorrServe HTTP Range запросы скачивает только нужную книгу из ZIP-архива (из каждого архива весом ~2–2,5 ГБ, загружается лишь нужный диапазон байт с книгой).
+1. **При старте сервера** — скачивается только INPX-файл (~35 МБ) через [TorrServe](https://github.com/YouROK/TorrServer), парсится на сервере и загружается в [Meilisearch](https://www.meilisearch.com/). Первая индексация ~586 000 книг занимает около 5 минут; при последующих перезапусках индекс переиспользуется, если коллекция не изменилась.
+2. **При поиске** — запрос уходит в Meilisearch: полнотекстовый поиск с опечатками, фасеты по жанрам, языкам и сериям. Ответ приходит за единицы миллисекунд.
+3. **При скачивании** — сервер через TorrServe HTTP Range запросы читает только нужный диапазон байт из ZIP-архива (~2–2,5 ГБ каждый) и отдаёт одну книгу.
+
+Магнет-ссылка задаётся **только через настройки сервера** (`Library__MagnetUri`). Клиент не может её подменить.
+
+### Интерфейсы
+
+| Адрес | Для кого |
+|-------|----------|
+| `/` | Vue SPA — обычный браузер на компьютере или телефоне |
+| `/m` | Серверный HTML без JavaScript — читалки, e-ink, слабые устройства |
+| `/opds` | OPDS 1.2 каталог — приложения-читалки с поддержкой OPDS |
+| `/api` | JSON API — `search`, `author`, `series`, `book`, `status`, `genres` |
+
+Браузеры читалок (PocketBook, Kindle, Kobo, Onyx, Boox, reMarkable) с корня автоматически перенаправляются на `/m`. Чтобы этого избежать, откройте `/?full=1`.
 
 ---
 
@@ -36,29 +49,41 @@ MyHomeLib **не скачивает весь торрент**. Вместо эт
 ```bash
 git clone <репозиторий>
 cd homelib-ui
+cp .env.example .env
+```
+
+Отредактируйте `.env` — как минимум укажите магнет-ссылку библиотеки:
+
+```ini
+LIBRARY_MAGNET_URI=magnet:?xt=urn:btih:...
+LIBRARY_TITLE=Flibusta
+MEILI_MASTER_KEY=не-менее-16-байт
+```
+
+```bash
 docker compose up -d
 ```
 
-`docker-compose.yml` поднимает два сервиса:
-- **torrserve** — TorrServe на порту `8090`
-- **myhomelib** — веб-приложение на порту `8080`
+`docker-compose.yml` поднимает три сервиса:
+- **torrserve** — TorrServe, вся работа с BitTorrent
+- **meilisearch** — поисковый движок, данные в томе `meili_data`
+- **myhomelib** — веб-приложение на порту `5080`
 
-Откройте в браузере: [http://localhost:8080](http://localhost:8080)
+Откройте в браузере: [http://localhost:5080](http://localhost:5080)
 
-Книги хранятся в именованном Docker-томе, смонтированном как `/data/books` внутри контейнера.
+> **Первый запуск занимает около 5 минут** — скачивание INPX и построение индекса. Пока индекс строится, `/m` и `/opds` показывают прогресс и обновляются сами.
+
+### Требования к ресурсам
+
+| | |
+|---|---|
+| Диск под индекс Meilisearch | ~1,5–2 ГБ на 586 000 книг |
+| RAM при индексации | ограничена `MEILI_MAX_INDEXING_MEMORY` (по умолчанию 512 МБ) |
+| RAM в работе | несколько сотен МБ |
 
 ### Изменение настроек
 
-Отредактируйте `docker-compose.yml` или задайте переменные окружения:
-
-```yaml
-environment:
-  Torrent__TorrServeUrl: http://torrserve:8090      # адрес TorrServe
-```
-
-> Разделитель для вложенных ключей в переменных окружения — двойное подчёркивание (`__`).
-
-Магнет-ссылка на торрент вводится прямо в браузере при первом открытии.
+Правьте `.env` или переменные окружения в `docker-compose.yml`. Разделитель вложенных ключей — двойное подчёркивание (`__`).
 
 ---
 
@@ -67,34 +92,55 @@ environment:
 ### Предварительные требования
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js 20+](https://nodejs.org/) (для сборки фронтенда)
-- Запущенный TorrServe. Скачайте бинарник со страницы [релизов TorrServe](https://github.com/YouROK/TorrServer/releases) и запустите:
+- [Node.js 20+](https://nodejs.org/) — только для сборки фронтенда
+- **TorrServe** — [бинарник со страницы релизов](https://github.com/YouROK/TorrServer/releases), по умолчанию слушает `http://127.0.0.1:8090`
+- **Meilisearch** — проще всего поднять из compose:
+
   ```bash
-  # Linux/macOS
-  ./TorrServer-linux-amd64
-  # Windows
-  TorrServer-windows-amd64.exe
+  docker compose up -d meilisearch
   ```
-  По умолчанию TorrServe слушает на `http://localhost:8090`.
+
+  Он слушает `http://127.0.0.1:7701`. Ключ должен быть не короче 16 байт, иначе Meilisearch не стартует в режиме production.
 
 ### Сборка фронтенда
 
-```bash
-cd MyHomeLib.Ui
-npm install
-npm run build
-```
+Сначала пакет-парсер, потом SPA — `MyHomeLib.Ui` подключает `inpx-parser` как локальную зависимость и без собранного `dist` не соберётся:
 
-`MyHomeLib.Web` раздаёт `MyHomeLib.Ui/dist`, если папка существует; иначе используется `MyHomeLib.Web/wwwroot`.
+```bash
+cd inpx-parser && npm ci && npm run build
+cd ../MyHomeLib.Ui && npm ci && npm run build
+```
 
 ### Запуск бэкенда
 
 ```bash
-# Отредактируйте appsettings.json (TorrServeUrl)
 dotnet run --project MyHomeLib.Web
 ```
 
-Откройте [http://localhost:5000](http://localhost:5000) (точный порт — в выводе консоли).
+Магнет-ссылка и адреса сервисов задаются переменными окружения:
+
+```bash
+Library__MagnetUri="magnet:?xt=urn:btih:..."
+Torrent__TorrServeUrl="http://127.0.0.1:8090"
+Meili__Url="http://127.0.0.1:7701"
+Meili__ApiKey="ваш-ключ"
+```
+
+> Используйте `127.0.0.1`, а не `localhost`: при наличии VPN-адаптеров подключение к `localhost` может стоить ~200 мс на каждый запрос из-за неудачной попытки IPv6.
+
+Для разработки удобно указать локальный INPX-файл и не ждать TorrServe:
+
+```bash
+Library__InpxPath="D:\books\flibusta_fb2_local.inpx"
+```
+
+### Полная сборка вместе с SPA
+
+```bash
+dotnet publish MyHomeLib.Web -c Release -o ./publish
+```
+
+Цель `BuildClientUi` сама соберёт SPA и положит её в `wwwroot`. Чтобы этого не делать, добавьте `-p:BuildClientApp=false`.
 
 ### Разработка фронтенда с hot-reload
 
@@ -103,24 +149,49 @@ cd MyHomeLib.Ui
 npm run dev
 ```
 
-Vite dev-сервер проксирует API-запросы на `http://localhost:5000`.
-
 ---
 
 ## Конфигурация
+
+### Секция `Library`
+
+| Ключ | Обязательно | По умолчанию | Описание |
+|------|-------------|--------------|----------|
+| `MagnetUri` | Да | — | Магнет-ссылка библиотеки. Без неё книги не скачиваются |
+| `InpxPath` | Нет | — | Локальный `.inpx`: индексация без обращения к TorrServe (для разработки) |
+| `Title` | Нет | `MyHomeLib` | Название коллекции, если его нет в самом INPX |
+| `ForceReindex` | Нет | `false` | Переиндексировать при старте, даже если ничего не изменилось |
+| `IndexBatchSize` | Нет | `10000` | Размер пачки документов при загрузке в Meilisearch |
+
+### Секция `Meili`
+
+| Ключ | Обязательно | По умолчанию | Описание |
+|------|-------------|--------------|----------|
+| `Url` | Да | `http://127.0.0.1:7700` | Адрес Meilisearch |
+| `ApiKey` | Нет | — | Мастер-ключ, если Meilisearch запущен с ключом |
+| `IndexUid` | Нет | `books` | Имя индекса |
 
 ### Секция `Torrent`
 
 | Ключ | Обязательно | По умолчанию | Описание |
 |------|-------------|--------------|----------|
-| `TorrServeUrl` | Да | — | URL экземпляра TorrServe, например `http://127.0.0.1:8090` |
+| `TorrServeUrl` | Да | `http://127.0.0.1:8090` | Адрес TorrServe |
 
 ### Пример `appsettings.json`
 
 ```json
 {
+  "Library": {
+    "MagnetUri": "magnet:?xt=urn:btih:...",
+    "Title": "Flibusta"
+  },
+  "Meili": {
+    "Url": "http://127.0.0.1:7700",
+    "ApiKey": "",
+    "IndexUid": "books"
+  },
   "Torrent": {
-    "TorrServeUrl": "http://localhost:8090"
+    "TorrServeUrl": "http://127.0.0.1:8090"
   }
 }
 ```
@@ -135,7 +206,7 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 Или скачайте файл:
 
-1. Скачайте файл [`MyHomeLib.Ui/dist-standalone/index.html`](MyHomeLib.Ui/dist-standalone/index.html).
+1. Скачайте файл [`docs/index.html`](docs/index.html) — его собирает `npm run build-standalone`.
 2. Откройте его в браузере (двойной клик или `file://`).
 3. По умолчанию приложение подключается к публичному серверу **books.alfeg.net**.
 
@@ -145,19 +216,18 @@ Vite dev-сервер проксирует API-запросы на `http://local
 
 В форме подключения библиотеки раскройте раздел **⚙ API сервер** и введите URL вашего инстанса, например `https://my-server.example.com`. Значение сохраняется в `localStorage` браузера.
 
-> Собственный сервер разворачивается через Docker Compose (см. ниже). Дополнительной настройки не требуется — магнет-ссылка вводится прямо в форме браузера.
+> Собственный сервер разворачивается через Docker Compose (см. выше). Библиотеку выбирает сервер через `LIBRARY_MAGNET_URI`, в браузере магнет-ссылка не вводится.
 
 ---
 
 ## Первый запуск
 
-1. Откройте браузер — вы увидите экран подключения библиотеки.
-2. Введите магнет-ссылку на торрент библиотеки в появившейся форме.
-3. MyHomeLib скачивает INPX-файл (~35 МБ) через TorrServe. Прогресс-бар показывает скорость загрузки (↓/↑), количество пиров и кэш-прогресс.
-4. Браузер распарсит INPX и построит MiniSearch-индекс (~685 000 книг, ~30–60 сек).
-5. Строка поиска становится активной.
+1. Сервер скачивает INPX (~35 МБ) через TorrServe. На холодном торренте это может занять минуту-другую.
+2. INPX парсится (~700 000 строк за ~1,5 с) и загружается в Meilisearch пачками. Полная индексация ~586 000 книг — около 5 минут.
+3. Пока идёт индексация, `/m` и `/opds` отдают страницу с прогрессом и сами обновляются; `/api/status` возвращает то же самое в JSON.
+4. После готовности поиск отвечает за единицы миллисекунд.
 
-**При повторном открытии**: INPX и индекс загружаются из IndexedDB — готово за секунды.
+**При перезапуске** индекс не строится заново: сервер сверяет содержимое коллекции и, если оно не изменилось, готов через несколько секунд.
 
 ---
 
@@ -182,8 +252,9 @@ TorrServe загружает только те фрагменты торрент
 
 ## Использование памяти
 
-- **Сервер** (~50–100 МБ): INPX-файл кешируется на диск; в RAM ничего не держится постоянно — только текущие запросы.
-- **Браузер**: MiniSearch-индекс (~685 000 книг) хранится в IndexedDB и загружается в Web Worker. RAM браузера — ~300–500 МБ при открытом индексе.
+- **Сервер** (~100–200 МБ): INPX держится в памяти только во время индексации, книги на диск не сохраняются.
+- **Meilisearch**: ~1,5–2 ГБ на диске под индекс 586 000 книг. Пик потребления RAM приходится на индексацию и ограничивается `MEILI_MAX_INDEXING_MEMORY`.
+- **Браузер**: `/m` — единицы килобайт на страницу. SPA строит собственный индекс в IndexedDB и занимает ~300–500 МБ.
 
 ---
 
@@ -191,25 +262,27 @@ TorrServe загружает только те фрагменты торрент
 
 ```
 MyHomeLibServer.slnx
-├── MyHomeLib.Library/   # Модель данных книги + парсер INPX (.NET)
-├── MyHomeLib.Web/       # ASP.NET Core backend: API, проксирование загрузок, раздача фронтенда
-└── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA (поиск, фильтры, UI)
+├── MyHomeLib.Library/   # Модель книги, парсер INPX, отпечаток коллекции (.NET)
+├── MyHomeLib.Web/       # ASP.NET Core: индексация, поиск, OPDS, /m, загрузки
+├── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA
+└── inpx-parser/         # npm-пакет: парсер INPX для браузера (используется SPA)
 ```
 
 ### Ключевые файлы
 
 | Файл | Назначение |
 |------|-----------|
-| `MyHomeLib.Web/Services/TorrServe/TorrServeClient.cs` | HTTP-обёртка над TorrServe API |
+| `MyHomeLib.Library/InpReader.cs` | Разбор строк `.inp`: разделитель `\x04`, UTF-8/CP1251, устойчив к битым полям |
+| `MyHomeLib.Library/BookUid.cs` | Стабильный идентификатор книги. Id из INPX не уникальны |
+| `MyHomeLib.Library/InpxSignature.cs` | Отпечаток коллекции: решает, нужна ли переиндексация |
+| `MyHomeLib.Web/Services/Search/LibraryIndexerService.cs` | Загрузка INPX в Meilisearch при старте |
+| `MyHomeLib.Web/Services/Search/LibrarySearchService.cs` | Единственный путь запросов для API, OPDS и `/m` |
 | `MyHomeLib.Web/Services/HttpRangeStream.cs` | Seekable Stream поверх HTTP Range |
-| `MyHomeLib.Web/Services/DownloadManager.cs` | Оркестрация скачивания через TorrServe |
-| `MyHomeLib.Web/Program.cs` | Minimal API: `/api/library/inpx`, `/api/library/download`, `/api/library/status` |
-| `MyHomeLib.Ui/src/workers/searchIndex.worker.ts` | MiniSearch в Web Worker: парсинг INPX, индекс, поиск, IndexedDB |
-| `MyHomeLib.Ui/src/workers/inpxParser.ts` | Парсер INPX-архивов (fflate) |
-| `MyHomeLib.Ui/src/composables/useLibraryState.ts` | Глобальное реактивное состояние (VueUse) |
-| `MyHomeLib.Ui/src/components/GenreSidebar.vue` | Левая панель: жанры + фильтр по году |
+| `MyHomeLib.Web/Controllers/OpdsController.cs` | OPDS 1.2 каталог |
+| `MyHomeLib.Web/Views/Thin/` | Страницы `/m` без JavaScript |
+| `MyHomeLib.Ui/src/workers/searchIndex.worker.ts` | MiniSearch в Web Worker (путь SPA) |
 | `Dockerfile` | Многоэтапная сборка (.NET 10 + Node.js → ASP.NET runtime, порт 8080) |
-| `docker-compose.yml` | TorrServe + MyHomeLib с общими named volumes |
+| `docker-compose.yml` | TorrServe + Meilisearch + MyHomeLib |
 
 ---
 
@@ -231,9 +304,22 @@ The Flibusta library is a single large torrent (~500 GB) containing thousands of
 
 MyHomeLib **never downloads the full torrent**. Instead:
 
-1. **On first load** — downloads only the INPX index (~35 MB) via [TorrServe](https://github.com/YouROK/TorrServer), parses it in the browser (Web Worker), and builds a [MiniSearch](https://lucaong.github.io/minisearch/) full-text index stored in IndexedDB. Subsequent visits restore the index instantly from cache.
-2. **On search** — queries MiniSearch in the Web Worker (AND across all tokens, prefix matching, BM25). Results appear in real time with no server round-trips.
-3. **On download** — the server streams only the needed bytes from a ZIP archive (~2–2.5 GB each) via TorrServe HTTP Range requests, fetching just the one book.
+1. **On server start** — only the INPX index (~35 MB) is fetched via [TorrServe](https://github.com/YouROK/TorrServer), parsed on the server and bulk loaded into [Meilisearch](https://www.meilisearch.com/). The first build of ~586,000 books takes around five minutes; later restarts reuse the index when the collection has not changed.
+2. **On search** — the query goes to Meilisearch: full-text with typo tolerance, plus facets over genres, languages and series. Responses come back in single-digit milliseconds.
+3. **On download** — the server reads only the needed byte range out of a ZIP archive (~2–2.5 GB each) through TorrServe HTTP Range requests and returns the one book.
+
+The magnet URI is set **only in server configuration** (`Library__MagnetUri`). Clients cannot supply one.
+
+### Interfaces
+
+| Path | Audience |
+|------|----------|
+| `/` | Vue SPA — a normal desktop or phone browser |
+| `/m` | Server-rendered HTML with no JavaScript — e-readers, e-ink, low-power devices |
+| `/opds` | OPDS 1.2 catalog — reader apps that speak OPDS |
+| `/api` | JSON API — `search`, `author`, `series`, `book`, `status`, `genres` |
+
+E-reader browsers (PocketBook, Kindle, Kobo, Onyx, Boox, reMarkable) are redirected from the site root to `/m`. Open `/?full=1` to get the SPA anyway.
 
 ---
 
@@ -245,7 +331,7 @@ The easiest way to start — no installation or server required.
 
 Or download the file:
 
-1. Download [`MyHomeLib.Ui/dist-standalone/index.html`](MyHomeLib.Ui/dist-standalone/index.html).
+1. Download [`docs/index.html`](docs/index.html) — produced by `npm run build-standalone`.
 2. Open it in any browser (double-click or `file://`).
 3. By default it connects to the public server **books.alfeg.net**.
 
@@ -255,7 +341,7 @@ The index (~685 000 books) is downloaded from the public server, parsed in the b
 
 On the library connection screen expand **⚙ API Server** and enter your instance URL, e.g. `https://my-server.example.com`. The value is saved in `localStorage`.
 
-> Your server is deployed via Docker Compose (see below). No extra config needed — the magnet URI is entered directly in the browser.
+> Your server is deployed via Docker Compose (see above). The server picks the library through `LIBRARY_MAGNET_URI`; the magnet URI is never entered in the browser.
 
 ---
 
@@ -273,29 +359,41 @@ On the library connection screen expand **⚙ API Server** and enter your instan
 ```bash
 git clone <repo>
 cd homelib-ui
+cp .env.example .env
+```
+
+Edit `.env` — at minimum point it at a library:
+
+```ini
+LIBRARY_MAGNET_URI=magnet:?xt=urn:btih:...
+LIBRARY_TITLE=Flibusta
+MEILI_MASTER_KEY=at-least-16-bytes
+```
+
+```bash
 docker compose up -d
 ```
 
-This starts:
-- **torrserve** — TorrServe on port `8090`
-- **myhomelib** — web app on port `8080`
+`docker-compose.yml` starts three services:
+- **torrserve** — TorrServe, which does all the BitTorrent work
+- **meilisearch** — the search engine, with data in the `meili_data` volume
+- **myhomelib** — the web app on port `5080`
 
-Open [http://localhost:8080](http://localhost:8080) in your browser.
+Open [http://localhost:5080](http://localhost:5080).
 
-The INPX index is fetched on demand directly from TorrServe.
+> **The first start takes about five minutes** — fetching the INPX and building the index. While that runs, `/m` and `/opds` serve a progress page that refreshes itself.
+
+### Resource requirements
+
+| | |
+|---|---|
+| Disk for the Meilisearch index | ~1.5–2 GB for 586,000 books |
+| RAM while indexing | capped by `MEILI_MAX_INDEXING_MEMORY` (512 MB by default) |
+| RAM when serving | a few hundred MB |
 
 ### Customising settings
 
-Edit `docker-compose.yml` or set environment variables:
-
-```yaml
-environment:
-  Torrent__TorrServeUrl: http://torrserve:8090
-```
-
-> Nested config keys use double-underscore as separator in environment variables.
-
-The magnet URI is entered directly in the browser on first use.
+Edit `.env`, or the environment variables in `docker-compose.yml`. Nested config keys use a double underscore (`__`) as the separator.
 
 ---
 
@@ -304,29 +402,55 @@ The magnet URI is entered directly in the browser on first use.
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js 20+](https://nodejs.org/)
-- TorrServe running on `http://localhost:8090` — download a binary from the [TorrServe releases](https://github.com/YouROK/TorrServer/releases)
+- [Node.js 20+](https://nodejs.org/) — only needed to build the frontend
+- **TorrServe** — grab a binary from the [releases page](https://github.com/YouROK/TorrServer/releases); it listens on `http://127.0.0.1:8090` by default
+- **Meilisearch** — easiest from compose:
+
+  ```bash
+  docker compose up -d meilisearch
+  ```
+
+  It listens on `http://127.0.0.1:7701`. The master key must be at least 16 bytes or Meilisearch refuses to start in production mode.
 
 ### Build the frontend
 
-```bash
-cd MyHomeLib.Ui
-npm install
-npm run build
-```
+Parser package first, then the SPA: `MyHomeLib.Ui` consumes `inpx-parser` as a local dependency and will not build without its `dist`.
 
-`MyHomeLib.Web` serves `MyHomeLib.Ui/dist` when it exists; otherwise it falls back to `MyHomeLib.Web/wwwroot`.
+```bash
+cd inpx-parser && npm ci && npm run build
+cd ../MyHomeLib.Ui && npm ci && npm run build
+```
 
 ### Run the backend
 
 ```bash
-# Edit appsettings.json first (set TorrServeUrl)
 dotnet run --project MyHomeLib.Web
 ```
 
-Open [http://localhost:5000](http://localhost:5000) (check console output for the exact port).
+The magnet URI and service addresses come from environment variables:
 
-On first run the app downloads the INPX index via TorrServe, then the browser parses and indexes all books. A status bar shows live progress. Subsequent visits are instant.
+```bash
+Library__MagnetUri="magnet:?xt=urn:btih:..."
+Torrent__TorrServeUrl="http://127.0.0.1:8090"
+Meili__Url="http://127.0.0.1:7701"
+Meili__ApiKey="your-key"
+```
+
+> Prefer `127.0.0.1` over `localhost`. On a machine with VPN adapters, connecting to `localhost` can cost ~200 ms per request on a failed IPv6 attempt before falling back.
+
+For development you can point at a local INPX file and skip TorrServe entirely:
+
+```bash
+Library__InpxPath="D:\books\flibusta_fb2_local.inpx"
+```
+
+### Full build including the SPA
+
+```bash
+dotnet publish MyHomeLib.Web -c Release -o ./publish
+```
+
+The `BuildClientUi` target builds the SPA and copies it into `wwwroot`. Pass `-p:BuildClientApp=false` to skip it.
 
 ### Frontend development with hot-reload
 
@@ -335,24 +459,49 @@ cd MyHomeLib.Ui
 npm run dev
 ```
 
-The Vite dev server proxies API requests to `http://localhost:5000`.
-
 ---
 
 ## Configuration
+
+### `Library` section
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `MagnetUri` | Yes | — | Magnet URI of the library. Without it books cannot be downloaded |
+| `InpxPath` | No | — | Local `.inpx` to index without contacting TorrServe (development) |
+| `Title` | No | `MyHomeLib` | Collection name, used when the INPX does not carry one |
+| `ForceReindex` | No | `false` | Rebuild on startup even when nothing changed |
+| `IndexBatchSize` | No | `10000` | Documents per batch when loading Meilisearch |
+
+### `Meili` section
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `Url` | Yes | `http://127.0.0.1:7700` | Meilisearch address |
+| `ApiKey` | No | — | Master key, when Meilisearch runs with one |
+| `IndexUid` | No | `books` | Index name |
 
 ### `Torrent` section
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `TorrServeUrl` | Yes | — | URL of the TorrServe instance, e.g. `http://torrserve:8090` |
+| `TorrServeUrl` | Yes | `http://127.0.0.1:8090` | TorrServe address |
 
 ### Example `appsettings.json`
 
 ```json
 {
+  "Library": {
+    "MagnetUri": "magnet:?xt=urn:btih:...",
+    "Title": "Flibusta"
+  },
+  "Meili": {
+    "Url": "http://127.0.0.1:7700",
+    "ApiKey": "",
+    "IndexUid": "books"
+  },
   "Torrent": {
-    "TorrServeUrl": "http://localhost:8090"
+    "TorrServeUrl": "http://127.0.0.1:8090"
   }
 }
 ```
@@ -361,8 +510,9 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 
 ## Memory usage
 
-- **Server** (~50–100 MB): the INPX file is fetched on demand from TorrServe; nothing is written to disk.
-- **Browser**: MiniSearch index (~600 000 books) lives in IndexedDB and is loaded into a Web Worker. Expect ~300–500 MB browser RAM while the index is active.
+- **Server** (~100–200 MB): the INPX is held in memory only while indexing, and no book is written to disk.
+- **Meilisearch**: ~1.5–2 GB on disk for an index of 586,000 books. RAM peaks during indexing and is capped by `MEILI_MAX_INDEXING_MEMORY`.
+- **Browser**: `/m` costs a few kilobytes per page. The SPA builds its own index in IndexedDB and uses ~300–500 MB.
 
 ---
 
@@ -370,25 +520,27 @@ The Vite dev server proxies API requests to `http://localhost:5000`.
 
 ```
 MyHomeLibServer.slnx
-├── MyHomeLib.Library/   # Book data model + INPX parser (.NET)
-├── MyHomeLib.Web/       # ASP.NET Core backend: API, download proxy, frontend serving
-└── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA (search, filters, UI)
+├── MyHomeLib.Library/   # Book model, INPX parser, collection fingerprint (.NET)
+├── MyHomeLib.Web/       # ASP.NET Core: indexing, search, OPDS, /m, downloads
+├── MyHomeLib.Ui/        # Vue 3 + TypeScript + Vite SPA
+└── inpx-parser/         # npm package: browser-side INPX parser used by the SPA
 ```
 
 ### Key files
 
 | File | Purpose |
 |------|---------|
-| `MyHomeLib.Web/Services/TorrServe/TorrServeClient.cs` | HTTP wrapper for TorrServe API |
+| `MyHomeLib.Library/InpReader.cs` | Parses `.inp` rows: `\x04` delimiter, UTF-8/CP1251, tolerant of malformed fields |
+| `MyHomeLib.Library/BookUid.cs` | Stable book identifier — INPX ids are not unique |
+| `MyHomeLib.Library/InpxSignature.cs` | Collection fingerprint that decides whether a reindex is needed |
+| `MyHomeLib.Web/Services/Search/LibraryIndexerService.cs` | Loads the INPX into Meilisearch at startup |
+| `MyHomeLib.Web/Services/Search/LibrarySearchService.cs` | The single query path behind the API, OPDS and `/m` |
 | `MyHomeLib.Web/Services/HttpRangeStream.cs` | Seekable `Stream` backed by HTTP Range — lets `ZipArchive` read a remote ZIP without downloading all of it |
-| `MyHomeLib.Web/Services/DownloadManager.cs` | Orchestrates book search and download via TorrServe |
-| `MyHomeLib.Web/Program.cs` | Minimal API: `/api/library/inpx`, `/api/library/download`, `/api/library/status` |
-| `MyHomeLib.Ui/src/workers/searchIndex.worker.ts` | MiniSearch in a Web Worker: parse INPX, build index, search, IndexedDB persistence |
-| `MyHomeLib.Ui/src/workers/inpxParser.ts` | INPX archive parser (fflate + streaming) |
-| `MyHomeLib.Ui/src/composables/useLibraryState.ts` | Global reactive state (VueUse createGlobalState) |
-| `MyHomeLib.Ui/src/components/GenreSidebar.vue` | Left sidebar: genre list + year range filter |
+| `MyHomeLib.Web/Controllers/OpdsController.cs` | OPDS 1.2 catalog |
+| `MyHomeLib.Web/Views/Thin/` | The no-JavaScript `/m` pages |
+| `MyHomeLib.Ui/src/workers/searchIndex.worker.ts` | MiniSearch in a Web Worker (the SPA path) |
 | `Dockerfile` | Multi-stage build: .NET 10 SDK + Node.js → ASP.NET runtime, port 8080 |
-| `docker-compose.yml` | Starts TorrServe + MyHomeLib with shared named volumes |
+| `docker-compose.yml` | Starts TorrServe + Meilisearch + MyHomeLib |
 
 ---
 
