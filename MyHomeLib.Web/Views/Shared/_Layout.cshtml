@@ -11,6 +11,11 @@
     The stylesheet is inlined because a second request costs a reader more than these bytes
     do, and a stylesheet that fails to load leaves an unusable page.
 
+    The font is asked for by name and never shipped. Literata is installed on the reader
+    itself (system/fonts, SIL OFL), so the page costs no font download and works offline; a
+    device without it falls back through PT Serif and Noto Serif to whatever serif exists.
+    Nothing here depends on the font being present.
+
     Sizes and greys are set for e-ink, not for the LCD they were first written on. A screen
     that renders in a handful of grey levels turns mid-grey small text into mush: #666 at
     12-13px was legible on a monitor and barely readable on the device. Secondary text is
@@ -38,7 +43,7 @@
         }
 
         body {
-            font: 17px/1.45 "PT Sans", Tahoma, Arial, sans-serif;
+            font: 17px/1.5 Literata, "PT Serif", "Noto Serif", Georgia, serif;
             margin: 0;
             padding: 0;
             color: #000;
