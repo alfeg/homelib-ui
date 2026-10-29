@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using MyHomeLib.Web.Models;
 using MyHomeLib.Web.Services;
 using MyHomeLib.Web.Services.Models;
+using MyHomeLib.Web.Services.TorrServe;
 
 namespace MyHomeLib.Web.Controllers;
 
@@ -128,7 +129,7 @@ public class LibraryController(
             var specific = handleSpecific(ex);
             if (specific is not null) return specific;
 
-            if (ex is HttpRequestException or TaskCanceledException or TimeoutException)
+            if (ex is HttpRequestException or TaskCanceledException or TimeoutException or TorrServeBusyException)
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, localizer["TorrServe is unavailable. Please try again later."]);
 
             logger.LogError(ex, "Unhandled controller error");

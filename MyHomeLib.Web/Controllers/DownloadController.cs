@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MyHomeLib.Web.Services;
 using MyHomeLib.Web.Services.Search;
+using MyHomeLib.Web.Services.TorrServe;
 
 namespace MyHomeLib.Web.Controllers;
 
@@ -11,6 +13,7 @@ namespace MyHomeLib.Web.Controllers;
 /// </summary>
 [ApiController]
 [EnableCors("Api")]
+[EnableRateLimiting(DownloadGuard.PolicyName)]
 public class DownloadController(
     LibrarySearchService search,
     BookDownloadService downloads,
@@ -39,6 +42,12 @@ public class DownloadController(
         catch (TaskCanceledException) when (ct.IsCancellationRequested)
         {
             throw; // client went away
+        }
+        catch (TorrServeBusyException ex)
+        {
+            logger.LogWarning("[Download] {Uid} refused: {Message}", uid, ex.Message);
+            Response.Headers.RetryAfter = "30";
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, ex.Message);
         }
         catch (FileNotFoundException ex)
         {

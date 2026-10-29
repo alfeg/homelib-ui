@@ -10,7 +10,7 @@ namespace MyHomeLib.Web.Services.TorrServe;
 /// <summary>
 /// Thin client for the TorrServe HTTP API (https://github.com/YouROK/TorrServer).
 /// </summary>
-public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
+public class TorrServeClient(HttpClient http, TorrServeThrottle throttle, ILogger<TorrServeClient> logger)
 {
     private readonly string _baseUrl = http.BaseAddress!.ToString().TrimEnd('/');
 
@@ -31,8 +31,7 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
         var magnetUri = request.MagnetUri
             ?? throw new InvalidOperationException("MagnetUri required for TorrServe search");
 
-        await AddTorrentAsync(magnetUri, hash, saveToDb: true, ct: ct);
-        var files = await WaitForFilesAsync(hash, ct);
+        var files = await ResolveFilesAsync(magnetUri, hash, ct);
         var regexPattern = "^" + Regex.Escape(request.FilePattern)
             .Replace("\\\\\\?","??").Replace("\\?", ".").Replace("??","\\?")
             .Replace("\\\\\\*","**").Replace("\\*", ".*").Replace("**","\\*") + "$";
@@ -48,8 +47,12 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
     /// found". Asking again a moment later succeeds, because the first attempt is what makes
     /// TorrServe go and get those pieces. Observed on 3 of 65 books against a cold torrent.
     /// </remarks>
+    /// <exception cref="TorrServeBusyException">Too many downloads already in flight.</exception>
     public async Task<DownloadResponse> DownloadFile(DownloadRequest request, CancellationToken ct = default)
     {
+        // One slot per download, held across the retries below: a retry is the same download.
+        using var slot = await throttle.EnterAsync(ct);
+
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -69,18 +72,33 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
 
     private async Task<DownloadResponse> DownloadOnceAsync(DownloadRequest request, CancellationToken ct)
     {
-        var hash    = request.Library;
-        var archive = request.Archive;
-        var book    = request.Book;
-
         var magnetUri = request.MagnetUri
             ?? throw new InvalidOperationException("MagnetUri required for TorrServe download");
 
         logger.LogInformation("[TorrServe] [{Library}] {Name} Starting download", request.Library, request.Name);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
-        await AddTorrentAsync(magnetUri, hash, saveToDb: true, ct: ct);
-        var files = await WaitForFilesAsync(hash, ct);
+        var files = await ResolveFilesAsync(magnetUri, request.Library, ct);
+        try
+        {
+            return await ReadFromTorrentAsync(request, files, sw, ct);
+        }
+        catch
+        {
+            // The remembered file list let us skip asking TorrServe whether it still has the
+            // torrent. After any failure, ask again next time: it may have been dropped.
+            throttle.ForgetFiles(request.Library);
+            throw;
+        }
+    }
+
+    private async Task<DownloadResponse> ReadFromTorrentAsync(
+        DownloadRequest request, TorrServeFile[] files, System.Diagnostics.Stopwatch sw, CancellationToken ct)
+    {
+        var hash    = request.Library;
+        var archive = request.Archive;
+        var book    = request.Book;
+
         var file = files.FirstOrDefault(f => f.Path.EndsWith(archive))
                    ?? throw new FileNotFoundException($"Archive {archive} not found in torrent {hash}");
 
@@ -148,6 +166,7 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
     public async Task RemoveTorrentAsync(string hash, CancellationToken ct = default)
     {
         logger.LogDebug("[TorrServe] RemoveTorrent hash={Hash}", hash);
+        throttle.ForgetFiles(hash);
         await PostAsync<TorrentActionRequest, TorrServeTorrent>("/torrents", new TorrentActionRequest("rem", hash),
             TorrServeJsonContext.Default.TorrentActionRequest,
             TorrServeJsonContext.Default.TorrServeTorrent, ct);
@@ -173,6 +192,21 @@ public class TorrServeClient(HttpClient http, ILogger<TorrServeClient> logger)
     public string? LastVersion { get; private set; }
 
     // ── Private helpers ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the torrent's file list, adding the torrent first unless the list is remembered.
+    /// Adding is not free: TorrServe writes the torrent to its database on every add.
+    /// </summary>
+    private async Task<TorrServeFile[]> ResolveFilesAsync(string magnetUri, string hash, CancellationToken ct)
+    {
+        if (throttle.TryGetFiles(hash, out var cached))
+            return cached;
+
+        await AddTorrentAsync(magnetUri, hash, saveToDb: true, ct: ct);
+        var files = await WaitForFilesAsync(hash, ct);
+        throttle.RememberFiles(hash, files);
+        return files;
+    }
 
     /// <summary>Adds a torrent by magnet URI.</summary>
     private async Task AddTorrentAsync(string magnetUri, string title, bool saveToDb = true,

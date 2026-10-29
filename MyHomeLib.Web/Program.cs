@@ -72,7 +72,10 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddYarpProxy(builder.Configuration);
 
-// TorrServe services
+// TorrServe services. The throttle is a singleton because the client is transient and the
+// limit has to hold across every request in the process.
+builder.Services.AddSingleton<TorrServeThrottle>();
+builder.Services.AddDownloadGuard();
 builder.Services.AddHttpClient<TorrServeClient>((sp, c) =>
         c.BaseAddress = new Uri(sp.GetRequiredService<IOptions<TorrentConfig>>().Value.TorrServeUrl))
     .ConfigurePrimaryHttpMessageHandler(Ipv4FirstHandler.Create);
@@ -112,6 +115,10 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 
 app.UseCors();
+
+// Ahead of the controllers: crawlers and over-eager clients are turned away before a
+// download reaches the TorrServe throttle.
+app.UseDownloadGuard();
 
 app.UseRequestLocalization(options =>
 {
