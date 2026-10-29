@@ -87,6 +87,9 @@
   <data name="Download" xml:space="preserve">
     <value>Скачать</value>
   </data>
+  <data name="Source code" xml:space="preserve">
+    <value>Исходный код</value>
+  </data>
   <data name="Format" xml:space="preserve">
     <value>Формат</value>
   </data>
