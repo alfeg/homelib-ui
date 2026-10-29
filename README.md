@@ -82,7 +82,7 @@ docker compose up -d
 LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' docker compose -f docker-compose.minimal.yml up -d
 ```
 
-Защита от ботов: `/robots.txt` закрывает `/download/` и `/api/`, краулеры на `/download` получают `403`, а с одного IP — не больше `Torrent:DownloadsPerMinutePerClient` скачиваний в минуту.
+Защита от ботов: `/robots.txt` закрывает `/download/` и `/api/`, краулеры на `/download` получают `403`, а с одного IP можно скачать разом до 30 книг (`Torrent:DownloadBurstPerClient`), дальше — 10 в минуту (`Torrent:DownloadsPerMinutePerClient`).
 
 > **Первый запуск занимает около 5 минут** — скачивание INPX и построение индекса. Пока индекс строится, `/m` и `/opds` показывают прогресс и обновляются сами.
 
@@ -207,10 +207,11 @@ npm run dev
 |------|-------------|--------------|----------|
 | `TorrServeUrl` | Да | `http://127.0.0.1:8090` | Адрес TorrServe |
 | `MaxConcurrentDownloads` | Нет | `2` | Сколько скачиваний одновременно обращаются к TorrServe |
-| `MaxQueuedDownloads` | Нет | `8` | Сколько скачиваний может ждать в очереди; остальные получают `503` |
-| `QueueTimeoutSeconds` | Нет | `30` | Сколько скачивание ждёт в очереди, прежде чем получить отказ |
+| `MaxQueuedDownloads` | Нет | `40` | Сколько скачиваний может ждать в очереди; остальные получают `503` |
+| `QueueTimeoutSeconds` | Нет | `180` | Сколько скачивание ждёт в очереди, прежде чем получить отказ |
 | `FileListCacheMinutes` | Нет | `10` | Сколько минут доверять списку файлов торрента до повторного добавления. `0` — не кэшировать |
-| `DownloadsPerMinutePerClient` | Нет | `10` | Скачиваний в минуту с одного IP; сверх — `429`. `0` — без ограничения |
+| `DownloadBurstPerClient` | Нет | `30` | Сколько скачиваний один IP может начать разом (например, серию); сверх — `429`. `0` — без ограничения |
+| `DownloadsPerMinutePerClient` | Нет | `10` | С какой скоростью этот запас восстанавливается, скачиваний в минуту |
 
 ### Пример `appsettings.json`
 
@@ -431,7 +432,7 @@ For the smallest setup use `docker-compose.minimal.yml`: the same three services
 LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' docker compose -f docker-compose.minimal.yml up -d
 ```
 
-Bot protection: `/robots.txt` disallows `/download/` and `/api/`, crawlers on `/download` get `403`, and one IP may start at most `Torrent:DownloadsPerMinutePerClient` downloads a minute.
+Bot protection: `/robots.txt` disallows `/download/` and `/api/`, crawlers on `/download` get `403`, and one IP may start up to 30 downloads at once (`Torrent:DownloadBurstPerClient`), then 10 a minute (`Torrent:DownloadsPerMinutePerClient`).
 
 > **The first start takes about five minutes** — fetching the INPX and building the index. While that runs, `/m` and `/opds` serve a progress page that refreshes itself.
 
@@ -556,10 +557,11 @@ npm run dev
 |-----|----------|---------|-------------|
 | `TorrServeUrl` | Yes | `http://127.0.0.1:8090` | TorrServe address |
 | `MaxConcurrentDownloads` | No | `2` | Downloads allowed to talk to TorrServe at once |
-| `MaxQueuedDownloads` | No | `8` | Downloads allowed to wait for a slot; beyond this they get `503` |
-| `QueueTimeoutSeconds` | No | `30` | How long a queued download waits before it is refused |
+| `MaxQueuedDownloads` | No | `40` | Downloads allowed to wait for a slot; beyond this they get `503` |
+| `QueueTimeoutSeconds` | No | `180` | How long a queued download waits before it is refused |
 | `FileListCacheMinutes` | No | `10` | How long the torrent's file list is trusted before the torrent is re-added. `0` disables |
-| `DownloadsPerMinutePerClient` | No | `10` | Downloads one IP may start per minute; beyond that, `429`. `0` disables |
+| `DownloadBurstPerClient` | No | `30` | Downloads one IP may start at once (e.g. a series); beyond that, `429`. `0` disables |
+| `DownloadsPerMinutePerClient` | No | `10` | How fast that allowance refills, in downloads per minute |
 
 ### Example `appsettings.json`
 

@@ -116,7 +116,8 @@ LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' \
         <tr><th>Переменная</th><th>По умолчанию</th><th>Что делает</th></tr>
         <tr><td><code>Library__Title</code></td><td><code>MyHomeLib</code></td><td>Название библиотеки в <code>/m</code> и OPDS</td></tr>
         <tr><td><code>Library__BlockedGenres__0</code>, <code>__1</code>…</td><td>—</td><td>Коды жанров, скрытые в <code>/m</code> и OPDS (например, для детской читалки)</td></tr>
-        <tr><td><code>Torrent__DownloadsPerMinutePerClient</code></td><td><code>10</code></td><td>Скачиваний в минуту с одного IP, сверх — <code>429</code>. <code>0</code> — без ограничения</td></tr>
+        <tr><td><code>Torrent__DownloadBurstPerClient</code></td><td><code>30</code></td><td>Сколько скачиваний один IP может начать разом — например, всю серию. Сверх — <code>429</code>. <code>0</code> — без ограничения</td></tr>
+        <tr><td><code>Torrent__DownloadsPerMinutePerClient</code></td><td><code>10</code></td><td>Скорость, с которой этот запас восстанавливается, в минуту</td></tr>
         <tr><td><code>Torrent__MaxConcurrentDownloads</code></td><td><code>2</code></td><td>Одновременных обращений к TorrServe</td></tr>
         <tr><td><code>Library__ForceReindex</code></td><td><code>false</code></td><td>Перестроить индекс при старте</td></tr>
     </table>
@@ -170,7 +171,7 @@ LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' \
     <p><code>/</code> — the full browser app · <code>/m</code> — script-free pages for e-ink readers (readers are redirected there) · <code>/opds</code> — add <code>http://&lt;server&gt;:5080/opds</code> to your reader's network library · <code>/api/status</code> — indexing state as JSON.</p>
 
     <h3>Settings</h3>
-    <p>Add them to the <code>environment</code> of the <code>myhomelib</code> service: <code>Library__Title</code>, <code>Library__BlockedGenres__0</code>…, <code>Torrent__DownloadsPerMinutePerClient</code> (default 10, <code>0</code> disables), <code>Torrent__MaxConcurrentDownloads</code> (default 2), <code>Library__ForceReindex</code>.</p>
+    <p>Add them to the <code>environment</code> of the <code>myhomelib</code> service: <code>Library__Title</code>, <code>Library__BlockedGenres__0</code>…, <code>Torrent__DownloadBurstPerClient</code> (default 30 at once, <code>0</code> disables), <code>Torrent__DownloadsPerMinutePerClient</code> (refill, default 10 a minute), <code>Torrent__MaxConcurrentDownloads</code> (default 2), <code>Library__ForceReindex</code>.</p>
     <p class="note">Crawlers on <code>/download</code> get <code>403</code>, and <code>/robots.txt</code> disallows downloads and the API. Behind a reverse proxy every request arrives from one address, so the per-client limit becomes shared.</p>
 
     <h3>Updating</h3>

@@ -16,10 +16,12 @@ namespace MyHomeLib.Web.Services;
 /// <list type="bullet">
 /// <item><c>robots.txt</c> asks well-behaved crawlers not to follow /download and /api.</item>
 /// <item>A crawler user agent on a download URL gets 403 without touching TorrServe.</item>
-/// <item>Each client address gets a small per-minute download budget; beyond it, 429.</item>
+/// <item>Each client address gets a token bucket: a burst big enough for a whole series,
+/// refilled slowly. Beyond it, 429.</item>
 /// </list>
 /// Reader apps and e-ink browsers do not identify as bots, so the agent check costs them
-/// nothing; a person downloads a handful of books a minute at most, well inside the budget.
+/// nothing. A person grabbing a series spends the burst once and then pauses; a crawler
+/// keeps going and is held to the refill rate.
 /// </remarks>
 public static class DownloadGuard
 {
@@ -62,25 +64,32 @@ public static class DownloadGuard
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.OnRejected = (context, _) =>
             {
-                context.HttpContext.Response.Headers.RetryAfter = "60";
+                var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var wait)
+                    ? Math.Max(1, (int)Math.Ceiling(wait.TotalSeconds))
+                    : 60;
+                context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
                 return ValueTask.CompletedTask;
             };
 
             options.AddPolicy(PolicyName, context =>
             {
-                var limit = context.RequestServices.GetRequiredService<IOptions<TorrentConfig>>().Value
-                    .DownloadsPerMinutePerClient;
+                var config = context.RequestServices.GetRequiredService<IOptions<TorrentConfig>>().Value;
 
                 // 0 switches the per-client limit off; the TorrServe throttle still applies.
-                if (limit <= 0)
+                if (config.DownloadBurstPerClient <= 0)
                     return RateLimitPartition.GetNoLimiter("unlimited");
 
+                // One token every 60/rate seconds rather than the whole rate once a minute, so
+                // the bucket refills smoothly instead of in a lump a crawler can time.
+                var perMinute = Math.Max(1, config.DownloadsPerMinutePerClient);
                 var client = context.Connection.RemoteIpAddress ?? IPAddress.None;
-                return RateLimitPartition.GetFixedWindowLimiter(client.ToString(), _ => new FixedWindowRateLimiterOptions
+                return RateLimitPartition.GetTokenBucketLimiter(client.ToString(), _ => new TokenBucketRateLimiterOptions
                 {
-                    PermitLimit = limit,
-                    Window = TimeSpan.FromMinutes(1),
+                    TokenLimit = config.DownloadBurstPerClient,
+                    TokensPerPeriod = 1,
+                    ReplenishmentPeriod = TimeSpan.FromSeconds(60.0 / perMinute),
                     QueueLimit = 0,
+                    AutoReplenishment = true,
                 });
             });
         });
