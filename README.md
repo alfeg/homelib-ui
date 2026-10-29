@@ -14,7 +14,7 @@
 
 MyHomeLib **не скачивает весь торрент**. Вместо этого:
 
-1. **При старте сервера** — скачивается только INPX-файл (~35 МБ) через [TorrServe](https://github.com/YouROK/TorrServer), парсится на сервере и загружается в [Meilisearch](https://www.meilisearch.com/). Первая индексация ~586 000 книг занимает около 5 минут; при последующих перезапусках индекс переиспользуется, если коллекция не изменилась.
+1. **При старте сервера** — скачивается только INPX-файл (~35 МБ) через [TorrServe](https://github.com/YouROK/TorrServer), парсится на сервере и загружается в [Meilisearch](https://www.meilisearch.com/). Первая индексация ~700 000 книг занимает около 5 минут; при последующих перезапусках индекс переиспользуется, если коллекция не изменилась.
 2. **При поиске** — запрос уходит в Meilisearch: полнотекстовый поиск с опечатками, фасеты по жанрам, языкам и сериям. Ответ приходит за единицы миллисекунд.
 3. **При скачивании** — сервер через TorrServe HTTP Range запросы читает только нужный диапазон байт из ZIP-архива (~2–2,5 ГБ каждый) и отдаёт одну книгу.
 
@@ -28,6 +28,9 @@ MyHomeLib **не скачивает весь торрент**. Вместо эт
 | `/m` | Серверный HTML без JavaScript — читалки, e-ink, слабые устройства |
 | `/opds` | OPDS 1.2 каталог — приложения-читалки с поддержкой OPDS |
 | `/api` | JSON API — `search`, `author`, `series`, `book`, `status`, `genres` |
+| `/download/{uid}` | Скачивание одной книги (`/download/{uid}.zip` — в ZIP) |
+
+`/m` и `/opds` умеют: поиск, жанры, языки, авторы, серии, «Новые поступления» (`new`) и «Все книги» (`all`). Поиск в `/m` можно ограничить текущим разделом. Язык интерфейса `/m` — русский или английский, переключается ссылкой внизу страницы (запоминается в cookie).
 
 Браузеры читалок (PocketBook, Kindle, Kobo, Onyx, Boox, reMarkable) с корня автоматически перенаправляются на `/m`. Чтобы этого избежать, откройте `/?full=1`.
 
@@ -71,13 +74,23 @@ docker compose up -d
 
 Откройте в браузере: [http://localhost:5080](http://localhost:5080)
 
+Пошаговая инструкция: [docs/docker](https://alfeg.github.io/homelib-ui/docker/).
+
+Минимальный вариант — `docker-compose.minimal.yml`: те же три сервиса, готовый образ `ghcr.io/alfeg/homelib-ui` (клонировать репозиторий не нужно), наружу открыт только порт `5080`, Meilisearch без ключа:
+
+```bash
+LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' docker compose -f docker-compose.minimal.yml up -d
+```
+
+Защита от ботов: `/robots.txt` закрывает `/download/` и `/api/`, краулеры на `/download` получают `403`, а с одного IP — не больше `Torrent:DownloadsPerMinutePerClient` скачиваний в минуту.
+
 > **Первый запуск занимает около 5 минут** — скачивание INPX и построение индекса. Пока индекс строится, `/m` и `/opds` показывают прогресс и обновляются сами.
 
 ### Требования к ресурсам
 
 | | |
 |---|---|
-| Диск под индекс Meilisearch | ~1,5–2 ГБ на 586 000 книг |
+| Диск под индекс Meilisearch | ~1,5–2 ГБ на ~700 000 книг |
 | RAM при индексации | ограничена `MEILI_MAX_INDEXING_MEMORY` (по умолчанию 512 МБ) |
 | RAM в работе | несколько сотен МБ |
 
@@ -134,6 +147,21 @@ Meili__ApiKey="ваш-ключ"
 Library__InpxPath="D:\books\flibusta_fb2_local.inpx"
 ```
 
+### Индексация из командной строки
+
+Индекс можно построить без запуска веб-сервера — удобно для cron или шага деплоя:
+
+```bash
+dotnet run --project MyHomeLib.Web -- index           # или: dotnet MyHomeLib.Web.dll index
+dotnet run --project MyHomeLib.Web -- index --force   # перестроить, даже если ничего не изменилось
+```
+
+| Код выхода | Значение |
+|---|---|
+| `0` | Индекс актуален (перестроен или уже был свежим) |
+| `1` | Индексация не удалась, рабочего индекса нет |
+| `2` | Коллекцию прочитать не удалось; отдаётся прежний индекс, возможно устаревший |
+
 ### Полная сборка вместе с SPA
 
 ```bash
@@ -161,13 +189,15 @@ npm run dev
 | `InpxPath` | Нет | — | Локальный `.inpx`: индексация без обращения к TorrServe (для разработки) |
 | `Title` | Нет | `MyHomeLib` | Название коллекции, если его нет в самом INPX |
 | `ForceReindex` | Нет | `false` | Переиндексировать при старте, даже если ничего не изменилось |
+| `IncludeDeleted` | Нет | `true` | Индексировать книги, помеченные в INPX как удалённые. Флаг означает «снято с сайта», а не «нет в торренте» — файл почти всегда на месте |
+| `BlockedGenres` | Нет | `[]` | Коды жанров, скрытые в `/m` и `/opds` (например, `love_erotica`, `love_hard`, `home_sex` для детской читалки). Это фильтр, а не замок: `/api` и скачивание по прямой ссылке не ограничиваются |
 | `IndexBatchSize` | Нет | `10000` | Размер пачки документов при загрузке в Meilisearch |
 
 ### Секция `Meili`
 
 | Ключ | Обязательно | По умолчанию | Описание |
 |------|-------------|--------------|----------|
-| `Url` | Да | `http://127.0.0.1:7700` | Адрес Meilisearch |
+| `Url` | Да | `http://localhost:7700` | Адрес Meilisearch |
 | `ApiKey` | Нет | — | Мастер-ключ, если Meilisearch запущен с ключом |
 | `IndexUid` | Нет | `books` | Имя индекса |
 
@@ -176,6 +206,11 @@ npm run dev
 | Ключ | Обязательно | По умолчанию | Описание |
 |------|-------------|--------------|----------|
 | `TorrServeUrl` | Да | `http://127.0.0.1:8090` | Адрес TorrServe |
+| `MaxConcurrentDownloads` | Нет | `2` | Сколько скачиваний одновременно обращаются к TorrServe |
+| `MaxQueuedDownloads` | Нет | `8` | Сколько скачиваний может ждать в очереди; остальные получают `503` |
+| `QueueTimeoutSeconds` | Нет | `30` | Сколько скачивание ждёт в очереди, прежде чем получить отказ |
+| `FileListCacheMinutes` | Нет | `10` | Сколько минут доверять списку файлов торрента до повторного добавления. `0` — не кэшировать |
+| `DownloadsPerMinutePerClient` | Нет | `10` | Скачиваний в минуту с одного IP; сверх — `429`. `0` — без ограничения |
 
 ### Пример `appsettings.json`
 
@@ -210,7 +245,7 @@ npm run dev
 2. Откройте его в браузере (двойной клик или `file://`).
 3. По умолчанию приложение подключается к публичному серверу **books.alfeg.net**.
 
-Индекс (~685 000 книг) скачивается с публичного сервера, парсится в браузере и сохраняется в IndexedDB. Повторные открытия — мгновенные.
+Индекс (~700 000 книг) скачивается с публичного сервера, парсится в браузере и сохраняется в IndexedDB. Повторные открытия — мгновенные.
 
 ### Хотите использовать собственный сервер?
 
@@ -223,7 +258,7 @@ npm run dev
 ## Первый запуск
 
 1. Сервер скачивает INPX (~35 МБ) через TorrServe. На холодном торренте это может занять минуту-другую.
-2. INPX парсится (~700 000 строк за ~1,5 с) и загружается в Meilisearch пачками. Полная индексация ~586 000 книг — около 5 минут.
+2. INPX парсится (~700 000 строк за ~1,5 с) и загружается в Meilisearch пачками. Полная индексация — около 5 минут.
 3. Пока идёт индексация, `/m` и `/opds` отдают страницу с прогрессом и сами обновляются; `/api/status` возвращает то же самое в JSON.
 4. После готовности поиск отвечает за единицы миллисекунд.
 
@@ -233,9 +268,11 @@ npm run dev
 
 ## Поиск и фильтры
 
-- **Поиск** по названию, автору, серии, языку — AND по всем словам, prefix-matching.
-- **Фильтр по жанрам** — список жанров со счётчиками в левой панели.
-- **Фильтр по году** — выбор диапазона годов издания. Счётчики жанров обновляются при изменении года.
+- **Поиск** по названию, автору, серии — с допуском опечаток (Meilisearch). `ё` и `е` не различаются.
+- **Фильтры** — жанр, язык, автор, серия.
+- **Год** — это год **поступления книги в коллекцию**, а не год издания: даты издания в INPX нет.
+
+SPA (`/`) пока ищет по собственному индексу в браузере (MiniSearch), а не через Meilisearch.
 
 ---
 
@@ -246,14 +283,14 @@ npm run dev
 
 Ничего не сохраняется на сервере.
 
-TorrServe загружает только те фрагменты торрента, которые содержат нужную книгу. Типичное время — несколько секунд.
+TorrServe загружает только те фрагменты торрента, которые содержат нужную книгу. Типичное время — несколько секунд; если архив «холодный», сервер повторяет попытку. Одновременных скачиваний ограниченное число (см. `Torrent:MaxConcurrentDownloads`), лишние ждут в очереди или получают `503`.
 
 ---
 
 ## Использование памяти
 
 - **Сервер** (~100–200 МБ): INPX держится в памяти только во время индексации, книги на диск не сохраняются.
-- **Meilisearch**: ~1,5–2 ГБ на диске под индекс 586 000 книг. Пик потребления RAM приходится на индексацию и ограничивается `MEILI_MAX_INDEXING_MEMORY`.
+- **Meilisearch**: ~1,5–2 ГБ на диске под индекс ~700 000 книг. Пик потребления RAM приходится на индексацию и ограничивается `MEILI_MAX_INDEXING_MEMORY`.
 - **Браузер**: `/m` — единицы килобайт на страницу. SPA строит собственный индекс в IndexedDB и занимает ~300–500 МБ.
 
 ---
@@ -277,6 +314,8 @@ MyHomeLibServer.slnx
 | `MyHomeLib.Library/InpxSignature.cs` | Отпечаток коллекции: решает, нужна ли переиндексация |
 | `MyHomeLib.Web/Services/Search/LibraryIndexerService.cs` | Загрузка INPX в Meilisearch при старте |
 | `MyHomeLib.Web/Services/Search/LibrarySearchService.cs` | Единственный путь запросов для API, OPDS и `/m` |
+| `MyHomeLib.Web/LibraryCli.cs` | Команда `index`: индексация без веб-сервера |
+| `MyHomeLib.Web/Services/TorrServe/TorrServeThrottle.cs` | Ограничение и очередь одновременных скачиваний |
 | `MyHomeLib.Web/Services/HttpRangeStream.cs` | Seekable Stream поверх HTTP Range |
 | `MyHomeLib.Web/Controllers/OpdsController.cs` | OPDS 1.2 каталог |
 | `MyHomeLib.Web/Views/Thin/` | Страницы `/m` без JavaScript |
@@ -304,7 +343,7 @@ The Flibusta library is a single large torrent (~500 GB) containing thousands of
 
 MyHomeLib **never downloads the full torrent**. Instead:
 
-1. **On server start** — only the INPX index (~35 MB) is fetched via [TorrServe](https://github.com/YouROK/TorrServer), parsed on the server and bulk loaded into [Meilisearch](https://www.meilisearch.com/). The first build of ~586,000 books takes around five minutes; later restarts reuse the index when the collection has not changed.
+1. **On server start** — only the INPX index (~35 MB) is fetched via [TorrServe](https://github.com/YouROK/TorrServer), parsed on the server and bulk loaded into [Meilisearch](https://www.meilisearch.com/). The first build of ~700,000 books takes around five minutes; later restarts reuse the index when the collection has not changed.
 2. **On search** — the query goes to Meilisearch: full-text with typo tolerance, plus facets over genres, languages and series. Responses come back in single-digit milliseconds.
 3. **On download** — the server reads only the needed byte range out of a ZIP archive (~2–2.5 GB each) through TorrServe HTTP Range requests and returns the one book.
 
@@ -318,6 +357,9 @@ The magnet URI is set **only in server configuration** (`Library__MagnetUri`). C
 | `/m` | Server-rendered HTML with no JavaScript — e-readers, e-ink, low-power devices |
 | `/opds` | OPDS 1.2 catalog — reader apps that speak OPDS |
 | `/api` | JSON API — `search`, `author`, `series`, `book`, `status`, `genres` |
+| `/download/{uid}` | Download one book (`/download/{uid}.zip` wraps it in a ZIP) |
+
+`/m` and `/opds` offer search, genres, languages, authors, series, recently added (`new`) and all books (`all`). A `/m` search can be scoped to the section you are in. The `/m` interface is in Russian or English, switched from a link at the foot of each page and remembered in a cookie.
 
 E-reader browsers (PocketBook, Kindle, Kobo, Onyx, Boox, reMarkable) are redirected from the site root to `/m`. Open `/?full=1` to get the SPA anyway.
 
@@ -335,7 +377,7 @@ Or download the file:
 2. Open it in any browser (double-click or `file://`).
 3. By default it connects to the public server **books.alfeg.net**.
 
-The index (~685 000 books) is downloaded from the public server, parsed in the browser, and cached in IndexedDB. Repeat visits are instant.
+The index (~700,000 books) is downloaded from the public server, parsed in the browser, and cached in IndexedDB. Repeat visits are instant.
 
 ### Using your own server
 
@@ -349,7 +391,7 @@ On the library connection screen expand **⚙ API Server** and enter your instan
 
 | | Option | When to use |
 |---|--------|-------------|
-| 🥇 | [Standalone HTML](#standalone-version-single-html-file) | Just use it — no server, no installation |
+| 🥇 | [Standalone HTML](#standalone-build-single-html-file) | Just use it — no server, no installation |
 | 🥈 | [Docker Compose](#quick-start-with-docker-compose) | Self-hosting on your own server |
 
 ---
@@ -381,13 +423,23 @@ docker compose up -d
 
 Open [http://localhost:5080](http://localhost:5080).
 
+Step-by-step guide: [docs/docker](https://alfeg.github.io/homelib-ui/docker/#en).
+
+For the smallest setup use `docker-compose.minimal.yml`: the same three services, the published `ghcr.io/alfeg/homelib-ui` image (no clone needed), only port `5080` exposed, Meilisearch without a key:
+
+```bash
+LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' docker compose -f docker-compose.minimal.yml up -d
+```
+
+Bot protection: `/robots.txt` disallows `/download/` and `/api/`, crawlers on `/download` get `403`, and one IP may start at most `Torrent:DownloadsPerMinutePerClient` downloads a minute.
+
 > **The first start takes about five minutes** — fetching the INPX and building the index. While that runs, `/m` and `/opds` serve a progress page that refreshes itself.
 
 ### Resource requirements
 
 | | |
 |---|---|
-| Disk for the Meilisearch index | ~1.5–2 GB for 586,000 books |
+| Disk for the Meilisearch index | ~1.5–2 GB for ~700,000 books |
 | RAM while indexing | capped by `MEILI_MAX_INDEXING_MEMORY` (512 MB by default) |
 | RAM when serving | a few hundred MB |
 
@@ -444,6 +496,21 @@ For development you can point at a local INPX file and skip TorrServe entirely:
 Library__InpxPath="D:\books\flibusta_fb2_local.inpx"
 ```
 
+### Indexing from the command line
+
+The index can be built without starting the web server — handy for cron or a deploy step:
+
+```bash
+dotnet run --project MyHomeLib.Web -- index           # or: dotnet MyHomeLib.Web.dll index
+dotnet run --project MyHomeLib.Web -- index --force   # rebuild even when nothing changed
+```
+
+| Exit code | Meaning |
+|---|---|
+| `0` | The index is current (rebuilt, or already up to date) |
+| `1` | Indexing failed and no usable index is present |
+| `2` | The collection could not be read; the existing, possibly stale, index is served |
+
 ### Full build including the SPA
 
 ```bash
@@ -471,13 +538,15 @@ npm run dev
 | `InpxPath` | No | — | Local `.inpx` to index without contacting TorrServe (development) |
 | `Title` | No | `MyHomeLib` | Collection name, used when the INPX does not carry one |
 | `ForceReindex` | No | `false` | Rebuild on startup even when nothing changed |
+| `IncludeDeleted` | No | `true` | Index books the INPX flags as deleted. The flag means "withdrawn from the website", not "missing from the torrent" — the file is almost always there |
+| `BlockedGenres` | No | `[]` | Genre codes hidden from `/m` and `/opds` (e.g. `love_erotica`, `love_hard`, `home_sex` for a child's reader). A filter, not a lock: `/api` and direct download links are not restricted |
 | `IndexBatchSize` | No | `10000` | Documents per batch when loading Meilisearch |
 
 ### `Meili` section
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `Url` | Yes | `http://127.0.0.1:7700` | Meilisearch address |
+| `Url` | Yes | `http://localhost:7700` | Meilisearch address |
 | `ApiKey` | No | — | Master key, when Meilisearch runs with one |
 | `IndexUid` | No | `books` | Index name |
 
@@ -486,6 +555,11 @@ npm run dev
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
 | `TorrServeUrl` | Yes | `http://127.0.0.1:8090` | TorrServe address |
+| `MaxConcurrentDownloads` | No | `2` | Downloads allowed to talk to TorrServe at once |
+| `MaxQueuedDownloads` | No | `8` | Downloads allowed to wait for a slot; beyond this they get `503` |
+| `QueueTimeoutSeconds` | No | `30` | How long a queued download waits before it is refused |
+| `FileListCacheMinutes` | No | `10` | How long the torrent's file list is trusted before the torrent is re-added. `0` disables |
+| `DownloadsPerMinutePerClient` | No | `10` | Downloads one IP may start per minute; beyond that, `429`. `0` disables |
 
 ### Example `appsettings.json`
 
@@ -508,10 +582,40 @@ npm run dev
 
 ---
 
+## First start
+
+1. The server fetches the INPX (~35 MB) through TorrServe. On a cold torrent this can take a minute or two.
+2. The INPX is parsed (~700,000 rows in ~1.5 s) and loaded into Meilisearch in batches. A full build takes about five minutes.
+3. While indexing runs, `/m` and `/opds` serve a progress page that refreshes itself; `/api/status` returns the same as JSON.
+4. Once ready, searches answer in single-digit milliseconds.
+
+**On restart** nothing is rebuilt: the server fingerprints the collection and, when it has not changed, is ready within seconds.
+
+---
+
+## Search and filters
+
+- **Search** over title, author and series, with typo tolerance (Meilisearch). `ё` and `е` are treated as the same letter.
+- **Filters** — genre, language, author, series.
+- **Year** is the year a book **entered the collection**, not its publication year: the INPX carries no publication date.
+
+The SPA (`/`) still searches its own in-browser index (MiniSearch), not Meilisearch.
+
+---
+
+## Downloading books
+
+1. Find the book.
+2. Click ⬇ next to it — the server streams the book from TorrServe straight to the browser.
+
+Nothing is stored on the server. TorrServe fetches only the torrent pieces that cover the book; a download typically takes a few seconds, and a cold archive is retried. Concurrent downloads are capped (`Torrent:MaxConcurrentDownloads`); the rest queue or get `503`.
+
+---
+
 ## Memory usage
 
 - **Server** (~100–200 MB): the INPX is held in memory only while indexing, and no book is written to disk.
-- **Meilisearch**: ~1.5–2 GB on disk for an index of 586,000 books. RAM peaks during indexing and is capped by `MEILI_MAX_INDEXING_MEMORY`.
+- **Meilisearch**: ~1.5–2 GB on disk for an index of ~700,000 books. RAM peaks during indexing and is capped by `MEILI_MAX_INDEXING_MEMORY`.
 - **Browser**: `/m` costs a few kilobytes per page. The SPA builds its own index in IndexedDB and uses ~300–500 MB.
 
 ---
@@ -535,6 +639,8 @@ MyHomeLibServer.slnx
 | `MyHomeLib.Library/InpxSignature.cs` | Collection fingerprint that decides whether a reindex is needed |
 | `MyHomeLib.Web/Services/Search/LibraryIndexerService.cs` | Loads the INPX into Meilisearch at startup |
 | `MyHomeLib.Web/Services/Search/LibrarySearchService.cs` | The single query path behind the API, OPDS and `/m` |
+| `MyHomeLib.Web/LibraryCli.cs` | The `index` command: indexing without the web server |
+| `MyHomeLib.Web/Services/TorrServe/TorrServeThrottle.cs` | Caps and queues concurrent downloads |
 | `MyHomeLib.Web/Services/HttpRangeStream.cs` | Seekable `Stream` backed by HTTP Range — lets `ZipArchive` read a remote ZIP without downloading all of it |
 | `MyHomeLib.Web/Controllers/OpdsController.cs` | OPDS 1.2 catalog |
 | `MyHomeLib.Web/Views/Thin/` | The no-JavaScript `/m` pages |
