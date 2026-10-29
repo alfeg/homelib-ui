@@ -28,7 +28,12 @@ services:
       retries: 20
 
   myhomelib:
-    build: .
+    # The published image by default; `docker compose up --build` builds from source instead.
+    image: ghcr.io/alfeg/homelib-ui:${HOMELIB_TAG:-latest}
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     depends_on:
       meilisearch:

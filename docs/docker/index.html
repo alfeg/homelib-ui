@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyHomeLib в Docker</title>
+<style>
+    :root {
+        --bg: #fbfaf7;
+        --fg: #1d1c1a;
+        --muted: #5e5b55;
+        --rule: #dedad2;
+        --code-bg: #f0ede6;
+        --accent: #8a3b12;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+            --bg: #161513;
+            --fg: #e9e6df;
+            --muted: #a29d93;
+            --rule: #34312c;
+            --code-bg: #22201d;
+            --accent: #e39a6b;
+        }
+    }
+    :root[data-theme="dark"] {
+        --bg: #161513;
+        --fg: #e9e6df;
+        --muted: #a29d93;
+        --rule: #34312c;
+        --code-bg: #22201d;
+        --accent: #e39a6b;
+    }
+
+    * { box-sizing: border-box }
+    body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 17px/1.6 Georgia, "PT Serif", "Noto Serif", serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px }
+    h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px }
+    h2 { font-size: 22px; margin: 40px 0 8px; padding-top: 16px; border-top: 1px solid var(--rule) }
+    h3 { font-size: 18px; margin: 24px 0 6px }
+    p, li { max-width: 68ch }
+    a { color: var(--accent) }
+    .lead { color: var(--muted); margin: 0 0 20px }
+    .lang { float: right; font-size: 15px }
+    code, pre { font: 14px/1.5 ui-monospace, Consolas, "SFMono-Regular", monospace }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px }
+    pre {
+        background: var(--code-bg);
+        padding: 12px 14px;
+        border-radius: 4px;
+        overflow-x: auto;
+    }
+    pre code { background: none; padding: 0 }
+    table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto }
+    th, td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--rule); vertical-align: top }
+    th { font-weight: normal; color: var(--muted) }
+    .note { border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; color: var(--muted) }
+</style>
+</head>
+<body>
+<main>
+
+<!-- ─────────────────────────────── Русский ─────────────────────────────── -->
+<section id="ru">
+    <a class="lang" href="#en">English</a>
+    <h1>MyHomeLib в Docker</h1>
+    <p class="lead">Свой сервер библиотеки: поиск, OPDS-каталог для читалок и скачивание книг прямо из торрента, без загрузки всей коллекции.</p>
+
+    <h2>Что понадобится</h2>
+    <ul>
+        <li>Docker с Compose v2 (<code>docker compose version</code>).</li>
+        <li>~2 ГБ на диске под поисковый индекс, ~1 ГБ RAM во время первой индексации.</li>
+        <li>Магнет-ссылка на библиотеку с INPX-файлом (например, Флибуста).</li>
+    </ul>
+
+    <h2>Быстрый старт</h2>
+    <p>Исходники не нужны — достаточно одного compose-файла, образ приложения скачается из GitHub Container Registry:</p>
+    <pre><code>mkdir homelib &amp;&amp; cd homelib
+curl -fsSLO https://raw.githubusercontent.com/alfeg/homelib-ui/master/docker-compose.minimal.yml
+
+LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' \
+  docker compose -f docker-compose.minimal.yml up -d</code></pre>
+    <p>Откройте <a href="http://localhost:5080">http://localhost:5080</a>.</p>
+    <p>Поднимаются три контейнера: <b>torrserve</b> (работа с торрентом), <b>meilisearch</b> (поиск) и <b>myhomelib</b> (веб-приложение, образ <code>ghcr.io/alfeg/homelib-ui</code>). Наружу открыт только порт <code>5080</code>.</p>
+    <p>Конкретная версия вместо <code>latest</code>: <code>HOMELIB_TAG=1.2.3</code> или <code>HOMELIB_TAG=sha-4d44417</code>.</p>
+
+    <h3>Чтобы не передавать ссылку каждый раз</h3>
+    <p>Положите её в файл <code>.env</code> рядом с compose-файлом — Compose прочитает его сам:</p>
+    <pre><code>LIBRARY_MAGNET_URI=magnet:?xt=urn:btih:...</code></pre>
+
+    <h2>Первый запуск</h2>
+    <ol>
+        <li>Сервер скачивает через торрент только INPX (~35 МБ) — на «холодном» торренте это минута-две.</li>
+        <li>Индексация ~700 000 книг в Meilisearch — около 5 минут. Пока она идёт, <code>/m</code> и <code>/opds</code> показывают прогресс и обновляются сами.</li>
+        <li>При перезапуске индекс не строится заново, если коллекция не изменилась: готово за секунды.</li>
+    </ol>
+    <pre><code>docker compose -f docker-compose.minimal.yml logs -f myhomelib</code></pre>
+
+    <h2>Адреса</h2>
+    <table>
+        <tr><th>Адрес</th><th>Для чего</th></tr>
+        <tr><td><code>/</code></td><td>Полное приложение для браузера</td></tr>
+        <tr><td><code>/m</code></td><td>Простые страницы без JavaScript — для e-ink читалок. Читалки перенаправляются сюда сами</td></tr>
+        <tr><td><code>/opds</code></td><td>OPDS-каталог: добавьте <code>http://&lt;сервер&gt;:5080/opds</code> в сетевую библиотеку читалки</td></tr>
+        <tr><td><code>/api/status</code></td><td>Состояние индексации в JSON</td></tr>
+    </table>
+
+    <h2>Настройки</h2>
+    <p>Добавляются в <code>environment</code> сервиса <code>myhomelib</code>. Разделитель уровней — двойное подчёркивание.</p>
+    <table>
+        <tr><th>Переменная</th><th>По умолчанию</th><th>Что делает</th></tr>
+        <tr><td><code>Library__Title</code></td><td><code>MyHomeLib</code></td><td>Название библиотеки в <code>/m</code> и OPDS</td></tr>
+        <tr><td><code>Library__BlockedGenres__0</code>, <code>__1</code>…</td><td>—</td><td>Коды жанров, скрытые в <code>/m</code> и OPDS (например, для детской читалки)</td></tr>
+        <tr><td><code>Torrent__DownloadsPerMinutePerClient</code></td><td><code>10</code></td><td>Скачиваний в минуту с одного IP, сверх — <code>429</code>. <code>0</code> — без ограничения</td></tr>
+        <tr><td><code>Torrent__MaxConcurrentDownloads</code></td><td><code>2</code></td><td>Одновременных обращений к TorrServe</td></tr>
+        <tr><td><code>Library__ForceReindex</code></td><td><code>false</code></td><td>Перестроить индекс при старте</td></tr>
+    </table>
+    <p class="note">Поисковые боты на <code>/download</code> получают <code>403</code>, а <code>/robots.txt</code> закрывает скачивание и API. Если сервер стоит за обратным прокси, все запросы приходят с одного IP — и лимит на клиента становится общим.</p>
+
+    <h2>Обновление</h2>
+    <pre><code>docker compose -f docker-compose.minimal.yml pull
+docker compose -f docker-compose.minimal.yml up -d</code></pre>
+    <p>Индекс и данные TorrServe лежат в томах <code>meili_data</code> и <code>torrserve_data</code> и переживают пересборку.</p>
+
+    <h2>Полный вариант</h2>
+    <p><code>docker-compose.yml</code> из репозитория — то же самое плюс ключ Meilisearch, ограничения памяти, healthcheck и тонкая настройка .NET. Настраивается через <code>.env</code> (образец — <code>.env.example</code>). Тоже берёт готовый образ; собрать из исходников:</p>
+    <pre><code>git clone https://github.com/alfeg/homelib-ui.git &amp;&amp; cd homelib-ui
+GIT_SHA=$(git rev-parse HEAD) docker compose up -d --build</code></pre>
+
+    <h2>Если что-то не так</h2>
+    <ul>
+        <li><b>Долго нет прогресса</b> — торрент без сидов. Смотрите <code>logs -f torrserve</code>.</li>
+        <li><b>Скачивание отвечает 503</b> — TorrServe занят другими скачиваниями; повторите через полминуты.</li>
+        <li><b>Скачивание отвечает 429</b> — превышен лимит в минуту для вашего IP.</li>
+        <li><b>Начать индекс с нуля</b>: <code>docker compose -f docker-compose.minimal.yml down -v</code> удалит тома вместе с индексом.</li>
+    </ul>
+</section>
+
+<!-- ─────────────────────────────── English ─────────────────────────────── -->
+<section id="en" lang="en">
+    <h2 style="font-size:30px;border-top-width:3px"><a class="lang" href="#ru">Русский</a>MyHomeLib with Docker</h2>
+    <p class="lead">Your own library server: search, an OPDS catalog for reader apps, and book downloads straight out of the torrent without fetching the whole collection.</p>
+
+    <h3>You will need</h3>
+    <ul>
+        <li>Docker with Compose v2 (<code>docker compose version</code>).</li>
+        <li>~2 GB of disk for the search index, ~1 GB of RAM during the first indexing run.</li>
+        <li>A magnet URI for a library that ships an INPX file (Flibusta, for example).</li>
+    </ul>
+
+    <h3>Quick start</h3>
+    <p>No source checkout needed — one compose file, and the app image is pulled from GitHub Container Registry:</p>
+    <pre><code>mkdir homelib &amp;&amp; cd homelib
+curl -fsSLO https://raw.githubusercontent.com/alfeg/homelib-ui/master/docker-compose.minimal.yml
+
+LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' \
+  docker compose -f docker-compose.minimal.yml up -d</code></pre>
+    <p>Open <a href="http://localhost:5080">http://localhost:5080</a>. Three containers start — <b>torrserve</b>, <b>meilisearch</b> and <b>myhomelib</b> (image <code>ghcr.io/alfeg/homelib-ui</code>) — and only port <code>5080</code> is exposed. Pin a version with <code>HOMELIB_TAG=1.2.3</code> or <code>HOMELIB_TAG=sha-4d44417</code>.</p>
+    <p>To avoid passing the magnet every time, put <code>LIBRARY_MAGNET_URI=...</code> in a <code>.env</code> file next to the compose file.</p>
+
+    <h3>First start</h3>
+    <p>The server fetches only the INPX (~35 MB) through the torrent, then indexes ~700,000 books in about five minutes. Meanwhile <code>/m</code> and <code>/opds</code> show progress and refresh themselves. Restarts reuse the index when the collection has not changed.</p>
+
+    <h3>Addresses</h3>
+    <p><code>/</code> — the full browser app · <code>/m</code> — script-free pages for e-ink readers (readers are redirected there) · <code>/opds</code> — add <code>http://&lt;server&gt;:5080/opds</code> to your reader's network library · <code>/api/status</code> — indexing state as JSON.</p>
+
+    <h3>Settings</h3>
+    <p>Add them to the <code>environment</code> of the <code>myhomelib</code> service: <code>Library__Title</code>, <code>Library__BlockedGenres__0</code>…, <code>Torrent__DownloadsPerMinutePerClient</code> (default 10, <code>0</code> disables), <code>Torrent__MaxConcurrentDownloads</code> (default 2), <code>Library__ForceReindex</code>.</p>
+    <p class="note">Crawlers on <code>/download</code> get <code>403</code>, and <code>/robots.txt</code> disallows downloads and the API. Behind a reverse proxy every request arrives from one address, so the per-client limit becomes shared.</p>
+
+    <h3>Updating</h3>
+    <pre><code>docker compose -f docker-compose.minimal.yml pull
+docker compose -f docker-compose.minimal.yml up -d</code></pre>
+    <p>The index and TorrServe state live in the <code>meili_data</code> and <code>torrserve_data</code> volumes and survive a rebuild. <code>down -v</code> deletes them to start from scratch.</p>
+
+    <h3>Full setup</h3>
+    <p><code>docker-compose.yml</code> adds a Meilisearch key, memory caps, a healthcheck and .NET tuning, configured through <code>.env</code> (see <code>.env.example</code>). It pulls the same image; to build from source:</p>
+    <pre><code>git clone https://github.com/alfeg/homelib-ui.git &amp;&amp; cd homelib-ui
+GIT_SHA=$(git rev-parse HEAD) docker compose up -d --build</code></pre>
+</section>
+
+</main>
+</body>
+</html>

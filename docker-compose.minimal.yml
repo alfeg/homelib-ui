@@ -1,0 +1,36 @@
+# Smallest setup that runs the app: one library, nothing exposed but the web port.
+# Uses the published image, so this file is all you need — no clone, no build.
+#
+#   LIBRARY_MAGNET_URI='magnet:?xt=urn:btih:...' docker compose -f docker-compose.minimal.yml up -d
+#
+# TorrServe and Meilisearch publish no ports, so Meilisearch runs without a key.
+# For tuning, healthchecks and memory caps see docker-compose.yml.
+services:
+  torrserve:
+    image: ghcr.io/yourok/torrserver:latest
+    restart: unless-stopped
+    volumes:
+      - torrserve_data:/opt/torrserver
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.24
+    restart: unless-stopped
+    environment:
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili_data:/meili_data
+
+  myhomelib:
+    image: ghcr.io/alfeg/homelib-ui:${HOMELIB_TAG:-latest}
+    restart: unless-stopped
+    depends_on: [torrserve, meilisearch]
+    ports:
+      - "5080:8080"
+    environment:
+      Library__MagnetUri: ${LIBRARY_MAGNET_URI:?set LIBRARY_MAGNET_URI}
+      Torrent__TorrServeUrl: http://torrserve:8090
+      Meili__Url: http://meilisearch:7700
+
+volumes:
+  torrserve_data:
+  meili_data:

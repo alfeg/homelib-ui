@@ -9,6 +9,7 @@ on:
     paths:
       - "MyHomeLib.Ui/**"
       - "inpx-parser/**"
+      - "docs/docker/**"
       - ".github/workflows/build-standalone-pages.yml"
 
 permissions:

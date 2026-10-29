@@ -1,4 +1,4 @@
-FROM node:lts-alpine AS ui-build
+FROM --platform=$BUILDPLATFORM node:lts-alpine AS ui-build
 
 WORKDIR /src/inpx-parser
 COPY inpx-parser/package*.json ./
@@ -12,8 +12,12 @@ RUN npm ci
 COPY MyHomeLib.Ui/ ./
 RUN npm run build
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+
+# .git is not in the build context, so the commit shown in the /m footer is passed in:
+#   docker compose build --build-arg GIT_SHA=$(git rev-parse HEAD)
+ARG GIT_SHA=
 
 COPY MyHomeLib.Library/MyHomeLib.Library.csproj MyHomeLib.Library/
 COPY MyHomeLib.Web/MyHomeLib.Web.csproj          MyHomeLib.Web/
@@ -25,11 +29,12 @@ COPY MyHomeLib.Web/      MyHomeLib.Web/
 # Genre label JSON lives with the SPA and is linked into the Web project by its csproj.
 COPY MyHomeLib.Ui/src/assets/ MyHomeLib.Ui/src/assets/
 
-RUN dotnet build MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --no-restore -p:BuildClientApp=false
+RUN dotnet build MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --no-restore -p:BuildClientApp=false \
+	-p:SourceRevisionId=$GIT_SHA
 
 COPY --from=ui-build /src/MyHomeLib.Ui/dist/ MyHomeLib.Web/wwwroot/
 RUN dotnet publish MyHomeLib.Web/MyHomeLib.Web.csproj -c Release --self-contained false -o /app \
-	-p:BuildClientApp=false
+	-p:BuildClientApp=false -p:SourceRevisionId=$GIT_SHA
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
