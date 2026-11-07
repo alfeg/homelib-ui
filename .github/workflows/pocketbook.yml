@@ -1,0 +1,76 @@
+name: PocketBook app
+
+# Builds homelib-pocketbook-<version>.zip (launcher, binary, config template, README).
+#   push / PR          → workflow artifact
+#   pocketbook-v1.2.3  → also a GitHub release with the zip attached
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    tags: ["pocketbook-v*"]
+    paths:
+      - "clients/pocketbook/**"
+      - "tunnel/proto/**"
+      - "tunnel/client/**"
+      - "tunnel/Cargo.toml"
+      - ".github/workflows/pocketbook.yml"
+  pull_request:
+    paths:
+      - "clients/pocketbook/**"
+      - "tunnel/proto/**"
+      - "tunnel/client/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pocketbook-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unit tests
+        run: |
+          cargo test --manifest-path tunnel/Cargo.toml -p homelib-proto -p homelib-client
+          cargo test --manifest-path clients/pocketbook/Cargo.toml
+
+      # Rust + Zig + cargo-zigbuild in Dockerfile.build; targets ARMv7 soft-float, glibc 2.23.
+      - name: Cross-compile for PocketBook
+        run: clients/pocketbook/build.sh
+
+      - name: Package
+        id: pkg
+        run: |
+          version="${GITHUB_REF_NAME#pocketbook-v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || version="dev-${GITHUB_SHA::7}"
+          name="homelib-pocketbook-$version"
+          mkdir -p "out/$name"
+          cp clients/pocketbook/dist/homelib.app clients/pocketbook/dist/homelib.bin \
+             clients/pocketbook/homelib.cfg.example clients/pocketbook/README.md "out/$name/"
+          (cd out && zip -r "$name.zip" "$name")
+          echo "zip=out/$name.zip" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: ${{ steps.pkg.outputs.zip }}
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/pocketbook-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: HomeLib for PocketBook ${{ github.ref_name }}
+          files: ${{ steps.pkg.outputs.zip }}
+          body: |
+            Native HomeLib app for PocketBook readers with the B288 chip (Verse PB629, Touch HD 3, Touch Lux 4/5).
+            Install: unzip, copy `homelib.app` and `homelib.bin` to `applications/` on the reader,
+            and save `homelib.cfg.example` there as `homelib.cfg` with your ticket.
+            See README.md in the zip, and tunnel/README.md for the server side.
