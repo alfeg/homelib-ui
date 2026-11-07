@@ -34,6 +34,13 @@ MyHomeLib **не скачивает весь торрент**. Вместо эт
 
 Браузеры читалок (PocketBook, Kindle, Kobo, Onyx, Boox, reMarkable) с корня автоматически перенаправляются на `/m`. Чтобы этого избежать, откройте `/?full=1`.
 
+### Приложение для PocketBook
+
+Нативное приложение для читалок PocketBook на чипе B288 (Verse PB629, Touch HD 3, Touch Lux 4/5): поиск, авторы, серии, скачивание книги или всей серии и открытие в читалке. Работает быстрее встроенного браузера и подключается к серверу через [iroh-туннель](tunnel/README.md) — сервер может оставаться дома за NAT, без проброса портов и не раскрывая домашний адрес. Дома приложение ходит на сервер напрямую по локальной сети, вне дома — через ретранслятор.
+
+- Установка на читалку: [clients/pocketbook/README.md](clients/pocketbook/README.md), архив — в [Releases](https://github.com/alfeg/homelib-ui/releases).
+- Настройка сервера (ретранслятор + `docker compose --profile iroh`): [tunnel/README.md](tunnel/README.md).
+
 ---
 
 ## Способы запуска
@@ -363,6 +370,13 @@ The magnet URI is set **only in server configuration** (`Library__MagnetUri`). C
 `/m` and `/opds` offer search, genres, languages, authors, series, recently added (`new`) and all books (`all`). A `/m` search can be scoped to the section you are in. The `/m` interface is in Russian or English, switched from a link at the foot of each page and remembered in a cookie.
 
 E-reader browsers (PocketBook, Kindle, Kobo, Onyx, Boox, reMarkable) are redirected from the site root to `/m`. Open `/?full=1` to get the SPA anyway.
+
+### PocketBook app
+
+A native app for PocketBook readers with the B288 chip (Verse PB629, Touch HD 3, Touch Lux 4/5): search, authors, series, download a book or a whole series and open it in the reader. It is faster than the built-in browser and reaches the server through the [iroh tunnel](tunnel/README.md), so the server can stay at home behind NAT — no port forwarding, home address not revealed. At home the app talks to the server directly over the LAN; elsewhere through a relay.
+
+- Installing on the reader: [clients/pocketbook/README.md](clients/pocketbook/README.md); the zip is under [Releases](https://github.com/alfeg/homelib-ui/releases).
+- Server setup (relay + `docker compose --profile iroh`): [tunnel/README.md](tunnel/README.md).
 
 ---
 
