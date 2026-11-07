@@ -1,0 +1,14 @@
+# iroh-relay for the HomeLib tunnel.
+#
+# Plain HTTP is enough: the relay only forwards packets that are already end-to-end
+# encrypted by QUIC between the app and homelib-gate. QUIC address discovery is off (it
+# would need TLS) — which also means neither side learns the other's public IP, so away
+# from home everything is relayed and the server's home address stays private.
+enable_relay = true
+http_bind_addr = "[::]:3340"
+enable_quic_addr_discovery = false
+enable_metrics = false
+
+# Only clients presenting the shared token may use the relay. The real token comes from
+# IROH_RELAY_ACCESS_TOKEN (see .env.example), which overrides this placeholder list.
+access.shared_token = ["placeholder-overridden-by-env"]

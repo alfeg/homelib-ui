@@ -1,0 +1,15 @@
+[package]
+name = "homelib-gate"
+description = "iroh endpoint that forwards authenticated streams to the HomeLib HTTP server"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+homelib-proto = { path = "../proto" }
+iroh.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+hex.workspace = true

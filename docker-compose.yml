@@ -56,6 +56,29 @@ services:
       DOTNET_GCConserveMemory: 9
       DOTNET_GCRetainVM: 0
 
+  # Optional: reach the server over iroh, e.g. from the PocketBook app, with no open port
+  # and without revealing the home address. Enable with `docker compose --profile iroh up -d`;
+  # clients use the ticket from `docker compose --profile iroh run --rm iroh-gate ticket`.
+  # See tunnel/README.md.
+  iroh-gate:
+    profiles: ["iroh"]
+    image: ghcr.io/alfeg/homelib-gate:${HOMELIB_TAG:-latest}
+    build: ./tunnel
+    restart: unless-stopped
+    depends_on:
+      - myhomelib
+    # Direct connections from devices on the home network (no relay needed there).
+    ports:
+      - "${HOMELIB_GATE_PORT:-11204}:${HOMELIB_GATE_PORT:-11204}/udp"
+    environment:
+      HOMELIB_GATE_SECRET: ${HOMELIB_GATE_SECRET:?set HOMELIB_GATE_SECRET (homelib-gate keygen)}
+      HOMELIB_TUNNEL_TOKEN: ${HOMELIB_TUNNEL_TOKEN:?set HOMELIB_TUNNEL_TOKEN (same as the relay token)}
+      HOMELIB_RELAY_URL: ${HOMELIB_RELAY_URL:?set HOMELIB_RELAY_URL}
+      HOMELIB_UPSTREAM: myhomelib:8080
+      HOMELIB_GATE_PORT: ${HOMELIB_GATE_PORT:-11204}
+      # This machine's LAN address and the port above, e.g. 192.168.1.10:11204. Optional.
+      HOMELIB_GATE_DIRECT: ${HOMELIB_GATE_DIRECT:-}
+
 volumes:
   torrserve_data:
   meili_data:
