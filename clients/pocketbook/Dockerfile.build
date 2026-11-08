@@ -1,0 +1,16 @@
+# Toolchain for cross-compiling the PocketBook app.
+#
+# The inkview crate loads libinkview.so at runtime, so no PocketBook SDK is needed — only
+# a Rust target for 32-bit ARM soft-float Linux and a C cross compiler for ring (iroh's
+# crypto). cargo-zigbuild provides both and pins the glibc version: the B288 readers
+# (PocketBook Verse PB629, Touch HD 3, Touch Lux 4/5, …) ship glibc 2.23.
+FROM rust:1.95-bookworm
+
+ARG ZIG_VERSION=0.14.1
+RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
+      | tar -xJ -C /opt \
+ && ln -s /opt/zig-x86_64-linux-${ZIG_VERSION}/zig /usr/local/bin/zig \
+ && rustup target add armv7-unknown-linux-gnueabi \
+ && cargo install cargo-zigbuild --version 0.20.1 --locked
+
+WORKDIR /src/clients/pocketbook

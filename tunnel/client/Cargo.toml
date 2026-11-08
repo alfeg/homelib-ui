@@ -1,0 +1,15 @@
+[package]
+name = "homelib-client"
+description = "Blocking HTTP client for the HomeLib server, carried over the iroh tunnel"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+homelib-proto = { path = "../proto" }
+iroh.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true

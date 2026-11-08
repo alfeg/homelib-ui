@@ -1,0 +1,14 @@
+# The relay, for a small VPS with a public address (it needs no disk and little RAM).
+#   cp .env.example .env   # set the token
+#   docker compose up -d
+services:
+  iroh-relay:
+    image: n0computer/iroh-relay:v1.4.1
+    restart: unless-stopped
+    command: ["--config-path", "/config/iroh-relay.toml"]
+    environment:
+      IROH_RELAY_ACCESS_TOKEN: ${IROH_RELAY_ACCESS_TOKEN:?set IROH_RELAY_ACCESS_TOKEN in .env}
+    volumes:
+      - ./iroh-relay.toml:/config/iroh-relay.toml:ro
+    ports:
+      - "3340:3340"

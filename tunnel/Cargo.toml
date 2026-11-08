@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["proto", "gate", "client"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+rust-version = "1.91"
+
+[workspace.dependencies]
+iroh = { version = "1.4", default-features = false, features = ["tls-ring"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hex = "0.4"

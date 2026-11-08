@@ -1,0 +1,25 @@
+[package]
+name = "homelib-pb"
+description = "Native HomeLib client for PocketBook e-readers, talking to the server over iroh"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.91"
+
+[[bin]]
+name = "homelib"
+path = "src/main.rs"
+
+[dependencies]
+homelib-client = { path = "../../tunnel/client" }
+homelib-proto = { path = "../../tunnel/proto" }
+inkview = { version = "0.3", default-features = false, features = ["sdk-6-10"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
