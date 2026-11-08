@@ -16,8 +16,9 @@ Works on PocketBook readers with the **B288** chip (32-bit ARM, glibc 2.23+), e.
 2. Connect the reader by USB and copy into its `applications` folder:
    - `homelib.app`
    - `homelib.bin`
-3. Copy `homelib.cfg.example` there as **`homelib.cfg`** and replace the `ticket=` line
-   with the ticket you were given.
+3. Copy `homelib.cfg.example` there as **`homelib.cfg`** and put in the ticket you were
+   given. A LAN-only ticket works at home; add the `relay=` line the server owner gives
+   you to use the library from anywhere.
 4. Eject the reader. **HomeLib** appears in *Applications*.
 
 On the first start the app installs its icon (a house with books); it shows after the
@@ -36,6 +37,21 @@ reader rescans its apps, or after a reboot.
 Books are saved to `/mnt/ext1/HomeLib` (the `HomeLib` folder on the reader), where the
 library picks them up. Change it with `download_dir=` in `homelib.cfg`.
 
+## Configuration
+
+`homelib.cfg` lists every option with comments ([template](homelib.cfg.example)):
+
+| Key | Meaning |
+|---|---|
+| `ticket` | the ticket from the server (`homelib2:…`) |
+| `relay` | relay URL, added to the ticket's; repeat or comma-separate; `off` = none |
+| `direct` | server LAN `ip:port`, added to the ticket's; `off` = none |
+| `server`, `token` | the ticket's parts on their own; they also override the ticket's |
+| `download_dir` | where books go (default `/mnt/ext1/HomeLib`) |
+| `font`, `font_bold` | font file names without extension |
+
+A build with `HOMELIB_TICKET` set has the ticket baked in; `homelib.cfg` still refines it.
+
 ## Troubleshooting
 
 Every start writes `applications/homelib.log` on the reader, including any error.
@@ -43,9 +59,9 @@ Every start writes `applications/homelib.log` on the reader, including any error
 | Symptom | Likely cause |
 |---|---|
 | App closes at once | Started `homelib.bin` directly, or `homelib.app` is missing — the launcher sets a glibc option firmware 6.11 needs |
-| "Нет билета подключения" | `homelib.cfg` missing, or no `ticket=` line in it |
+| "Не настроено подключение" | `homelib.cfg` missing, or it has no ticket / no way to reach the server |
 | "invalid ticket" | The ticket got cut or wrapped when copying — it is one line |
-| Works at home, not outside | The relay is unreachable from that network — ask the server owner |
+| Works at home, not outside | No `relay=` configured, or the relay is unreachable from that network |
 
 To remove: delete `homelib.app`, `homelib.bin`, `homelib.cfg`, `homelib.log` and
 `icons/homelib*.bmp` from `applications`.

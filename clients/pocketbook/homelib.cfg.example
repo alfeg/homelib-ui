@@ -1,12 +1,30 @@
 # HomeLib for PocketBook — copy to applications/homelib.cfg on the reader.
+# One "key=value" per line; lines starting with # are comments.
 
-# The shared ticket from the server owner (`docker compose run --rm iroh-gate ticket`).
-# Treat it like a password: whoever has it can use the library.
-ticket=homelib2:<endpoint id>:<token>:http://relay.example.net:3340/#192.168.1.10:11204
+# ── Connection ───────────────────────────────────────────────────────────────
+# The ticket from the server owner. The LAN-only form (no relay) is printed by
+#   docker compose --profile iroh run --rm iroh-gate ticket --no-relay
+# and works on the home network only. It is a password: whoever has it can use the library.
+ticket=homelib2:<server id>:<token>:#192.168.1.10:11204
 
-# Where downloaded books go. The reader's library picks them up from there.
+# Relay: makes the library reachable from anywhere, not only at home.
+# Added to any relays already in the ticket. Repeat the line or separate with commas.
+# "relay=off" drops the ticket's relays (home network only).
+#relay=http://relay.example.net:3340
+
+# Server LAN address(es) for the direct path at home, added to the ticket's.
+# "direct=off" drops the ticket's addresses (relay only).
+#direct=192.168.1.10:11204
+
+# Instead of a ticket, the parts can be given separately (they also override the ticket's):
+#server=<server id>
+#token=<token>
+
+# ── Reader ───────────────────────────────────────────────────────────────────
+# Where downloaded books go; the reader's library picks them up from there.
 #download_dir=/mnt/ext1/HomeLib
 
-# Fonts (file names without extension). By default the app picks Literata if present.
+# Fonts: file names without extension, from system/fonts or the firmware.
+# By default the app picks Literata if present, else PT Serif, Noto Serif, Liberation Serif.
 #font=Literata-Regular
 #font_bold=Literata-Bold

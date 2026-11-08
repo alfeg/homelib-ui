@@ -10,12 +10,14 @@
 //! |---|---|
 //! | `HOMELIB_GATE_SECRET` | iroh secret key (hex). Fixes the endpoint id, so the ticket stays valid across restarts. `homelib-gate keygen` makes one. |
 //! | `HOMELIB_TUNNEL_TOKEN` | Shared token. Must equal the relay's `IROH_RELAY_ACCESS_TOKEN`. |
-//! | `HOMELIB_RELAY_URL` | Relay URL(s), comma-separated, e.g. `http://relay.example.net:3340`. |
+//! | `HOMELIB_RELAY_URL` | Relay URL(s), comma-separated, e.g. `http://relay.example.net:3340`. Optional: without one the gate is reachable on the LAN only. |
 //! | `HOMELIB_UPSTREAM` | HTTP server to forward to. Default `127.0.0.1:8080`. |
 //! | `HOMELIB_GATE_PORT` | Fixed UDP port, needed for `HOMELIB_GATE_DIRECT` (random otherwise). |
 //! | `HOMELIB_GATE_DIRECT` | LAN `ip:port` address(es) put in the ticket, so devices at home connect directly. Optional. |
 //!
-//! Commands: `serve` (default), `ticket` (print the shared ticket and exit), `keygen`.
+//! Commands: `serve` (default), `ticket` (print the shared ticket and exit),
+//! `ticket --no-relay` (the same without relays: a LAN-only ticket, to hand out with a
+//! separate `relay=` line in the app's config), `keygen`.
 
 use std::{
     env,
@@ -51,15 +53,13 @@ impl Config {
             .map_err(|e| format!("HOMELIB_GATE_SECRET: {e}"))?;
         let token = var("HOMELIB_TUNNEL_TOKEN")?.trim().to_string();
         validate_token(&token).map_err(|e| format!("HOMELIB_TUNNEL_TOKEN: {e}"))?;
-        let relays = var("HOMELIB_RELAY_URL")?
+        let relays = env::var("HOMELIB_RELAY_URL")
+            .unwrap_or_default()
             .split(',')
             .map(str::trim)
             .filter(|r| !r.is_empty())
             .map(|r| r.parse::<RelayUrl>().map_err(|e| format!("HOMELIB_RELAY_URL {r}: {e}")))
             .collect::<Result<Vec<_>, _>>()?;
-        if relays.is_empty() {
-            return Err("HOMELIB_RELAY_URL is empty".into());
-        }
         let direct = env::var("HOMELIB_GATE_DIRECT")
             .unwrap_or_default()
             .split(',')
@@ -76,6 +76,9 @@ impl Config {
         };
         if !direct.is_empty() && port.is_none() {
             return Err("HOMELIB_GATE_DIRECT needs a fixed HOMELIB_GATE_PORT".into());
+        }
+        if relays.is_empty() && direct.is_empty() {
+            return Err("set HOMELIB_RELAY_URL, HOMELIB_GATE_DIRECT, or both: clients need a way in".into());
         }
         Ok(Config { secret, token, relays, direct, upstream, port })
     }
@@ -115,7 +118,15 @@ async fn main() -> ExitCode {
 
     match command.as_str() {
         "ticket" => {
-            println!("{}", config.ticket());
+            let mut ticket = config.ticket();
+            if env::args().any(|a| a == "--no-relay") {
+                if ticket.direct.is_empty() {
+                    eprintln!("homelib-gate: --no-relay needs HOMELIB_GATE_DIRECT");
+                    return ExitCode::FAILURE;
+                }
+                ticket.relays.clear();
+            }
+            println!("{ticket}");
             ExitCode::SUCCESS
         }
         "serve" => match serve(config).await {

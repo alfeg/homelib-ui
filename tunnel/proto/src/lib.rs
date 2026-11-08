@@ -9,8 +9,13 @@
 //!
 //! ```text
 //! homelib1:<endpoint id>:<token>:<relay url>
-//! homelib2:<endpoint id>:<token>:<relay url>[,<relay url>…][#<ip:port>[,<ip:port>…]]
+//! homelib2:<endpoint id>:<token>:[<relay url>[,<relay url>…]][#<ip:port>[,<ip:port>…]]
 //! ```
+//!
+//! Both parts of a `homelib2` ticket are optional, but not both at once. A ticket with only
+//! LAN addresses (`homelib2:<id>:<token>:#192.168.1.10:11204`) never touches a relay: the
+//! app then works on the home network only, which is the default for a self-hosted setup.
+//! Adding a relay makes the library reachable from anywhere.
 //!
 //! `homelib2` adds more relays and the gate's LAN addresses. On the home network a client
 //! reaches the gate at a LAN address directly, without any relay or even internet access;
@@ -42,9 +47,10 @@ pub const MAX_TOKEN_LEN: usize = 255;
 pub struct Ticket {
     pub endpoint: EndpointId,
     pub token: String,
-    /// At least one. The gate homes on one of them; clients know them all.
+    /// Relays the gate can be reached through. Empty means LAN only.
     pub relays: Vec<RelayUrl>,
-    /// LAN addresses of the gate, for direct connections at home. May be empty.
+    /// LAN addresses of the gate, for direct connections at home.
+    /// At least one of `relays` and `direct` is non-empty.
     pub direct: Vec<SocketAddr>,
 }
 
@@ -113,7 +119,7 @@ impl FromStr for Ticket {
             .map_err(|e| bad(format!("bad endpoint id: {e}")))?;
         let token = parts.next().ok_or_else(|| bad("missing token"))?.to_string();
         validate_token(&token).map_err(|e| bad(e.to_string()))?;
-        let rest = parts.next().ok_or_else(|| bad("missing relay url"))?;
+        let rest = parts.next().ok_or_else(|| bad("missing relay url or #address"))?;
 
         let (relays, direct) = match (version, rest.split_once('#')) {
             ("homelib2", Some((relays, direct))) => (relays, direct),
@@ -124,7 +130,7 @@ impl FromStr for Ticket {
         } else {
             relays.split(',').filter(|r| !r.is_empty()).map(parse_relay).collect::<Result<Vec<_>, _>>()?
         };
-        if relays.is_empty() {
+        if version == "homelib1" && relays.is_empty() {
             return Err(bad("no relay url"));
         }
         let direct = direct
@@ -132,6 +138,9 @@ impl FromStr for Ticket {
             .filter(|a| !a.is_empty())
             .map(|a| a.parse::<SocketAddr>().map_err(|e| bad(format!("bad address {a}: {e}"))))
             .collect::<Result<Vec<_>, _>>()?;
+        if relays.is_empty() && direct.is_empty() {
+            return Err(bad("needs a relay url or a #LAN address"));
+        }
         Ok(Ticket { endpoint, token, relays, direct })
     }
 }
@@ -154,11 +163,16 @@ pub fn validate_token(token: &str) -> io::Result<()> {
     }
 }
 
-/// An endpoint builder that uses only the given relays, authenticated with the token.
+/// An endpoint builder that uses only the given relays, authenticated with the token, or
+/// no relay at all when the list is empty (LAN only).
 ///
-/// The relays run over plain HTTP without QUIC address discovery, so no QUIC probe is
-/// configured for them. Starts from the minimal preset: no n0 relays, no DNS/pkarr lookup.
+/// No QUIC address discovery is configured for the relays, so neither side learns its own
+/// public IP. Starts from the minimal preset: no n0 relays, no DNS/pkarr lookup.
 pub fn endpoint_builder(relays: &[RelayUrl], token: &str) -> Builder {
+    let builder = Endpoint::builder(presets::Minimal);
+    if relays.is_empty() {
+        return builder.relay_mode(RelayMode::Disabled);
+    }
     let map: RelayMap = relays
         .iter()
         .map(|url| {
@@ -167,7 +181,7 @@ pub fn endpoint_builder(relays: &[RelayUrl], token: &str) -> Builder {
             config
         })
         .collect();
-    Endpoint::builder(presets::Minimal).relay_mode(RelayMode::Custom(map))
+    builder.relay_mode(RelayMode::Custom(map))
 }
 
 /// Client side of the per-stream handshake: one length byte, then the token.
@@ -229,6 +243,19 @@ mod tests {
         let text = ticket.to_string();
         assert!(text.starts_with("homelib2:"));
         assert!(text.ends_with("#192.168.1.10:11204"));
+        assert_eq!(text.parse::<Ticket>().unwrap(), ticket);
+    }
+
+    #[test]
+    fn lan_only_ticket_round_trips() {
+        let ticket = Ticket {
+            endpoint: id(),
+            token: "abc123".into(),
+            relays: vec![],
+            direct: vec!["192.168.1.10:11204".parse().unwrap()],
+        };
+        let text = ticket.to_string();
+        assert_eq!(text, format!("homelib2:{}:abc123:#192.168.1.10:11204", id()));
         assert_eq!(text.parse::<Ticket>().unwrap(), ticket);
     }
 

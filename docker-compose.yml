@@ -58,8 +58,8 @@ services:
 
   # Optional: reach the server over iroh, e.g. from the PocketBook app, with no open port
   # and without revealing the home address. Enable with `docker compose --profile iroh up -d`;
-  # clients use the ticket from `docker compose --profile iroh run --rm iroh-gate ticket`.
-  # See tunnel/README.md.
+  # clients use the ticket from `docker compose --profile iroh run --rm iroh-gate ticket`
+  # (add `--no-relay` for a LAN-only ticket). See tunnel/README.md.
   iroh-gate:
     profiles: ["iroh"]
     image: ghcr.io/alfeg/homelib-gate:${HOMELIB_TAG:-latest}
@@ -73,7 +73,8 @@ services:
     environment:
       HOMELIB_GATE_SECRET: ${HOMELIB_GATE_SECRET:?set HOMELIB_GATE_SECRET (homelib-gate keygen)}
       HOMELIB_TUNNEL_TOKEN: ${HOMELIB_TUNNEL_TOKEN:?set HOMELIB_TUNNEL_TOKEN (same as the relay token)}
-      HOMELIB_RELAY_URL: ${HOMELIB_RELAY_URL:?set HOMELIB_RELAY_URL}
+      # Optional: without a relay the gate is reachable on the LAN only.
+      HOMELIB_RELAY_URL: ${HOMELIB_RELAY_URL:-}
       HOMELIB_UPSTREAM: myhomelib:8080
       HOMELIB_GATE_PORT: ${HOMELIB_GATE_PORT:-11204}
       # This machine's LAN address and the port above, e.g. 192.168.1.10:11204. Optional.
